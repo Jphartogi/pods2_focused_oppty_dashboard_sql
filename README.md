@@ -70,6 +70,21 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   (Target − Achieved − Recurring − 2026 Pipeline).
 - **Thousand separators** — all large IDR inputs (target, achievement, recurring, per-AM targets, TCV,
   Rev 2026) format as you type: `163000000000` → `163.000.000.000`, so you never miscount a zero.
+- **Calendar** — every next action can carry a target date; the Calendar tab shows them in a month
+  grid (overdue red, upcoming blue, done green) plus an overdue/upcoming list. Admin and management
+  see everyone with an AM filter; an **Account Manager only ever sees their own** action plan.
+- **Configuration tab** (admin) — manage the **Deal Stages**, Strategic Pillars and Squads lists.
+  Stages are fully configurable: add/rename/delete, and every dropdown, filter and chart follows.
+  Deleting a value that is still in use asks for confirmation and never rewrites existing deals.
+- **Pipeline vs Account Manager Gap** — per AM: `Gap = Target − YTD actual − FY26 recurring (no
+  churn) − 2026 pipeline`, with a stacked coverage bar so you instantly see who is short. Enter each
+  AM's Target / YTD / Recurring under Settings → Account Manager Targets.
+- **Strategy Coverage** — replaces the old wall-of-text playbook: per-AM coverage bars, a call-out
+  listing opportunities that still have no strategy, and one collapsed line per documented deal that
+  expands to read the full strategy.
+- **Backup & restore (XLSX)** — admin-only, in Settings → Data Backup. Export everything
+  (opportunities, strategies, next actions with dates, config, users) to one Excel workbook; the same
+  file is the import template for restoring or migrating to another host.
 - **Rev 2026 column** — every opportunity carries a `revenue_2026` value: the revenue realizable in
   the remaining H2 2026 (vs. the full multi-year TCV). This is the number that counts toward the
   2026 result and is editable per deal. Seeded equal to TCV; refine per deal in the edit modal.
@@ -157,11 +172,17 @@ live PythonAnywhere instance:
 
 1. Replace `app.py` and `templates/index.html` with the new versions (git pull in a Bash console, or
    re-upload via the **Files** tab). **Do not delete `db.sqlite3`.**
-2. Go to the **Web** tab and click **Reload**. On reload the app auto-migrates the database
-   (adds `deals.strategy`, `config.current_achievement`, `config.recurring_revenue`) and preserves
-   every existing deal, user, and setting.
-3. That's it — open the app, and in Settings fill in Achieved-YTD and Recurring; add per-opportunity
-   strategies from each deal's edit modal.
+2. **If this update adds a new library, install it first.** The XLSX backup feature needs `openpyxl`:
+   ```bash
+   pip3.10 install --user openpyxl        # use the pip matching your web app's Python version
+   ```
+   (Everything else keeps working without it; only Export/Import will report that it's missing.)
+3. Go to the **Web** tab and click **Reload**. On reload the app auto-migrates the database — it adds
+   any missing columns (`deals.strategy`, `config.current_achievement`, `config.recurring_revenue`,
+   `config.stages`, `config.am_achievements`, `config.am_recurring`) and preserves every existing
+   deal, user, password and setting.
+4. Recommended right after reloading: **Settings → Data Backup → Export all data** so you have a
+   restore point, then fill in the per-AM Target / YTD / Recurring figures.
 
 ## 9. Notes
 

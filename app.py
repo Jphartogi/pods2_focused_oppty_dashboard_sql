@@ -37,6 +37,7 @@ DEFAULT_PILLARS = [
     "Digital Reward",
 ]
 DEFAULT_SQUADS = ["Volume Squad", "Tender Squad", "Strategic Squad"]
+DEFAULT_STAGES = ["Prospecting", "Negotiation", "Closed", "Blocked"]
 
 # Seed Account Managers: (username, password, full_name)
 SEED_AMS = [
@@ -210,6 +211,13 @@ def migrate_db(db):
         db.execute("ALTER TABLE config ADD COLUMN current_achievement INTEGER DEFAULT 0")
     if "recurring_revenue" not in config_cols:
         db.execute("ALTER TABLE config ADD COLUMN recurring_revenue INTEGER DEFAULT 0")
+    if "stages" not in config_cols:
+        db.execute("ALTER TABLE config ADD COLUMN stages TEXT")
+        db.execute("UPDATE config SET stages = ?", (json.dumps(DEFAULT_STAGES),))
+    if "am_achievements" not in config_cols:
+        db.execute("ALTER TABLE config ADD COLUMN am_achievements TEXT DEFAULT '{}'")
+    if "am_recurring" not in config_cols:
+        db.execute("ALTER TABLE config ADD COLUMN am_recurring TEXT DEFAULT '{}'")
 
 
 def init_db():
@@ -254,6 +262,9 @@ def init_db():
             am_targets TEXT DEFAULT '{}',
             current_achievement INTEGER DEFAULT 0,
             recurring_revenue INTEGER DEFAULT 0,
+            stages TEXT,
+            am_achievements TEXT DEFAULT '{}',
+            am_recurring TEXT DEFAULT '{}',
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
@@ -283,9 +294,10 @@ def init_db():
     # Seed config if empty
     if db.execute("SELECT COUNT(*) FROM config").fetchone()[0] == 0:
         db.execute(
-            "INSERT INTO config (target_amount, strategic_pillars, squads, am_targets) VALUES (?, ?, ?, ?)",
+            """INSERT INTO config (target_amount, strategic_pillars, squads, am_targets, stages)
+               VALUES (?, ?, ?, ?, ?)""",
             (163_000_000_000, json.dumps(DEFAULT_PILLARS), json.dumps(DEFAULT_SQUADS),
-             json.dumps(DEFAULT_AM_TARGETS)),
+             json.dumps(DEFAULT_AM_TARGETS), json.dumps(DEFAULT_STAGES)),
         )
 
     # Seed deals if empty
@@ -678,15 +690,24 @@ def delete_user(user_id):
 # --------------------------------------------------------------------------
 def config_to_dict(row):
     keys = row.keys()
-    try:
-        am_targets = json.loads(row["am_targets"] or "{}") if "am_targets" in keys else {}
-    except (KeyError, TypeError):
-        am_targets = {}
+
+    def jload(col, default):
+        if col not in keys:
+            return default
+        try:
+            val = json.loads(row[col] or "null")
+            return default if val is None else val
+        except (TypeError, ValueError):
+            return default
+
     return {
         "target_amount": row["target_amount"],
         "strategic_pillars": json.loads(row["strategic_pillars"]),
         "squads": json.loads(row["squads"]),
-        "am_targets": am_targets,
+        "stages": jload("stages", list(DEFAULT_STAGES)),
+        "am_targets": jload("am_targets", {}),
+        "am_achievements": jload("am_achievements", {}),
+        "am_recurring": jload("am_recurring", {}),
         "current_achievement": (row["current_achievement"] if "current_achievement" in keys else 0) or 0,
         "recurring_revenue": (row["recurring_revenue"] if "recurring_revenue" in keys else 0) or 0,
         "updated_at": row["updated_at"],
@@ -712,21 +733,320 @@ def update_config():
     target_amount = int(data.get("target_amount", row["target_amount"]) or 0)
     strategic_pillars = data.get("strategic_pillars", json.loads(row["strategic_pillars"]))
     squads = data.get("squads", json.loads(row["squads"]))
-    am_targets = data.get("am_targets", current["am_targets"])
-    am_targets = {k: int(v or 0) for k, v in am_targets.items()}
+    stages = data.get("stages", current["stages"]) or list(DEFAULT_STAGES)
+
+    def int_map(src):
+        return {k: int(v or 0) for k, v in (src or {}).items()}
+
+    am_targets = int_map(data.get("am_targets", current["am_targets"]))
+    am_achievements = int_map(data.get("am_achievements", current["am_achievements"]))
+    am_recurring = int_map(data.get("am_recurring", current["am_recurring"]))
     current_achievement = int(data.get("current_achievement", current["current_achievement"]) or 0)
     recurring_revenue = int(data.get("recurring_revenue", current["recurring_revenue"]) or 0)
 
     db.execute(
         """UPDATE config SET target_amount = ?, strategic_pillars = ?, squads = ?,
-           am_targets = ?, current_achievement = ?, recurring_revenue = ?,
+           stages = ?, am_targets = ?, am_achievements = ?, am_recurring = ?,
+           current_achievement = ?, recurring_revenue = ?,
            updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
         (target_amount, json.dumps(strategic_pillars), json.dumps(squads),
-         json.dumps(am_targets), current_achievement, recurring_revenue, row["id"]),
+         json.dumps(stages), json.dumps(am_targets), json.dumps(am_achievements),
+         json.dumps(am_recurring), current_achievement, recurring_revenue, row["id"]),
     )
     db.commit()
     row = db.execute("SELECT * FROM config WHERE id = ?", (row["id"],)).fetchone()
     return jsonify(config_to_dict(row))
+
+
+# --------------------------------------------------------------------------
+# XLSX Backup: full export / import  (ADMIN only)
+# --------------------------------------------------------------------------
+DEAL_HEADERS = [
+    "ID", "Opportunity", "Customer", "Account Manager", "Squad", "Strategic Pillar",
+    "TCV (IDR)", "Rev 2026 (IDR)", "Target Quarter", "Stage", "Progress (%)",
+    "Blocked", "Blocker", "Strategy", "Next Actions",
+]
+# Config keys stored as JSON (lists/dicts) vs plain integers
+CONFIG_JSON_KEYS = ["strategic_pillars", "squads", "stages",
+                    "am_targets", "am_achievements", "am_recurring"]
+CONFIG_INT_KEYS = ["target_amount", "current_achievement", "recurring_revenue"]
+
+
+def actions_to_text(actions):
+    """[{action,done,due}] -> '[x] text @2026-08-15' lines (human readable + parseable)."""
+    lines = []
+    for a in actions or []:
+        mark = "[x]" if a.get("done") else "[ ]"
+        due = f" @{a['due']}" if a.get("due") else ""
+        lines.append(f"{mark} {a.get('action','')}{due}")
+    return "\n".join(lines)
+
+
+def text_to_actions(text):
+    actions = []
+    for raw in str(text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        done = False
+        if line.lower().startswith("[x]"):
+            done, line = True, line[3:].strip()
+        elif line.startswith("[ ]") or line.startswith("[]"):
+            line = line.split("]", 1)[1].strip()
+        due = ""
+        if "@" in line:
+            head, _, tail = line.rpartition("@")
+            candidate = tail.strip()
+            # only treat as a date if it looks like one
+            if len(candidate) == 10 and candidate[4] == "-" and candidate[7] == "-":
+                due, line = candidate, head.strip()
+        if line:
+            actions.append({"action": line, "done": done, "due": due})
+    return actions
+
+
+@app.route("/api/export/xlsx", methods=["GET"])
+@login_required(roles=("admin",))
+def export_xlsx():
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+    except ImportError:
+        return jsonify({"error": "openpyxl is not installed on the server. "
+                                 "Run: pip install --user openpyxl, then reload the web app."}), 500
+
+    db = get_db()
+    deals = [deal_to_dict(r) for r in db.execute("SELECT * FROM deals ORDER BY id").fetchall()]
+    config = config_to_dict(db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone())
+    users = db.execute("SELECT username, full_name, role FROM users ORDER BY id").fetchall()
+
+    wb = Workbook()
+    head_fill = PatternFill("solid", fgColor="1A73E8")
+    head_font = Font(color="FFFFFF", bold=True)
+
+    def style_header(ws, ncols):
+        for c in range(1, ncols + 1):
+            cell = ws.cell(row=1, column=c)
+            cell.fill, cell.font = head_fill, head_font
+        ws.freeze_panes = "A2"
+
+    # --- Opportunities ---
+    ws = wb.active
+    ws.title = "Opportunities"
+    ws.append(DEAL_HEADERS)
+    for d in deals:
+        ws.append([
+            d["id"], d["deal_name"], d["customer"], d["assigned_am"], d["squad"],
+            d["strategic_pillar"], d["estimated_value"], d["revenue_2026"],
+            d["target_quarter"], d["stage"], d["progress"],
+            "Yes" if d["is_blocked"] else "No", d["blocker_description"],
+            d["strategy"], actions_to_text(d["next_actions"]),
+        ])
+    style_header(ws, len(DEAL_HEADERS))
+    for col, width in zip("ABCDEFGHIJKLMNO",
+                          [6, 38, 28, 18, 16, 22, 16, 16, 14, 14, 11, 9, 26, 50, 50]):
+        ws.column_dimensions[col].width = width
+    for row in ws.iter_rows(min_row=2):
+        row[13].alignment = Alignment(wrap_text=True, vertical="top")  # Strategy
+        row[14].alignment = Alignment(wrap_text=True, vertical="top")  # Next Actions
+
+    # --- Config ---
+    cfg = wb.create_sheet("Config")
+    cfg.append(["Key", "Value"])
+    for k in CONFIG_INT_KEYS:
+        cfg.append([k, config.get(k, 0)])
+    for k in CONFIG_JSON_KEYS:
+        cfg.append([k, json.dumps(config.get(k))])
+    style_header(cfg, 2)
+    cfg.column_dimensions["A"].width = 24
+    cfg.column_dimensions["B"].width = 80
+
+    # --- Users (no passwords are ever exported) ---
+    us = wb.create_sheet("Users")
+    us.append(["Username", "Full Name", "Role"])
+    for u in users:
+        us.append([u["username"], u["full_name"], u["role"]])
+    style_header(us, 3)
+    for col, width in zip("ABC", [20, 28, 20]):
+        us.column_dimensions[col].width = width
+
+    # --- Readme ---
+    rm = wb.create_sheet("READ ME")
+    for line in [
+        ["PODS 2 Command Center - data backup"],
+        [f"Exported: {datetime.now().strftime('%Y-%m-%d %H:%M')}"],
+        [""],
+        ["This file is both a BACKUP and an IMPORT TEMPLATE."],
+        ["Re-upload it via Settings > Data Backup > Import to restore or migrate."],
+        [""],
+        ["Opportunities sheet:"],
+        ["  - Leave ID as-is to update an existing opportunity."],
+        ["  - Clear the ID to create a NEW opportunity on import."],
+        ["  - Next Actions format, one per line:  [x] done action @2026-08-15"],
+        ["                                        [ ] pending action"],
+        ["    The @YYYY-MM-DD part is the target date and is optional."],
+        ["  - Blocked column accepts Yes/No."],
+        [""],
+        ["Config sheet: JSON values - keep the JSON syntax valid."],
+        ["Users sheet: passwords are never exported. New usernames on import are"],
+        ["  created with the temporary password 'changeme123' - reset them right away."],
+    ]:
+        rm.append(line)
+    rm.column_dimensions["A"].width = 95
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"deal_tracker_backup_{date.today().isoformat()}.xlsx"
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name=filename,
+    )
+
+
+@app.route("/api/import/xlsx", methods=["POST"])
+@login_required(roles=("admin",))
+def import_xlsx():
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return jsonify({"error": "openpyxl is not installed on the server. "
+                                 "Run: pip install --user openpyxl, then reload the web app."}), 500
+
+    upload = request.files.get("file")
+    if not upload:
+        return jsonify({"error": "No file uploaded"}), 400
+    replace_all = str(request.form.get("replace_all", "")).lower() in ("1", "true", "yes")
+
+    try:
+        wb = load_workbook(upload, data_only=True)
+    except Exception as exc:
+        return jsonify({"error": f"Could not read this file as .xlsx ({exc})"}), 400
+
+    db = get_db()
+    summary = {"updated": 0, "created": 0, "deleted": 0, "users_created": 0, "config_updated": False}
+
+    # ---------------- Opportunities ----------------
+    if "Opportunities" in wb.sheetnames:
+        ws = wb["Opportunities"]
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+        seen_ids = set()
+
+        def s(v):
+            return "" if v is None else str(v).strip()
+
+        def n(v):
+            if v is None or str(v).strip() == "":
+                return 0
+            try:
+                return int(float(str(v).replace(".", "").replace(",", "")
+                                 if isinstance(v, str) else v))
+            except (TypeError, ValueError):
+                return 0
+
+        for r in rows:
+            r = list(r) + [None] * (len(DEAL_HEADERS) - len(r))
+            name = s(r[1])
+            if not name:
+                continue  # skip blank lines
+            deal_id = r[0]
+            payload = (
+                name, s(r[2]), s(r[3]), s(r[4]), s(r[5]), n(r[6]), n(r[7]), s(r[8]),
+                s(r[9]) or "Prospecting", max(0, min(100, n(r[10]))),
+                1 if s(r[11]).lower() in ("yes", "true", "1") else 0,
+                s(r[12]), s(r[13]), json.dumps(text_to_actions(r[14])),
+            )
+            existing = None
+            if deal_id not in (None, ""):
+                try:
+                    existing = db.execute("SELECT id FROM deals WHERE id = ?",
+                                          (int(deal_id),)).fetchone()
+                except (TypeError, ValueError):
+                    existing = None
+            if existing:
+                db.execute(
+                    """UPDATE deals SET deal_name=?, customer=?, assigned_am=?, squad=?,
+                       strategic_pillar=?, estimated_value=?, revenue_2026=?, target_quarter=?,
+                       stage=?, progress=?, is_blocked=?, blocker_description=?, strategy=?,
+                       next_actions=?, updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                    payload + (int(deal_id),),
+                )
+                seen_ids.add(int(deal_id))
+                summary["updated"] += 1
+            else:
+                cur = db.execute(
+                    """INSERT INTO deals (deal_name, customer, assigned_am, squad,
+                       strategic_pillar, estimated_value, revenue_2026, target_quarter, stage,
+                       progress, is_blocked, blocker_description, strategy, next_actions,
+                       updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)""",
+                    payload,
+                )
+                seen_ids.add(cur.lastrowid)
+                summary["created"] += 1
+
+        if replace_all and seen_ids:
+            placeholders = ",".join("?" * len(seen_ids))
+            cur = db.execute(f"DELETE FROM deals WHERE id NOT IN ({placeholders})",
+                             tuple(seen_ids))
+            summary["deleted"] = cur.rowcount
+
+    # ---------------- Config ----------------
+    if "Config" in wb.sheetnames:
+        incoming = {}
+        for k, v in wb["Config"].iter_rows(min_row=2, values_only=True):
+            if not k:
+                continue
+            key = str(k).strip()
+            if key in CONFIG_INT_KEYS:
+                try:
+                    incoming[key] = int(float(v or 0))
+                except (TypeError, ValueError):
+                    pass
+            elif key in CONFIG_JSON_KEYS:
+                try:
+                    incoming[key] = json.loads(v) if isinstance(v, str) else v
+                except (TypeError, ValueError):
+                    pass
+        if incoming:
+            row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+            merged = config_to_dict(row)
+            merged.update(incoming)
+            db.execute(
+                """UPDATE config SET target_amount=?, strategic_pillars=?, squads=?, stages=?,
+                   am_targets=?, am_achievements=?, am_recurring=?, current_achievement=?,
+                   recurring_revenue=?, updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                (int(merged["target_amount"] or 0), json.dumps(merged["strategic_pillars"]),
+                 json.dumps(merged["squads"]), json.dumps(merged["stages"]),
+                 json.dumps(merged["am_targets"]), json.dumps(merged["am_achievements"]),
+                 json.dumps(merged["am_recurring"]), int(merged["current_achievement"] or 0),
+                 int(merged["recurring_revenue"] or 0), row["id"]),
+            )
+            summary["config_updated"] = True
+
+    # ---------------- Users (never overwrites existing passwords) ----------------
+    if "Users" in wb.sheetnames:
+        for uname, fname, role in wb["Users"].iter_rows(min_row=2, values_only=True):
+            username = str(uname or "").strip()
+            role = str(role or "").strip()
+            if not username or role not in VALID_ROLES:
+                continue
+            existing = db.execute("SELECT id FROM users WHERE username = ?",
+                                  (username,)).fetchone()
+            if existing:
+                db.execute("UPDATE users SET full_name = ?, role = ? WHERE id = ?",
+                           (str(fname or "").strip() or username, role, existing["id"]))
+            else:
+                db.execute(
+                    "INSERT INTO users (username, password, role, full_name) VALUES (?,?,?,?)",
+                    (username, _hash("changeme123"), role,
+                     str(fname or "").strip() or username),
+                )
+                summary["users_created"] += 1
+
+    db.commit()
+    return jsonify({"ok": True, "summary": summary})
 
 
 # --------------------------------------------------------------------------
