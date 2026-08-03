@@ -88,10 +88,17 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 - **Execution Framework — the 8 Enterprise Proofs.** Every opportunity has an *Execution Framework*
   tab in its edit modal implementing the PODS 2 standard: **1 Qualification, 2 Engagement, 3 Concept,
   4 Value, 5 Contract, 6 Delivery, 7 Operation, 8 CLM**. Each proof carries a status
-  (Not started / In progress / Done / N/A), a target date, and a notes/evidence line, so the AM's
-  strategy turns into a structured, auditable execution plan instead of a loose to-do list.
-  Proof target dates flow into the **Calendar**; N/A proofs are excluded from completion maths.
-  Any pre-existing next actions are preserved under "Other next actions".
+  (Not started / In progress / Done / N/A), a target date, and **an unlimited list of evidence
+  entries** — each with its own date — so an AM records everything they have done to fulfil that
+  proof and builds a real audit trail rather than a single note. Proof target dates flow into the
+  **Calendar**; N/A proofs are excluded from completion maths. Any pre-existing next actions are
+  preserved under "Other next actions".
+- **Stage automation** — an opportunity's Stage is derived from how far its framework has
+  progressed: the furthest proof reached (done or in progress) sets the stage, and a blocked deal
+  always shows the blocked stage. The proof → stage mapping and an on/off switch live under
+  **Configuration → Stage automation**, with an **Apply to all opportunities** button to
+  re-run it in bulk. Any single deal can opt out via "Set stage manually" in its edit form.
+  Deals with no framework progress keep whatever stage they already had.
 - **Framework analytics** — Analytics shows a proof-by-proof funnel (done / in progress / not
   started across the filtered deals), completion by Account Manager, and a click-to-drill list of the
   deals stuck at any given proof. The PDF report includes the same breakdown.
@@ -196,8 +203,10 @@ live PythonAnywhere instance:
    (Everything else keeps working without it; only Export/Import will report that it's missing.)
 3. Go to the **Web** tab and click **Reload**. On reload the app auto-migrates the database — it adds
    any missing columns (`deals.strategy`, `deals.proofs`, `config.current_achievement`,
-   `config.recurring_revenue`, `config.stages`, `config.am_achievements`, `config.am_recurring`) and
-   preserves every existing deal, user, password and setting.
+   `config.recurring_revenue`, `config.stages`, `config.am_achievements`, `config.am_recurring`,
+   `config.auto_stage`, `config.stage_rules`) and preserves every existing deal, user, password and
+   setting. A proof's older single note is folded into its evidence list automatically, and stage
+   automation only ever changes a deal that already has framework progress.
 4. Recommended right after reloading: **Settings → Data Backup → Export all data** so you have a
    restore point, then fill in the per-AM Target / YTD / Recurring figures.
 

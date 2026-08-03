@@ -66,7 +66,11 @@ PROOF_STATUSES = ("not_started", "in_progress", "done", "na")
 
 
 def normalize_proofs(raw):
-    """Always return the full 8-proof structure, preserving whatever was stored."""
+    """Always return the full 8-proof structure, preserving whatever was stored.
+
+    Each proof holds a list of evidence `entries` ({text, date}). A legacy single
+    `notes` string is migrated into the first entry so nothing is ever lost.
+    """
     incoming = raw if isinstance(raw, dict) else {}
     out = {}
     for key in PROOF_KEYS:
@@ -76,10 +80,28 @@ def normalize_proofs(raw):
         status = str(item.get("status", "not_started")).strip().lower().replace(" ", "_")
         if status not in PROOF_STATUSES:
             status = "not_started"
+
+        entries = []
+        for e in (item.get("entries") or []):
+            if isinstance(e, dict):
+                text = str(e.get("text", "") or "").strip()
+                date = str(e.get("date", "") or "").strip()[:10]
+            else:
+                text, date = str(e or "").strip(), ""
+            if text:
+                entries.append({"text": text, "date": date})
+
+        # Migrate a legacy notes string into the evidence list.
+        legacy = str(item.get("notes", "") or "").strip()
+        if legacy and not any(e["text"] == legacy for e in entries):
+            entries.insert(0, {"text": legacy, "date": ""})
+
         out[key] = {
             "status": status,
-            "notes": str(item.get("notes", "") or ""),
-            "due": str(item.get("due", "") or ""),
+            "due": str(item.get("due", "") or "")[:10],
+            "entries": entries,
+            # kept for backward compatibility with older clients/exports
+            "notes": entries[0]["text"] if entries else "",
         }
     return out
 
@@ -92,6 +114,38 @@ def proof_progress(proofs):
         return 0
     done = sum(1 for v in applicable if v["status"] == "done")
     return round(done / len(applicable) * 100)
+
+
+# Which stage each proof implies once it is reached. Admin-editable in Configuration.
+DEFAULT_STAGE_RULES = {
+    "qualification": "Prospecting",
+    "engagement": "Prospecting",
+    "concept": "Negotiation",
+    "value": "Negotiation",
+    "contract": "Negotiation",
+    "delivery": "Closed",
+    "operation": "Closed",
+    "clm": "Closed",
+}
+DEFAULT_BLOCKED_STAGE = "Blocked"
+
+
+def derive_stage(proofs, is_blocked, rules, blocked_stage, fallback):
+    """Stage implied by how far the execution framework has progressed.
+
+    A blocked deal always shows the blocked stage. Otherwise we take the furthest
+    proof that has been reached (done or in progress) and use its mapped stage.
+    """
+    if is_blocked and blocked_stage:
+        return blocked_stage
+    p = normalize_proofs(proofs)
+    reached = None
+    for key in PROOF_KEYS:                      # PROOF_KEYS is in framework order
+        if p[key]["status"] in ("done", "in_progress"):
+            reached = key
+    if reached is None:
+        return fallback
+    return (rules or {}).get(reached) or fallback
 
 # Seed Account Managers: (username, password, full_name)
 SEED_AMS = [
@@ -274,6 +328,13 @@ def migrate_db(db):
         db.execute("ALTER TABLE config ADD COLUMN am_achievements TEXT DEFAULT '{}'")
     if "am_recurring" not in config_cols:
         db.execute("ALTER TABLE config ADD COLUMN am_recurring TEXT DEFAULT '{}'")
+    if "auto_stage" not in config_cols:
+        # Safe to enable on upgrade: a deal with no framework progress keeps its
+        # current stage (derive_stage falls back to it), so nothing is rewritten.
+        db.execute("ALTER TABLE config ADD COLUMN auto_stage INTEGER DEFAULT 1")
+    if "stage_rules" not in config_cols:
+        db.execute("ALTER TABLE config ADD COLUMN stage_rules TEXT")
+        db.execute("UPDATE config SET stage_rules = ?", (json.dumps(DEFAULT_STAGE_RULES),))
 
 
 def init_db():
@@ -322,6 +383,8 @@ def init_db():
             stages TEXT,
             am_achievements TEXT DEFAULT '{}',
             am_recurring TEXT DEFAULT '{}',
+            auto_stage INTEGER DEFAULT 1,
+            stage_rules TEXT,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
@@ -351,10 +414,12 @@ def init_db():
     # Seed config if empty
     if db.execute("SELECT COUNT(*) FROM config").fetchone()[0] == 0:
         db.execute(
-            """INSERT INTO config (target_amount, strategic_pillars, squads, am_targets, stages)
-               VALUES (?, ?, ?, ?, ?)""",
+            """INSERT INTO config (target_amount, strategic_pillars, squads, am_targets,
+                                   stages, auto_stage, stage_rules)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (163_000_000_000, json.dumps(DEFAULT_PILLARS), json.dumps(DEFAULT_SQUADS),
-             json.dumps(DEFAULT_AM_TARGETS), json.dumps(DEFAULT_STAGES)),
+             json.dumps(DEFAULT_AM_TARGETS), json.dumps(DEFAULT_STAGES),
+             1, json.dumps(DEFAULT_STAGE_RULES)),
         )
 
     # Seed deals if empty
@@ -407,6 +472,19 @@ def can_edit_deal(user, deal_row):
     if user["role"] == "account_manager":
         return (deal_row["assigned_am"] or "") == (user["full_name"] or "")
     return False
+
+
+def current_config(db):
+    return config_to_dict(db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone())
+
+
+def resolve_stage(db, data, proofs, is_blocked, requested_stage, fallback_stage):
+    """Apply the auto-derive rule unless it's off or the client asked to override."""
+    cfg = current_config(db)
+    if not cfg.get("auto_stage") or data.get("stage_override"):
+        return requested_stage or fallback_stage
+    return derive_stage(proofs, is_blocked, cfg.get("stage_rules"),
+                        cfg.get("blocked_stage"), requested_stage or fallback_stage)
 
 
 def deal_to_dict(row):
@@ -482,6 +560,28 @@ def api_logout():
 # --------------------------------------------------------------------------
 # Account Managers (for filters / assignment dropdowns) - any authenticated user
 # --------------------------------------------------------------------------
+@app.route("/api/deals/recalculate_stages", methods=["POST"])
+@login_required(roles=("admin",))
+def recalculate_stages():
+    """Re-apply the auto-derive rule to every opportunity (admin, on demand)."""
+    db = get_db()
+    cfg = current_config(db)
+    rules, blocked_stage = cfg.get("stage_rules"), cfg.get("blocked_stage")
+    changed = []
+    for row in db.execute("SELECT * FROM deals").fetchall():
+        proofs = normalize_proofs(
+            json.loads((row["proofs"] if "proofs" in row.keys() else "") or "{}"))
+        new_stage = derive_stage(proofs, bool(row["is_blocked"]), rules,
+                                 blocked_stage, row["stage"])
+        if new_stage != row["stage"]:
+            db.execute("UPDATE deals SET stage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                       (new_stage, row["id"]))
+            changed.append({"id": row["id"], "deal_name": row["deal_name"],
+                            "from": row["stage"], "to": new_stage})
+    db.commit()
+    return jsonify({"ok": True, "changed": len(changed), "details": changed[:50]})
+
+
 @app.route("/api/proof_framework", methods=["GET"])
 @login_required()
 def get_proof_framework():
@@ -538,6 +638,10 @@ def create_deal():
     rev_2026 = int(rev_2026) if rev_2026 not in (None, "") else est_value
 
     db = get_db()
+    new_proofs = normalize_proofs(data.get("proofs"))
+    new_blocked = bool(data.get("is_blocked"))
+    stage = resolve_stage(db, data, new_proofs, new_blocked,
+                          data.get("stage", "Prospecting"), "Prospecting")
     cur = db.execute(
         """INSERT INTO deals
            (deal_name, customer, assigned_am, squad, strategic_pillar, estimated_value,
@@ -553,13 +657,13 @@ def create_deal():
             est_value,
             rev_2026,
             data.get("target_quarter", ""),
-            data.get("stage", "Prospecting"),
+            stage,
             int(data.get("progress", 0) or 0),
-            1 if data.get("is_blocked") else 0,
+            1 if new_blocked else 0,
             data.get("blocker_description", ""),
             json.dumps(data.get("next_actions", [])),
             data.get("strategy", ""),
-            json.dumps(normalize_proofs(data.get("proofs"))),
+            json.dumps(new_proofs),
         ),
     )
     db.commit()
@@ -589,6 +693,10 @@ def update_deal(deal_id):
     existing_proofs = normalize_proofs(
         json.loads((row["proofs"] if "proofs" in row.keys() else "") or "{}")
     )
+    upd_proofs = normalize_proofs(data.get("proofs", existing_proofs))
+    upd_blocked = bool(data.get("is_blocked", row["is_blocked"]))
+    upd_stage = resolve_stage(db, data, upd_proofs, upd_blocked,
+                              data.get("stage", row["stage"]), row["stage"])
     db.execute(
         """UPDATE deals SET
              deal_name = ?, customer = ?, assigned_am = ?, squad = ?, strategic_pillar = ?,
@@ -605,13 +713,13 @@ def update_deal(deal_id):
             int(data.get("estimated_value", row["estimated_value"]) or 0),
             int(data.get("revenue_2026", row["revenue_2026"] or 0) or 0),
             data.get("target_quarter", row["target_quarter"]),
-            data.get("stage", row["stage"]),
+            upd_stage,
             int(data.get("progress", row["progress"]) or 0),
-            1 if data.get("is_blocked", row["is_blocked"]) else 0,
+            1 if upd_blocked else 0,
             data.get("blocker_description", row["blocker_description"]),
             json.dumps(data.get("next_actions", json.loads(row["next_actions"] or "[]"))),
             data.get("strategy", existing_strategy),
-            json.dumps(normalize_proofs(data.get("proofs", existing_proofs))),
+            json.dumps(upd_proofs),
             deal_id,
         ),
     )
@@ -664,10 +772,13 @@ def update_blocker(deal_id):
         return jsonify({"error": "Deal not found"}), 404
     if not can_edit_deal(g.current_user, row):
         return jsonify({"error": "You can only edit opportunities assigned to you"}), 403
+    blocked = bool(data.get("is_blocked"))
+    proofs = normalize_proofs(json.loads((row["proofs"] if "proofs" in row.keys() else "") or "{}"))
+    stage = resolve_stage(db, data, proofs, blocked, row["stage"], row["stage"])
     db.execute(
-        """UPDATE deals SET is_blocked = ?, blocker_description = ?,
+        """UPDATE deals SET is_blocked = ?, blocker_description = ?, stage = ?,
            updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
-        (1 if data.get("is_blocked") else 0, data.get("blocker_description", ""), deal_id),
+        (1 if blocked else 0, data.get("blocker_description", ""), stage, deal_id),
     )
     db.commit()
     row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
@@ -780,6 +891,9 @@ def config_to_dict(row):
         "am_targets": jload("am_targets", {}),
         "am_achievements": jload("am_achievements", {}),
         "am_recurring": jload("am_recurring", {}),
+        "auto_stage": bool(row["auto_stage"]) if "auto_stage" in keys and row["auto_stage"] is not None else True,
+        "stage_rules": jload("stage_rules", dict(DEFAULT_STAGE_RULES)),
+        "blocked_stage": DEFAULT_BLOCKED_STAGE,
         "current_achievement": (row["current_achievement"] if "current_achievement" in keys else 0) or 0,
         "recurring_revenue": (row["recurring_revenue"] if "recurring_revenue" in keys else 0) or 0,
         "updated_at": row["updated_at"],
@@ -815,15 +929,19 @@ def update_config():
     am_recurring = int_map(data.get("am_recurring", current["am_recurring"]))
     current_achievement = int(data.get("current_achievement", current["current_achievement"]) or 0)
     recurring_revenue = int(data.get("recurring_revenue", current["recurring_revenue"]) or 0)
+    auto_stage = 1 if data.get("auto_stage", current["auto_stage"]) else 0
+    stage_rules = data.get("stage_rules", current["stage_rules"]) or {}
+    stage_rules = {k: str(v or "") for k, v in stage_rules.items() if k in PROOF_KEYS}
 
     db.execute(
         """UPDATE config SET target_amount = ?, strategic_pillars = ?, squads = ?,
            stages = ?, am_targets = ?, am_achievements = ?, am_recurring = ?,
-           current_achievement = ?, recurring_revenue = ?,
+           current_achievement = ?, recurring_revenue = ?, auto_stage = ?, stage_rules = ?,
            updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
         (target_amount, json.dumps(strategic_pillars), json.dumps(squads),
          json.dumps(stages), json.dumps(am_targets), json.dumps(am_achievements),
-         json.dumps(am_recurring), current_achievement, recurring_revenue, row["id"]),
+         json.dumps(am_recurring), current_achievement, recurring_revenue,
+         auto_stage, json.dumps(stage_rules), row["id"]),
     )
     db.commit()
     row = db.execute("SELECT * FROM config WHERE id = ?", (row["id"],)).fetchone()
@@ -925,14 +1043,17 @@ def export_xlsx():
     # --- Execution Framework (8 Enterprise Proofs), one row per deal per proof ---
     fw = wb.create_sheet("Execution Framework")
     fw.append(["Deal ID", "Opportunity", "Account Manager", "#", "Proof",
-               "Status", "Target Date", "Notes / Evidence"])
+               "Status", "Target Date", "Evidence (one per line: YYYY-MM-DD | what was done)"])
     for d in deals:
         p = d["proofs"]
         for idx, key in enumerate(PROOF_KEYS, start=1):
             item = p.get(key, {})
+            evidence = "\n".join(
+                (f"{e['date']} | {e['text']}" if e.get("date") else e["text"])
+                for e in item.get("entries", [])
+            )
             fw.append([d["id"], d["deal_name"], d["assigned_am"], idx, PROOF_NAMES[key],
-                       item.get("status", "not_started"), item.get("due", ""),
-                       item.get("notes", "")])
+                       item.get("status", "not_started"), item.get("due", ""), evidence])
     style_header(fw, 8)
     for col, width in zip("ABCDEFGH", [8, 34, 18, 5, 24, 14, 14, 52]):
         fw.column_dimensions[col].width = width
@@ -980,6 +1101,11 @@ def export_xlsx():
         ["  - One row per opportunity per proof. Keep Deal ID and Proof name unchanged."],
         ["  - Status accepts: not_started / in_progress / done / na"],
         ["  - Target Date is YYYY-MM-DD and shows up on the Calendar."],
+        ["  - Evidence: one item per line. Optional date prefix, e.g."],
+        ["        2026-08-01 | Workshop held with DAOP ops team"],
+        ["        Budget letter received"],
+        ["  - Stage is auto-derived from how far the framework has progressed"],
+        ["    (configurable under Configuration > Stage automation)."],
         [""],
         ["Config sheet: JSON values - keep the JSON syntax valid."],
         ["Users sheet: passwords are never exported. New usernames on import are"],
@@ -1108,10 +1234,24 @@ def import_xlsx():
             due_txt = ""
             if due not in (None, ""):
                 due_txt = due.strftime("%Y-%m-%d") if hasattr(due, "strftime") else str(due).strip()[:10]
+            # Evidence: one entry per line, optional "YYYY-MM-DD | text" prefix
+            entries = []
+            for line in str(notes or "").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                date_part = ""
+                if "|" in line:
+                    head, _, tail = line.partition("|")
+                    head = head.strip()
+                    if len(head) == 10 and head[4] == "-" and head[7] == "-":
+                        date_part, line = head, tail.strip()
+                if line:
+                    entries.append({"text": line, "date": date_part})
             by_deal.setdefault(deal_id, {})[key] = {
                 "status": str(status or "not_started").strip().lower().replace(" ", "_"),
                 "due": due_txt,
-                "notes": str(notes or ""),
+                "entries": entries,
             }
         for deal_id, proofs in by_deal.items():
             existing = db.execute("SELECT proofs FROM deals WHERE id = ?", (deal_id,)).fetchone()
