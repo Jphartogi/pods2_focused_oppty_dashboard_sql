@@ -83,8 +83,25 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   listing opportunities that still have no strategy, and one collapsed line per documented deal that
   expands to read the full strategy.
 - **Backup & restore (XLSX)** — admin-only, in Settings → Data Backup. Export everything
-  (opportunities, strategies, next actions with dates, config, users) to one Excel workbook; the same
-  file is the import template for restoring or migrating to another host.
+  (opportunities, strategies, next actions with dates, the 8-proof framework, config, users) to one
+  Excel workbook; the same file is the import template for restoring or migrating to another host.
+- **Execution Framework — the 8 Enterprise Proofs.** Every opportunity has an *Execution Framework*
+  tab in its edit modal implementing the PODS 2 standard: **1 Qualification, 2 Engagement, 3 Concept,
+  4 Value, 5 Contract, 6 Delivery, 7 Operation, 8 CLM**. Each proof carries a status
+  (Not started / In progress / Done / N/A), a target date, and a notes/evidence line, so the AM's
+  strategy turns into a structured, auditable execution plan instead of a loose to-do list.
+  Proof target dates flow into the **Calendar**; N/A proofs are excluded from completion maths.
+  Any pre-existing next actions are preserved under "Other next actions".
+- **Framework analytics** — Analytics shows a proof-by-proof funnel (done / in progress / not
+  started across the filtered deals), completion by Account Manager, and a click-to-drill list of the
+  deals stuck at any given proof. The PDF report includes the same breakdown.
+- **Account Manager focus** — when an AM signs in, the Tracker is pre-filtered to their own
+  opportunities (clearly flagged, and they can widen it to the whole team at any time).
+- **Management View** (admin + management only) — a simple executive briefing that management lands
+  on by default: financial summary (target, achieved, recurring, pipeline, gap, framework health),
+  blockers needing escalation with owners, action points due in the next 30 days plus overdue, and
+  each deal's closing strategy with framework progress. Click or double-click anything to open the
+  full opportunity detail.
 - **Rev 2026 column** — every opportunity carries a `revenue_2026` value: the revenue realizable in
   the remaining H2 2026 (vs. the full multi-year TCV). This is the number that counts toward the
   2026 result and is editable per deal. Seeded equal to TCV; refine per deal in the edit modal.
@@ -178,9 +195,9 @@ live PythonAnywhere instance:
    ```
    (Everything else keeps working without it; only Export/Import will report that it's missing.)
 3. Go to the **Web** tab and click **Reload**. On reload the app auto-migrates the database — it adds
-   any missing columns (`deals.strategy`, `config.current_achievement`, `config.recurring_revenue`,
-   `config.stages`, `config.am_achievements`, `config.am_recurring`) and preserves every existing
-   deal, user, password and setting.
+   any missing columns (`deals.strategy`, `deals.proofs`, `config.current_achievement`,
+   `config.recurring_revenue`, `config.stages`, `config.am_achievements`, `config.am_recurring`) and
+   preserves every existing deal, user, password and setting.
 4. Recommended right after reloading: **Settings → Data Backup → Export all data** so you have a
    restore point, then fill in the per-AM Target / YTD / Recurring figures.
 

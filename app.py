@@ -39,6 +39,60 @@ DEFAULT_PILLARS = [
 DEFAULT_SQUADS = ["Volume Squad", "Tender Squad", "Strategic Squad"]
 DEFAULT_STAGES = ["Prospecting", "Negotiation", "Closed", "Blocked"]
 
+# --------------------------------------------------------------------------
+# Execution Framework - the 8 Enterprise Proofs (PODS 2 execution standard)
+# --------------------------------------------------------------------------
+PROOFS = [
+    ("qualification", "Proof of Qualification",
+     "Ensure target customers (B500) have the need, budget, and alignment with our solution"),
+    ("engagement", "Proof of Engagement",
+     "Secure deep engagement with all key customer stakeholders (PODS, SPIN selling, Sales card)"),
+    ("concept", "Proof of Concept",
+     "Verify the proposed solution functions exactly as specified (TQC)"),
+    ("value", "Proof of Value",
+     "Confirm the solution delivers a profitable outcome for the customer (TQC & outcome-based solution)"),
+    ("contract", "Proof of Contract",
+     "Ensure all TCLRF terms are covered (Technical, Commercial, Legal, Risk, Framework)"),
+    ("delivery", "Proof of Delivery",
+     "Ensure the final solution is delivered according to all expectations (TQC)"),
+    ("operation", "Proof of Operation",
+     "Commit on agreed-upon Service Level Agreement (SLA) and ensure payment"),
+    ("clm", "Proof of CLM",
+     "Nurture the customer relationship to prevent churn and enable upselling (Customer card)"),
+]
+PROOF_KEYS = [p[0] for p in PROOFS]
+PROOF_NAMES = {p[0]: p[1] for p in PROOFS}
+PROOF_STATUSES = ("not_started", "in_progress", "done", "na")
+
+
+def normalize_proofs(raw):
+    """Always return the full 8-proof structure, preserving whatever was stored."""
+    incoming = raw if isinstance(raw, dict) else {}
+    out = {}
+    for key in PROOF_KEYS:
+        item = incoming.get(key) or {}
+        if not isinstance(item, dict):
+            item = {}
+        status = str(item.get("status", "not_started")).strip().lower().replace(" ", "_")
+        if status not in PROOF_STATUSES:
+            status = "not_started"
+        out[key] = {
+            "status": status,
+            "notes": str(item.get("notes", "") or ""),
+            "due": str(item.get("due", "") or ""),
+        }
+    return out
+
+
+def proof_progress(proofs):
+    """% of applicable (non-N/A) proofs completed."""
+    p = normalize_proofs(proofs)
+    applicable = [v for v in p.values() if v["status"] != "na"]
+    if not applicable:
+        return 0
+    done = sum(1 for v in applicable if v["status"] == "done")
+    return round(done / len(applicable) * 100)
+
 # Seed Account Managers: (username, password, full_name)
 SEED_AMS = [
     ("anisa", "anisa123", "Anisa Rahmy"),
@@ -202,6 +256,8 @@ def migrate_db(db):
         db.execute("UPDATE deals SET revenue_2026 = estimated_value WHERE revenue_2026 = 0")
     if "strategy" not in deal_cols:
         db.execute("ALTER TABLE deals ADD COLUMN strategy TEXT DEFAULT ''")
+    if "proofs" not in deal_cols:
+        db.execute("ALTER TABLE deals ADD COLUMN proofs TEXT DEFAULT '{}'")
 
     config_cols = columns("config")
     if "am_targets" not in config_cols:
@@ -241,6 +297,7 @@ def init_db():
             blocker_description TEXT,
             next_actions TEXT,
             strategy TEXT DEFAULT '',
+            proofs TEXT DEFAULT '{}',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -369,6 +426,9 @@ def deal_to_dict(row):
         "blocker_description": row["blocker_description"] or "",
         "next_actions": json.loads(row["next_actions"] or "[]"),
         "strategy": (row["strategy"] if "strategy" in row.keys() else "") or "",
+        "proofs": normalize_proofs(
+            json.loads((row["proofs"] if "proofs" in row.keys() else "") or "{}")
+        ),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -422,6 +482,13 @@ def api_logout():
 # --------------------------------------------------------------------------
 # Account Managers (for filters / assignment dropdowns) - any authenticated user
 # --------------------------------------------------------------------------
+@app.route("/api/proof_framework", methods=["GET"])
+@login_required()
+def get_proof_framework():
+    """The 8 Enterprise Proofs execution framework (static definition)."""
+    return jsonify([{"key": k, "name": n, "description": d} for k, n, d in PROOFS])
+
+
 @app.route("/api/account_managers", methods=["GET"])
 @login_required()
 def get_account_managers():
@@ -475,8 +542,8 @@ def create_deal():
         """INSERT INTO deals
            (deal_name, customer, assigned_am, squad, strategic_pillar, estimated_value,
             revenue_2026, target_quarter, stage, progress, is_blocked, blocker_description,
-            next_actions, strategy, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+            next_actions, strategy, proofs, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
         (
             data.get("deal_name", "Untitled Opportunity"),
             data.get("customer", ""),
@@ -492,6 +559,7 @@ def create_deal():
             data.get("blocker_description", ""),
             json.dumps(data.get("next_actions", [])),
             data.get("strategy", ""),
+            json.dumps(normalize_proofs(data.get("proofs"))),
         ),
     )
     db.commit()
@@ -518,11 +586,14 @@ def update_deal(deal_id):
         assigned_am = data.get("assigned_am", row["assigned_am"])
 
     existing_strategy = row["strategy"] if "strategy" in row.keys() else ""
+    existing_proofs = normalize_proofs(
+        json.loads((row["proofs"] if "proofs" in row.keys() else "") or "{}")
+    )
     db.execute(
         """UPDATE deals SET
              deal_name = ?, customer = ?, assigned_am = ?, squad = ?, strategic_pillar = ?,
              estimated_value = ?, revenue_2026 = ?, target_quarter = ?, stage = ?, progress = ?,
-             is_blocked = ?, blocker_description = ?, next_actions = ?, strategy = ?,
+             is_blocked = ?, blocker_description = ?, next_actions = ?, strategy = ?, proofs = ?,
              updated_at = CURRENT_TIMESTAMP
            WHERE id = ?""",
         (
@@ -540,6 +611,7 @@ def update_deal(deal_id):
             data.get("blocker_description", row["blocker_description"]),
             json.dumps(data.get("next_actions", json.loads(row["next_actions"] or "[]"))),
             data.get("strategy", existing_strategy),
+            json.dumps(normalize_proofs(data.get("proofs", existing_proofs))),
             deal_id,
         ),
     )
@@ -850,6 +922,23 @@ def export_xlsx():
         row[13].alignment = Alignment(wrap_text=True, vertical="top")  # Strategy
         row[14].alignment = Alignment(wrap_text=True, vertical="top")  # Next Actions
 
+    # --- Execution Framework (8 Enterprise Proofs), one row per deal per proof ---
+    fw = wb.create_sheet("Execution Framework")
+    fw.append(["Deal ID", "Opportunity", "Account Manager", "#", "Proof",
+               "Status", "Target Date", "Notes / Evidence"])
+    for d in deals:
+        p = d["proofs"]
+        for idx, key in enumerate(PROOF_KEYS, start=1):
+            item = p.get(key, {})
+            fw.append([d["id"], d["deal_name"], d["assigned_am"], idx, PROOF_NAMES[key],
+                       item.get("status", "not_started"), item.get("due", ""),
+                       item.get("notes", "")])
+    style_header(fw, 8)
+    for col, width in zip("ABCDEFGH", [8, 34, 18, 5, 24, 14, 14, 52]):
+        fw.column_dimensions[col].width = width
+    for row in fw.iter_rows(min_row=2):
+        row[7].alignment = Alignment(wrap_text=True, vertical="top")
+
     # --- Config ---
     cfg = wb.create_sheet("Config")
     cfg.append(["Key", "Value"])
@@ -886,6 +975,11 @@ def export_xlsx():
         ["                                        [ ] pending action"],
         ["    The @YYYY-MM-DD part is the target date and is optional."],
         ["  - Blocked column accepts Yes/No."],
+        [""],
+        ["Execution Framework sheet (the 8 Enterprise Proofs):"],
+        ["  - One row per opportunity per proof. Keep Deal ID and Proof name unchanged."],
+        ["  - Status accepts: not_started / in_progress / done / na"],
+        ["  - Target Date is YYYY-MM-DD and shows up on the Calendar."],
         [""],
         ["Config sheet: JSON values - keep the JSON syntax valid."],
         ["Users sheet: passwords are never exported. New usernames on import are"],
@@ -925,7 +1019,8 @@ def import_xlsx():
         return jsonify({"error": f"Could not read this file as .xlsx ({exc})"}), 400
 
     db = get_db()
-    summary = {"updated": 0, "created": 0, "deleted": 0, "users_created": 0, "config_updated": False}
+    summary = {"updated": 0, "created": 0, "deleted": 0, "users_created": 0,
+               "proofs_updated": 0, "config_updated": False}
 
     # ---------------- Opportunities ----------------
     if "Opportunities" in wb.sheetnames:
@@ -991,6 +1086,42 @@ def import_xlsx():
             cur = db.execute(f"DELETE FROM deals WHERE id NOT IN ({placeholders})",
                              tuple(seen_ids))
             summary["deleted"] = cur.rowcount
+
+    # ---------------- Execution Framework (8 Proofs) ----------------
+    if "Execution Framework" in wb.sheetnames:
+        by_deal = {}
+        for r in wb["Execution Framework"].iter_rows(min_row=2, values_only=True):
+            r = list(r) + [None] * (8 - len(r))
+            deal_id, _, _, _, proof_name, status, due, notes = r[:8]
+            if deal_id in (None, "") or not proof_name:
+                continue
+            try:
+                deal_id = int(deal_id)
+            except (TypeError, ValueError):
+                continue
+            # match by proof name (or key), case-insensitive
+            label = str(proof_name).strip().lower()
+            key = next((k for k in PROOF_KEYS
+                        if k == label or PROOF_NAMES[k].lower() == label), None)
+            if not key:
+                continue
+            due_txt = ""
+            if due not in (None, ""):
+                due_txt = due.strftime("%Y-%m-%d") if hasattr(due, "strftime") else str(due).strip()[:10]
+            by_deal.setdefault(deal_id, {})[key] = {
+                "status": str(status or "not_started").strip().lower().replace(" ", "_"),
+                "due": due_txt,
+                "notes": str(notes or ""),
+            }
+        for deal_id, proofs in by_deal.items():
+            existing = db.execute("SELECT proofs FROM deals WHERE id = ?", (deal_id,)).fetchone()
+            if not existing:
+                continue
+            merged = normalize_proofs(json.loads(existing["proofs"] or "{}"))
+            merged.update(normalize_proofs(proofs))
+            db.execute("UPDATE deals SET proofs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                       (json.dumps(merged), deal_id))
+        summary["proofs_updated"] = len(by_deal)
 
     # ---------------- Config ----------------
     if "Config" in wb.sheetnames:
@@ -1214,6 +1345,24 @@ def export_pdf():
         ])
     story.append(make_table(detail_rows, [5 * cm, 4 * cm, 2.2 * cm, 2.6 * cm, 2.2 * cm, 1.2 * cm]))
     story.append(Spacer(1, 0.4 * cm))
+
+    # Execution framework coverage across the 8 Enterprise Proofs
+    if deals:
+        story.append(Paragraph("Execution Framework - 8 Enterprise Proofs", h2_style))
+        fw_rows = [["#", "Proof", "Done", "In progress", "Not started", "N/A"]]
+        for idx, key in enumerate(PROOF_KEYS, start=1):
+            counts = {"done": 0, "in_progress": 0, "not_started": 0, "na": 0}
+            for d in deals:
+                counts[d["proofs"].get(key, {}).get("status", "not_started")] += 1
+            fw_rows.append([str(idx), PROOF_NAMES[key], str(counts["done"]),
+                            str(counts["in_progress"]), str(counts["not_started"]),
+                            str(counts["na"])])
+        story.append(make_table(fw_rows, [1 * cm, 6 * cm, 2.2 * cm, 2.6 * cm, 2.6 * cm, 1.6 * cm]))
+        avg_fw = round(sum(proof_progress(d["proofs"]) for d in deals) / len(deals))
+        story.append(Spacer(1, 0.2 * cm))
+        story.append(Paragraph(
+            f"Average framework completion across the portfolio: <b>{avg_fw}%</b>.", body_style))
+        story.append(Spacer(1, 0.4 * cm))
 
     # Strategy playbook — the AM's how-to-close per opportunity
     strat_deals = [d for d in deals if (d.get("strategy") or "").strip()]

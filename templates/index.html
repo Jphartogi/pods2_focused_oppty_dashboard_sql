@@ -52,6 +52,11 @@
   .row-click { cursor:pointer; }
   .row-click:hover { background: var(--surface-2); }
   .clickable { cursor:pointer; }
+  .modal-tab-btn { color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom:-1px; }
+  .modal-tab-btn:hover { color: var(--text); }
+  .modal-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight:500; }
+  .proof-row { border:1px solid var(--border); border-radius:8px; }
+  .proof-num { width:22px; height:22px; border-radius:9999px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; }
 </style>
 </head>
 <body>
@@ -114,6 +119,7 @@
     <!-- Left nav rail -->
     <aside class="w-56 flex-shrink-0 py-4 hidden md:block" style="background:var(--surface); border-right:1px solid var(--border)">
       <nav class="space-y-1">
+        <button data-tab="management" id="mgmtNavBtn" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm transition"><i class="fa-solid fa-briefcase w-4"></i> Management View</button>
         <button data-tab="tracker" class="nav-link active w-full flex items-center gap-3 px-5 py-2.5 text-sm transition"><i class="fa-solid fa-table-cells-large w-4"></i> Tracker</button>
         <button data-tab="calendar" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm transition"><i class="fa-solid fa-calendar-days w-4"></i> Calendar</button>
         <button data-tab="analytics" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm transition"><i class="fa-solid fa-chart-line w-4"></i> Analytics</button>
@@ -159,6 +165,54 @@
         </div>
       </div>
 
+      <!-- ============ MANAGEMENT VIEW ============ -->
+      <section id="tab-management" class="tab-panel px-6 py-5">
+        <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
+          <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-briefcase mr-1" style="color:var(--primary)"></i>Executive briefing</span>
+          <select id="mgmtFilterAM" class="field text-sm px-3 py-1.5"><option value="">All Account Managers</option></select>
+          <div class="flex-1"></div>
+          <span class="text-[11px]" style="color:var(--text-faint)">Double-click any item to open the full opportunity</span>
+        </div>
+
+        <!-- Financial summary -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">FY2026 Target</p><p id="mgTarget" class="text-lg font-medium mt-1">–</p></div>
+          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Achieved YTD</p><p id="mgAchieved" class="text-lg font-medium mt-1" style="color:var(--success)">–</p></div>
+          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Recurring</p><p id="mgRecurring" class="text-lg font-medium mt-1" style="color:#12b5cb">–</p></div>
+          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">2026 Pipeline</p><p id="mgPipeline" class="text-lg font-medium mt-1" style="color:var(--primary)">–</p></div>
+          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Remaining Gap</p><p id="mgGap" class="text-lg font-medium mt-1" style="color:var(--danger)">–</p></div>
+          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Framework Health</p><p id="mgFramework" class="text-lg font-medium mt-1">–</p></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          <!-- Blockers -->
+          <div class="card elev p-5">
+            <div class="flex items-center justify-between mb-1">
+              <p class="text-sm font-medium"><i class="fa-solid fa-triangle-exclamation mr-1.5" style="color:var(--danger)"></i>Blockers needing escalation</p>
+              <span id="mgBlockerCount" class="chip" style="color:var(--text-muted)">0</span>
+            </div>
+            <p class="text-xs mb-3" style="color:var(--text-muted)">What is stuck and who owns it.</p>
+            <div id="mgBlockers" class="space-y-2"></div>
+          </div>
+          <!-- Action points -->
+          <div class="card elev p-5">
+            <div class="flex items-center justify-between mb-1">
+              <p class="text-sm font-medium"><i class="fa-solid fa-list-check mr-1.5" style="color:var(--primary)"></i>Action points (next 30 days &amp; overdue)</p>
+              <span id="mgActionCount" class="chip" style="color:var(--text-muted)">0</span>
+            </div>
+            <p class="text-xs mb-3" style="color:var(--text-muted)">Committed dates from the execution framework and next actions.</p>
+            <div id="mgActions" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- Strategy by AM -->
+        <div class="card elev p-5">
+          <p class="text-sm font-medium mb-1"><i class="fa-solid fa-chess-knight mr-1.5" style="color:var(--primary)"></i>Strategy &mdash; how each deal will be won</p>
+          <p class="text-xs mb-3" style="color:var(--text-muted)">Top opportunities by value, with the AM's closing strategy and framework progress.</p>
+          <div id="mgStrategy" class="space-y-2"></div>
+        </div>
+      </section>
+
       <!-- ============ TRACKER ============ -->
       <section id="tab-tracker" class="tab-panel active px-6 py-5">
         <div class="flex flex-wrap items-center gap-2 mb-4">
@@ -185,6 +239,7 @@
           <button id="addDealBtn" class="btn-primary text-sm px-4 py-2 rounded-lg transition"><i class="fa-solid fa-plus mr-1.5"></i>Add Opportunity</button>
         </div>
 
+        <p id="amFocusNote" class="text-[11px] mb-2" style="display:none;color:var(--primary)"><i class="fa-solid fa-user-check mr-1"></i>Showing <b>your</b> opportunities by default. Change the Account Manager filter to see the whole team.</p>
         <p class="text-[11px] mb-2" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Double-click any row to open the full opportunity detail. <b>Rev 2026</b> = revenue realizable in the remaining H2 2026.</p>
 
         <div class="card elev overflow-hidden">
@@ -321,6 +376,18 @@
 
         <div class="card elev p-5 mb-4">
           <div class="flex items-center justify-between mb-1">
+            <p class="text-sm font-medium"><i class="fa-solid fa-list-check mr-1.5" style="color:var(--primary)"></i>Execution Framework &mdash; 8 Enterprise Proofs</p>
+            <span id="fwAvgLabel" class="text-[11px]" style="color:var(--text-faint)"></span>
+          </div>
+          <p class="text-xs mb-3" style="color:var(--text-muted)">How far each proof has progressed across the filtered opportunities. Click a proof to see which deals are stuck there.</p>
+          <div id="fwFunnel" class="space-y-2 mb-4"></div>
+          <p class="text-xs font-medium mb-2" style="color:var(--text-muted)">Framework completion by Account Manager</p>
+          <div id="fwByAm" class="space-y-2"></div>
+          <div id="fwDrill" class="mt-3"></div>
+        </div>
+
+        <div class="card elev p-5 mb-4">
+          <div class="flex items-center justify-between mb-1">
             <p class="text-sm font-medium"><i class="fa-solid fa-chess-knight mr-1.5" style="color:var(--primary)"></i>Strategy Coverage &mdash; How to Close</p>
             <span id="strategyCoverPct" class="text-[11px]" style="color:var(--text-faint)"></span>
           </div>
@@ -453,8 +520,15 @@
       <h2 id="dealModalTitle" class="text-base font-medium">Add Opportunity</h2>
       <button data-close-modal="dealModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
+    <div class="px-6 pt-3 flex gap-1" style="border-bottom:1px solid var(--border)">
+      <button type="button" class="modal-tab-btn active text-sm px-4 py-2" data-mtab="details">Opportunity Details</button>
+      <button type="button" class="modal-tab-btn text-sm px-4 py-2" data-mtab="framework">
+        Execution Framework <span id="mtabFwBadge" class="chip ml-1" style="color:var(--text-muted)">0/8</span>
+      </button>
+    </div>
     <form id="dealForm" class="px-6 py-5 space-y-4">
       <input type="hidden" id="dealId">
+      <div id="mtab-details" class="modal-tab-pane space-y-4">
       <div class="grid grid-cols-2 gap-4">
         <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Opportunity Name</label><input id="dealName" required type="text" class="field w-full px-3 py-2 text-sm"></div>
         <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Customer</label><input id="dealCustomer" type="text" class="field w-full px-3 py-2 text-sm"></div>
@@ -477,22 +551,41 @@
         <label class="flex items-center gap-2 text-xs font-medium" style="color:var(--text-muted)"><input id="dealIsBlocked" type="checkbox"> This opportunity is blocked</label>
         <input id="dealBlockerDesc" type="text" placeholder="Describe the blocker..." class="field w-full mt-2 px-3 py-2 text-sm">
       </div>
-      <div class="rounded-lg p-3" style="border:1px solid var(--border)">
-        <label class="block text-xs font-medium mb-1" style="color:var(--text-muted)"><i class="fa-solid fa-chess-knight mr-1" style="color:var(--primary)"></i>Strategy &mdash; how you'll win &amp; close this deal</label>
-        <textarea id="dealStrategy" rows="3" placeholder="e.g. Lock fixed partner price, secure HQ sponsor, run a 2-site pilot then scale, target sign-off by end of Q3..." class="field w-full px-3 py-2 text-sm" style="resize:vertical"></textarea>
-        <p class="text-[10px] mt-1" style="color:var(--text-faint)">Your way of working / how-to-close. The next actions below should carry out this strategy.</p>
-      </div>
-      <div class="rounded-lg p-3" style="border:1px solid var(--border)">
-        <div class="flex items-center justify-between mb-2"><label class="text-xs font-medium" style="color:var(--text-muted)">Next Actions <span style="color:var(--text-faint)">(action plan for the strategy)</span></label><span id="nextActionsProgress" class="text-[11px]" style="color:var(--text-faint)">0 / 0</span></div>
-        <div class="w-full rounded-full h-1.5 mb-3" style="background:var(--surface-3)"><div id="nextActionsBar" class="h-1.5 rounded-full" style="width:0%;background:var(--primary)"></div></div>
-        <div id="nextActionsList" class="space-y-2 mb-2"></div>
-        <div class="flex gap-2">
-          <input id="newActionInput" type="text" placeholder="Add a next action..." class="field flex-1 px-3 py-2 text-sm">
-          <input id="newActionDue" type="date" title="Target date" class="field px-3 py-2 text-sm" style="width:150px">
-          <button type="button" id="addActionBtn" class="text-sm px-3 py-2 rounded-lg" style="background:var(--surface-2);color:var(--text)">Add</button>
+      </div><!-- /details pane -->
+
+      <div id="mtab-framework" class="modal-tab-pane space-y-4" style="display:none">
+        <div class="rounded-lg p-3" style="border:1px solid var(--border)">
+          <label class="block text-xs font-medium mb-1" style="color:var(--text-muted)"><i class="fa-solid fa-chess-knight mr-1" style="color:var(--primary)"></i>Strategy &mdash; how you'll win &amp; close this deal</label>
+          <textarea id="dealStrategy" rows="3" placeholder="e.g. Lock fixed partner price, secure HQ sponsor, run a 2-site pilot then scale, target sign-off by end of Q3..." class="field w-full px-3 py-2 text-sm" style="resize:vertical"></textarea>
+          <p class="text-[10px] mt-1" style="color:var(--text-faint)">The overall play. The 8 Enterprise Proofs below are how you execute it, step by step.</p>
         </div>
-        <p class="text-[10px] mt-1" style="color:var(--text-faint)">Give each action a target date so it appears on the Calendar.</p>
-      </div>
+
+        <div class="rounded-lg p-3" style="border:1px solid var(--border)">
+          <div class="flex items-center justify-between mb-1">
+            <p class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-list-check mr-1" style="color:var(--primary)"></i>8 Enterprise Proofs &mdash; execution framework</p>
+            <span id="proofsProgressLabel" class="text-[11px]" style="color:var(--text-faint)">0 / 8 complete</span>
+          </div>
+          <div class="w-full rounded-full h-1.5 mb-3" style="background:var(--surface-3)"><div id="proofsBar" class="h-1.5 rounded-full" style="width:0%;background:var(--primary)"></div></div>
+          <div id="proofsList" class="space-y-2"></div>
+        </div>
+
+        <details class="rounded-lg" style="border:1px solid var(--border)">
+          <summary class="clickable px-3 py-2 text-xs font-medium" style="color:var(--text-muted);list-style:none">
+            <i class="fa-solid fa-chevron-right text-[10px] mr-1" style="color:var(--text-faint)"></i>Other next actions <span id="nextActionsProgress" class="chip ml-1" style="color:var(--text-faint)">0 / 0</span>
+          </summary>
+          <div class="px-3 pb-3">
+            <p class="text-[10px] mb-2" style="color:var(--text-faint)">Ad-hoc actions that don't belong to a specific proof. Existing actions you captured before the framework are kept here.</p>
+            <div class="w-full rounded-full h-1.5 mb-3" style="background:var(--surface-3)"><div id="nextActionsBar" class="h-1.5 rounded-full" style="width:0%;background:var(--primary)"></div></div>
+            <div id="nextActionsList" class="space-y-2 mb-2"></div>
+            <div class="flex gap-2">
+              <input id="newActionInput" type="text" placeholder="Add a next action..." class="field flex-1 px-3 py-2 text-sm">
+              <input id="newActionDue" type="date" title="Target date" class="field px-3 py-2 text-sm" style="width:150px">
+              <button type="button" id="addActionBtn" class="text-sm px-3 py-2 rounded-lg" style="background:var(--surface-2);color:var(--text)">Add</button>
+            </div>
+          </div>
+        </details>
+      </div><!-- /framework pane -->
+
       <div class="flex justify-end gap-2 pt-2">
         <button type="button" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button>
         <button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button>
@@ -532,6 +625,43 @@ let FULLNAME = localStorage.getItem('dt_fullname');
 let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[], squads:[], stages:[], am_targets:{}, am_achievements:{}, am_recurring:{}, current_achievement:0, recurring_revenue:0 }, USERS = [], AMS = [];
 let nextActionsDraft = [], confirmCallback = null, analyticsFilters = {};
 let currentPage = 1, calMonth = new Date();
+let proofsDraft = {}, fwDrillKey = null;
+// The 8 Enterprise Proofs (fetched from the server; this is the fallback order/labels)
+let PROOF_FRAMEWORK = [
+  {key:'qualification',name:'Proof of Qualification',description:'Ensure target customers (B500) have the need, budget, and alignment with our solution'},
+  {key:'engagement',name:'Proof of Engagement',description:'Secure deep engagement with all key customer stakeholders (PODS, SPIN selling, Sales card)'},
+  {key:'concept',name:'Proof of Concept',description:'Verify the proposed solution functions exactly as specified (TQC)'},
+  {key:'value',name:'Proof of Value',description:'Confirm the solution delivers a profitable outcome for the customer (TQC & outcome-based solution)'},
+  {key:'contract',name:'Proof of Contract',description:'Ensure all TCLRF terms are covered (Technical, Commercial, Legal, Risk, Framework)'},
+  {key:'delivery',name:'Proof of Delivery',description:'Ensure the final solution is delivered according to all expectations (TQC)'},
+  {key:'operation',name:'Proof of Operation',description:'Commit on agreed-upon Service Level Agreement (SLA) and ensure payment'},
+  {key:'clm',name:'Proof of CLM',description:'Nurture the customer relationship to prevent churn and enable upselling (Customer card)'}
+];
+const PROOF_STATUS_META = {
+  not_started:{label:'Not started', color:'var(--text-faint)', bg:'var(--surface-3)'},
+  in_progress:{label:'In progress', color:'#fff', bg:'var(--primary)'},
+  done:{label:'Done', color:'#fff', bg:'var(--success)'},
+  na:{label:'N/A', color:'var(--text-faint)', bg:'var(--surface-2)'}
+};
+function normalizeProofs(raw){
+  const src=(raw&&typeof raw==='object')?raw:{}; const out={};
+  PROOF_FRAMEWORK.forEach(p=>{ const it=src[p.key]||{};
+    const st=String(it.status||'not_started');
+    out[p.key]={status:PROOF_STATUS_META[st]?st:'not_started', notes:it.notes||'', due:it.due||''};
+  });
+  return out;
+}
+function proofProgress(proofs){
+  const p=normalizeProofs(proofs);
+  const applicable=Object.values(p).filter(v=>v.status!=='na');
+  if(!applicable.length) return 0;
+  return Math.round(applicable.filter(v=>v.status==='done').length/applicable.length*100);
+}
+function proofDoneCount(proofs){
+  const p=normalizeProofs(proofs);
+  return {done:Object.values(p).filter(v=>v.status==='done').length,
+          total:Object.values(p).filter(v=>v.status!=='na').length};
+}
 
 const CHART_COLORS = ['#4285f4','#34a853','#fbbc04','#ea4335','#12b5cb','#a142f4','#ff6d01','#24c1e0'];
 const BASE_STAGE_COLORS = { 'Prospecting':'#fbbc04','Negotiation':'#4285f4','Closed':'#34a853','Blocked':'#ea4335' };
@@ -618,22 +748,34 @@ async function enterApp(){
   document.getElementById('avatar').textContent = initials(FULLNAME);
   document.getElementById('settingsNavBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('configNavBtn').style.display = ROLE==='admin' ? '' : 'none';
+  document.getElementById('mgmtNavBtn').style.display = (ROLE==='admin'||ROLE==='management') ? '' : 'none';
   document.getElementById('addDealBtn').style.display = (ROLE==='admin'||ROLE==='account_manager') ? '' : 'none';
+  try { PROOF_FRAMEWORK = await api('/api/proof_framework'); } catch(e) { /* keep fallback */ }
   // An AM only ever sees their own action plan on the calendar
   const calAM=document.getElementById('calFilterAM');
   if(ROLE==='account_manager'){ calAM.innerHTML=`<option>${escapeHtml(FULLNAME)}</option>`; calAM.disabled=true; }
   else { calAM.disabled=false; }
   await loadConfig();
   await loadAMs();
+  // An Account Manager lands focused on their own opportunities by default
+  if(ROLE==='account_manager'){
+    const f=document.getElementById('filterAM');
+    if([...f.options].some(o=>o.value===FULLNAME)) f.value=FULLNAME;
+    document.getElementById('amFocusNote').style.display='';
+  } else {
+    document.getElementById('amFocusNote').style.display='none';
+  }
   await loadDeals();
   if(ROLE==='admin') await loadUsers();
-  switchTab('tracker');
+  // Management lands on the executive briefing; everyone else on the tracker
+  switchTab(ROLE==='management' ? 'management' : 'tracker');
 }
 
 /* ================= TABS ================= */
 document.querySelectorAll('.nav-link').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 function switchTab(tab){
   if((tab==='settings'||tab==='configuration') && ROLE!=='admin') return;
+  if(tab==='management' && !(ROLE==='admin'||ROLE==='management')) return;
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
@@ -641,6 +783,7 @@ function switchTab(tab){
   if(tab==='settings') renderSettings();
   if(tab==='configuration') renderConfiguration();
   if(tab==='calendar') renderCalendar();
+  if(tab==='management') renderManagement();
 }
 
 /* ================= CONFIG / AMS ================= */
@@ -667,6 +810,10 @@ function populateSelectors(){
   document.getElementById('aFilterSquad').innerHTML='<option value="">All Squads</option>'+sq.map(s=>`<option>${escapeHtml(s)}</option>`).join('');
   document.getElementById('aFilterStage').innerHTML='<option value="">All Stages</option>'+st.map(x=>`<option>${escapeHtml(x)}</option>`).join('');
   document.getElementById('aFilterQuarter').innerHTML='<option value="">All Quarters</option>'+QUARTERS.map(q=>`<option>${escapeHtml(q)}</option>`).join('');
+  const mgAM=document.getElementById('mgmtFilterAM');
+  const keepMg=mgAM.value;
+  mgAM.innerHTML='<option value="">All Account Managers</option>'+AMS.map(a=>`<option>${escapeHtml(a)}</option>`).join('');
+  mgAM.value=keepMg;
   // An AM is locked to their own action plan; admin/management get the full picker
   const calAM=document.getElementById('calFilterAM');
   if(ROLE==='account_manager'){ calAM.innerHTML=`<option>${escapeHtml(FULLNAME)}</option>`; calAM.disabled=true; }
@@ -840,6 +987,18 @@ function openDetail(id){
       <div class="flex justify-between text-xs mb-1" style="color:var(--text-muted)"><span>Progress</span><span>${d.progress}%</span></div>
       <div class="w-full rounded-full h-2" style="background:var(--surface-3)"><div class="h-2 rounded-full" style="width:${d.progress}%;background:var(--primary)"></div></div>
     </div>
+    <div class="mb-4">
+      <div class="flex justify-between text-xs mb-2" style="color:var(--text-muted)"><span>Execution framework (8 Enterprise Proofs)</span><span>${proofDoneCount(d.proofs).done}/${proofDoneCount(d.proofs).total} · ${proofProgress(d.proofs)}%</span></div>
+      <div class="space-y-1">${PROOF_FRAMEWORK.map((p,i)=>{
+        const it=normalizeProofs(d.proofs)[p.key], m=PROOF_STATUS_META[it.status];
+        const overdue=it.status!=='done'&&it.status!=='na'&&it.due&&it.due<todayStr();
+        return `<div class="flex items-center gap-2 text-xs">
+          <span class="proof-num" style="background:${m.bg};color:${m.color};width:18px;height:18px;font-size:10px">${i+1}</span>
+          <span class="flex-1 truncate" style="color:${it.status==='na'?'var(--text-faint)':'var(--text)'}">${escapeHtml(p.name.replace('Proof of ',''))}${it.notes?`<span style="color:var(--text-faint)"> — ${escapeHtml(it.notes)}</span>`:''}</span>
+          ${it.due?`<span class="chip" style="color:${overdue?'var(--danger)':'var(--text-muted)'}">${it.due}</span>`:''}
+          <span class="text-[10px]" style="color:var(--text-muted);width:64px;text-align:right">${m.label}</span>
+        </div>`; }).join('')}</div>
+    </div>
     <div class="mb-4 rounded-lg p-3" style="background:var(--surface-2)">
       <p class="text-xs font-medium mb-1" style="color:var(--text)"><i class="fa-solid fa-chess-knight mr-1" style="color:var(--primary)"></i>Strategy — how to close</p>
       <p class="text-sm" style="color:${d.strategy?'var(--text-muted)':'var(--text-faint)'};white-space:pre-wrap">${d.strategy?escapeHtml(d.strategy):'No strategy captured yet.'}</p>
@@ -880,10 +1039,51 @@ function openDealModal(id){
   document.getElementById('dealBlockerDesc').value=d?(d.blocker_description||''):'';
   document.getElementById('dealStrategy').value=d?(d.strategy||''):'';
   nextActionsDraft=d?JSON.parse(JSON.stringify(d.next_actions)):[];
+  proofsDraft=normalizeProofs(d?d.proofs:{});
   renderNextActionsDraft();
+  renderProofsDraft();
+  switchModalTab('details');
   openModal('dealModal');
 }
 document.getElementById('dealProgress').addEventListener('input',e=>document.getElementById('dealProgressLabel').textContent=e.target.value);
+
+/* ---------- Modal tabs: Details | Execution Framework ---------- */
+document.querySelectorAll('.modal-tab-btn').forEach(b=>b.addEventListener('click',()=>switchModalTab(b.dataset.mtab)));
+function switchModalTab(tab){
+  document.querySelectorAll('.modal-tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.mtab===tab));
+  document.querySelectorAll('.modal-tab-pane').forEach(p=>p.style.display='none');
+  document.getElementById('mtab-'+tab).style.display='';
+}
+
+/* ---------- 8 Enterprise Proofs editor ---------- */
+function renderProofsDraft(){
+  const list=document.getElementById('proofsList');
+  list.innerHTML=PROOF_FRAMEWORK.map((p,i)=>{
+    const it=proofsDraft[p.key]||{status:'not_started',notes:'',due:''};
+    const meta=PROOF_STATUS_META[it.status];
+    return `<div class="proof-row p-2.5">
+      <div class="flex items-center gap-2 mb-1.5">
+        <span class="proof-num" style="background:${meta.bg};color:${meta.color}">${i+1}</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium truncate" style="color:var(--text)">${escapeHtml(p.name)}</p>
+          <p class="text-[10px] truncate" style="color:var(--text-faint)" title="${escapeHtml(p.description)}">${escapeHtml(p.description)}</p>
+        </div>
+        <select data-key="${p.key}" class="proof-status field text-xs px-2 py-1" style="width:118px">
+          ${Object.entries(PROOF_STATUS_META).map(([v,m])=>`<option value="${v}" ${it.status===v?'selected':''}>${m.label}</option>`).join('')}
+        </select>
+        <input type="date" value="${it.due||''}" data-key="${p.key}" class="proof-due field text-xs px-2 py-1" style="width:140px" title="Target date">
+      </div>
+      <input type="text" value="${escapeHtml(it.notes||'')}" data-key="${p.key}" class="proof-notes field w-full px-2 py-1.5 text-xs" placeholder="How you'll prove this / evidence, owner, next step...">
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.proof-status').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].status=e.target.value; renderProofsDraft(); }));
+  list.querySelectorAll('.proof-due').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].due=e.target.value; }));
+  list.querySelectorAll('.proof-notes').forEach(s=>s.addEventListener('input',e=>{ proofsDraft[e.target.dataset.key].notes=e.target.value; }));
+  const c=proofDoneCount(proofsDraft), pct=proofProgress(proofsDraft);
+  document.getElementById('proofsProgressLabel').textContent=`${c.done} / ${c.total} complete (${pct}%)`;
+  document.getElementById('proofsBar').style.width=pct+'%';
+  document.getElementById('mtabFwBadge').textContent=`${c.done}/${c.total}`;
+}
 document.getElementById('addActionBtn').addEventListener('click',()=>{
   const i=document.getElementById('newActionInput'), dd=document.getElementById('newActionDue');
   const t=i.value.trim(); if(!t)return;
@@ -924,7 +1124,8 @@ document.getElementById('dealForm').addEventListener('submit',async e=>{
     is_blocked:document.getElementById('dealIsBlocked').checked,
     blocker_description:document.getElementById('dealBlockerDesc').value.trim(),
     strategy:document.getElementById('dealStrategy').value.trim(),
-    next_actions:nextActionsDraft
+    next_actions:nextActionsDraft,
+    proofs:proofsDraft
   };
   try {
     if(id){ await api(`/api/deals/${id}`,{method:'PUT',body:JSON.stringify(payload)}); showToast('Opportunity updated'); }
@@ -941,6 +1142,97 @@ function openConfirm(msg,cb){ document.getElementById('confirmMessage').textCont
 document.getElementById('confirmCancelBtn').addEventListener('click',()=>closeModal('confirmModal'));
 document.getElementById('confirmOkBtn').addEventListener('click',async()=>{ if(confirmCallback) await confirmCallback(); closeModal('confirmModal'); });
 
+/* ================= MANAGEMENT VIEW (admin + management only) ================= */
+document.getElementById('mgmtFilterAM').addEventListener('change',renderManagement);
+function renderManagement(){
+  const amFilter=document.getElementById('mgmtFilterAM').value;
+  const deals=(ALL_DEALS||[]).filter(d=>!amFilter||d.assigned_am===amFilter);
+  const today=todayStr();
+
+  // --- Financial summary ---
+  const target = amFilter ? (CONFIG.am_targets||{})[amFilter]||0 : CONFIG.target_amount||0;
+  const achieved = amFilter ? (CONFIG.am_achievements||{})[amFilter]||0 : CONFIG.current_achievement||0;
+  const recurring = amFilter ? (CONFIG.am_recurring||{})[amFilter]||0 : CONFIG.recurring_revenue||0;
+  const pipeline = deals.reduce((s,d)=>s+(d.revenue_2026||0),0);
+  const gap = Math.max(target-(achieved+recurring+pipeline),0);
+  const fwAvg = deals.length?Math.round(deals.reduce((s,d)=>s+proofProgress(d.proofs),0)/deals.length):0;
+  document.getElementById('mgTarget').textContent=fmtIDR(target);
+  document.getElementById('mgAchieved').textContent=fmtIDR(achieved);
+  document.getElementById('mgRecurring').textContent=fmtIDR(recurring);
+  document.getElementById('mgPipeline').textContent=fmtIDR(pipeline);
+  document.getElementById('mgGap').textContent=fmtIDR(gap);
+  const fwEl=document.getElementById('mgFramework');
+  fwEl.textContent=fwAvg+'%';
+  fwEl.style.color = fwAvg>=60?'var(--success)':fwAvg>=30?'var(--warning)':'var(--danger)';
+
+  // --- Blockers ---
+  const blocked=deals.filter(d=>d.is_blocked).sort((a,b)=>b.estimated_value-a.estimated_value);
+  document.getElementById('mgBlockerCount').textContent=blocked.length;
+  document.getElementById('mgBlockers').innerHTML=blocked.map(d=>`
+    <div class="mg-row clickable rounded-lg p-3" data-deal="${d.id}" style="background:var(--danger-soft)">
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-medium flex-1" style="color:var(--text)">${escapeHtml(d.deal_name)}</span>
+        <span class="chip" style="color:var(--text-muted)">${escapeHtml((d.assigned_am||'').split(' ')[0])}</span>
+        <span class="text-xs" style="color:var(--text-muted)">${fmtIDR(d.estimated_value)}</span>
+      </div>
+      <p class="text-xs mt-1" style="color:var(--danger)">${escapeHtml(d.blocker_description||'Blocked — no detail given')}</p>
+    </div>`).join('')||`<p class="text-xs" style="color:var(--success)"><i class="fa-solid fa-circle-check mr-1"></i>No blockers right now.</p>`;
+
+  // --- Action points: overdue + next 30 days, from proofs and next actions ---
+  const horizon=new Date(); horizon.setDate(horizon.getDate()+30);
+  const hStr=ymd(horizon);
+  const items=[];
+  deals.forEach(d=>{
+    const pr=normalizeProofs(d.proofs);
+    PROOF_FRAMEWORK.forEach((p,i)=>{ const it=pr[p.key];
+      if(it.status==='done'||it.status==='na'||!it.due) return;
+      if(it.due<=hStr) items.push({due:it.due,label:`${i+1}. ${p.name.replace('Proof of ','')}${it.notes?' — '+it.notes:''}`,deal:d,proof:true});
+    });
+    (d.next_actions||[]).forEach(a=>{ if(a.done||!a.due) return;
+      if(a.due<=hStr) items.push({due:a.due,label:a.action,deal:d,proof:false}); });
+  });
+  items.sort((a,b)=>a.due.localeCompare(b.due));
+  document.getElementById('mgActionCount').textContent=items.length;
+  document.getElementById('mgActions').innerHTML=items.slice(0,12).map(x=>{
+    const overdue=x.due<today;
+    return `<div class="mg-row clickable flex items-center gap-2 rounded-lg px-3 py-2" data-deal="${x.deal.id}" style="background:var(--surface-2)">
+      <span class="chip" style="min-width:100px;text-align:center;color:${overdue?'var(--danger)':'var(--text-muted)'};border-color:${overdue?'var(--danger)':'var(--border)'}">${overdue?'⚠ ':''}${x.due}</span>
+      <span class="text-xs flex-1" style="color:var(--text)">${x.proof?'<i class="fa-solid fa-list-check mr-1" style="color:var(--primary)"></i>':''}${escapeHtml(x.label)}</span>
+      <span class="text-[11px]" style="color:var(--text-muted)">${escapeHtml(x.deal.deal_name)}</span>
+      <span class="chip" style="color:var(--text-muted)">${escapeHtml((x.deal.assigned_am||'').split(' ')[0])}</span>
+    </div>`;
+  }).join('')||`<p class="text-xs" style="color:var(--text-faint)">No dated actions in the next 30 days.</p>`;
+  if(items.length>12) document.getElementById('mgActions').insertAdjacentHTML('beforeend',
+    `<p class="text-[11px] mt-1" style="color:var(--text-faint)">+${items.length-12} more — see the Calendar</p>`);
+
+  // --- Strategy by opportunity ---
+  document.getElementById('mgStrategy').innerHTML=[...deals]
+    .sort((a,b)=>b.estimated_value-a.estimated_value).slice(0,12).map(d=>{
+      const c=proofDoneCount(d.proofs), pct=proofProgress(d.proofs);
+      const color=pct>=60?'var(--success)':pct>=30?'var(--warning)':'var(--danger)';
+      return `<div class="mg-row clickable rounded-lg p-3" data-deal="${d.id}" style="background:var(--surface-2)">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-sm font-medium" style="color:var(--text)">${escapeHtml(d.deal_name)}</span>
+          <span class="text-[11px]" style="color:var(--text-muted)">${escapeHtml(d.customer)}</span>
+          <span class="flex-1"></span>
+          <span class="chip" style="color:var(--text-muted)">${escapeHtml((d.assigned_am||'').split(' ')[0])}</span>
+          <span class="text-xs" style="color:var(--text)">${fmtIDR(d.estimated_value)}</span>
+        </div>
+        <div class="flex items-center gap-2 mb-1">
+          <div class="rounded-full h-1.5" style="width:120px;background:var(--surface-3)"><div class="h-1.5 rounded-full" style="width:${pct}%;background:${color}"></div></div>
+          <span class="text-[10px]" style="color:var(--text-muted)">framework ${c.done}/${c.total}</span>
+          <span class="text-[10px]" style="color:var(--text-faint)">· ${escapeHtml(d.stage)} · ${d.progress}%</span>
+        </div>
+        <p class="text-xs" style="color:${d.strategy?'var(--text-muted)':'var(--text-faint)'};white-space:pre-wrap">${d.strategy?escapeHtml(d.strategy):'— No strategy captured yet —'}</p>
+      </div>`;
+    }).join('')||`<p class="text-xs" style="color:var(--text-faint)">No opportunities.</p>`;
+
+  document.querySelectorAll('#tab-management .mg-row').forEach(r=>{
+    r.addEventListener('dblclick',()=>openDetail(parseInt(r.dataset.deal)));
+    r.addEventListener('click',()=>openDetail(parseInt(r.dataset.deal)));
+  });
+}
+
 /* ================= CALENDAR (next-action plan) ================= */
 function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function ymd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
@@ -952,9 +1244,18 @@ function calendarActions(){
   const out=[];
   (ALL_DEALS||[]).forEach(d=>{
     if(amFilter && d.assigned_am!==amFilter) return;
+    // 8 Enterprise Proof milestones (the execution framework)
+    const pr=normalizeProofs(d.proofs);
+    PROOF_FRAMEWORK.forEach((p,i)=>{
+      const it=pr[p.key]; if(!it || it.status==='na') return;
+      const done=it.status==='done';
+      if(hideDone && done) return;
+      out.push({ action:`${i+1}. ${p.name}${it.notes?' — '+it.notes:''}`, done, due:it.due||'', proof:true,
+                 dealId:d.id, dealName:d.deal_name, customer:d.customer, am:d.assigned_am });
+    });
     (d.next_actions||[]).forEach(a=>{
       if(hideDone && a.done) return;
-      out.push({ action:a.action, done:!!a.done, due:a.due||'',
+      out.push({ action:a.action, done:!!a.done, due:a.due||'', proof:false,
                  dealId:d.id, dealName:d.deal_name, customer:d.customer, am:d.assigned_am });
     });
   });
@@ -1067,6 +1368,7 @@ function renderAnalytics(){
   bindChartDrill();
 
   renderAmTargetChart(ds);
+  renderFrameworkAnalytics(ds);
   renderStrategyPlaybook(ds);
   renderLeaderboard(ds);
   renderSummary(ds,total,value,weighted,closed,blocked);
@@ -1074,6 +1376,79 @@ function renderAnalytics(){
 }
 
 function groupSum(ds,field){ const o={}; ds.forEach(d=>o[d[field]||'—']=(o[d[field]||'—']||0)+d.estimated_value); return o; }
+
+/* Execution framework analytics: proof-by-proof funnel + per-AM completion */
+function renderFrameworkAnalytics(ds){
+  const funnel=document.getElementById('fwFunnel');
+  if(!ds.length){
+    funnel.innerHTML=`<p class="text-xs" style="color:var(--text-faint)">No opportunities match the current filters.</p>`;
+    document.getElementById('fwByAm').innerHTML=''; document.getElementById('fwDrill').innerHTML='';
+    document.getElementById('fwAvgLabel').textContent=''; return;
+  }
+  const avg=Math.round(ds.reduce((s,d)=>s+proofProgress(d.proofs),0)/ds.length);
+  document.getElementById('fwAvgLabel').innerHTML=`portfolio average <b style="color:${avg>=60?'var(--success)':avg>=30?'var(--warning)':'var(--danger)'}">${avg}%</b> complete`;
+
+  funnel.innerHTML=PROOF_FRAMEWORK.map((p,i)=>{
+    const c={done:0,in_progress:0,not_started:0,na:0};
+    ds.forEach(d=>{ c[normalizeProofs(d.proofs)[p.key].status]++; });
+    const total=ds.length, w=v=>total?v/total*100:0;
+    const active=fwDrillKey===p.key;
+    return `<div class="fw-proof clickable" data-key="${p.key}" title="Click to see deals not yet done at this proof">
+      <div class="flex items-center gap-2 mb-0.5">
+        <span class="proof-num" style="background:${c.done===total?'var(--success)':'var(--surface-3)'};color:${c.done===total?'#fff':'var(--text-muted)'};width:18px;height:18px;font-size:10px">${i+1}</span>
+        <span class="text-xs flex-1" style="color:${active?'var(--primary)':'var(--text)'};font-weight:${active?'600':'400'}">${escapeHtml(p.name)}</span>
+        <span class="text-[11px]" style="color:var(--text-muted)">${c.done} done · ${c.in_progress} in progress · ${c.not_started} not started${c.na?` · ${c.na} n/a`:''}</span>
+      </div>
+      <div class="w-full rounded-full overflow-hidden flex" style="height:8px;background:var(--surface-3)">
+        <div style="width:${w(c.done)}%;background:var(--success)"></div>
+        <div style="width:${w(c.in_progress)}%;background:var(--primary)"></div>
+        <div style="width:${w(c.na)}%;background:var(--surface-2)"></div>
+      </div>
+    </div>`;
+  }).join('');
+  funnel.querySelectorAll('.fw-proof').forEach(el=>el.addEventListener('click',()=>{
+    fwDrillKey = fwDrillKey===el.dataset.key ? null : el.dataset.key;
+    renderFrameworkAnalytics(ds);
+  }));
+
+  // Per-AM framework completion
+  const byAM={};
+  ds.forEach(d=>{ const k=d.assigned_am||'—'; (byAM[k]=byAM[k]||[]).push(proofProgress(d.proofs)); });
+  document.getElementById('fwByAm').innerHTML=Object.keys(byAM).sort().map(am=>{
+    const arr=byAM[am], p=Math.round(arr.reduce((s,v)=>s+v,0)/arr.length);
+    const color=p>=60?'var(--success)':p>=30?'var(--warning)':'var(--danger)';
+    return `<div class="flex items-center gap-3">
+      <span class="text-xs" style="color:var(--text);width:130px">${escapeHtml(am)}</span>
+      <div class="flex-1 rounded-full h-2" style="background:var(--surface-3)"><div class="h-2 rounded-full" style="width:${p}%;background:${color}"></div></div>
+      <span class="text-[11px]" style="color:var(--text-muted);width:76px;text-align:right">${arr.length} opps · <b style="color:${color}">${p}%</b></span>
+    </div>`;
+  }).join('');
+
+  // Drill-down: which deals are stuck at the selected proof
+  const drill=document.getElementById('fwDrill');
+  if(!fwDrillKey){ drill.innerHTML=''; return; }
+  const meta=PROOF_FRAMEWORK.find(p=>p.key===fwDrillKey);
+  const stuck=ds.filter(d=>['not_started','in_progress'].includes(normalizeProofs(d.proofs)[fwDrillKey].status))
+                .sort((a,b)=>b.estimated_value-a.estimated_value);
+  drill.innerHTML=`<div class="rounded-lg p-3" style="background:var(--surface-2)">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-xs font-medium" style="color:var(--text)">${escapeHtml(meta.name)} — ${stuck.length} opportunity(ies) not yet done</p>
+      <button id="fwDrillClear" class="text-[11px]" style="color:var(--primary)">Clear</button>
+    </div>
+    <p class="text-[11px] mb-2" style="color:var(--text-faint)">${escapeHtml(meta.description)}</p>
+    ${stuck.slice(0,10).map(d=>{ const it=normalizeProofs(d.proofs)[fwDrillKey];
+      return `<div class="fw-drill-row clickable flex items-center gap-2 text-xs py-1" data-deal="${d.id}">
+        <span class="flex-1 truncate" style="color:var(--text)">${escapeHtml(d.deal_name)}</span>
+        <span class="chip" style="color:var(--text-muted)">${escapeHtml((d.assigned_am||'').split(' ')[0])}</span>
+        <span style="color:var(--text-muted);width:74px;text-align:right">${fmtIDR(d.estimated_value)}</span>
+        <span class="chip" style="color:${it.status==='in_progress'?'var(--primary)':'var(--text-faint)'}">${PROOF_STATUS_META[it.status].label}</span>
+      </div>`; }).join('')||`<p class="text-xs" style="color:var(--success)">All done at this proof.</p>`}
+    ${stuck.length>10?`<p class="text-[11px] mt-1" style="color:var(--text-faint)">+${stuck.length-10} more</p>`:''}
+  </div>`;
+  const clr=document.getElementById('fwDrillClear');
+  if(clr) clr.addEventListener('click',()=>{ fwDrillKey=null; renderFrameworkAnalytics(ds); });
+  drill.querySelectorAll('.fw-drill-row').forEach(r=>r.addEventListener('click',()=>openDetail(parseInt(r.dataset.deal))));
+}
 
 /* Strategy coverage: which deals have a documented how-to-close (scannable, expandable) */
 function renderStrategyPlaybook(ds){
