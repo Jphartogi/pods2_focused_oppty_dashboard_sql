@@ -3,9 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>H2 2026 Command Center - PODS 2</title>
+<title>PODS-2 Dashboard Tracker</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
   tailwind.config = { darkMode: ['selector', '[data-theme="dark"]'] };
 </script>
@@ -29,7 +32,10 @@
     --chart-grid:#3c4043; --chart-text:#9aa0a6;
   }
   html, body { background: var(--bg); color: var(--text); }
-  body { font-family: 'Google Sans','Roboto','Segoe UI',Arial,sans-serif; -webkit-font-smoothing: antialiased; }
+  body { font-family:'Inter','Google Sans','Roboto','Segoe UI',Arial,sans-serif; -webkit-font-smoothing: antialiased; letter-spacing:-0.011em; }
+  h1,h2,.metric-value { letter-spacing:-0.02em; }
+  /* numbers line up in tables */
+  .tabular { font-variant-numeric: tabular-nums; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
   .elev { box-shadow: 0 1px 2px 0 var(--shadow), 0 1px 3px 1px var(--shadow); }
   .nav-link { color: var(--text-muted); border-radius: 0 24px 24px 0; margin-right: 12px; }
@@ -55,37 +61,118 @@
   .modal-tab-btn { color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom:-1px; }
   .modal-tab-btn:hover { color: var(--text); }
   .modal-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight:500; }
-  .proof-row { border:1px solid var(--border); border-radius:8px; }
+  .proof-row { border:1px solid var(--border); border-radius:8px; transition: border-color .15s ease; }
+  .proof-row:hover { border-color: var(--primary); }
   .proof-num { width:22px; height:22px; border-radius:9999px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; }
+  /* --- light motion: cards lift slightly, panels fade in --- */
+  .card { transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease; }
+  .card.elev:hover { box-shadow: 0 1px 3px var(--shadow), 0 4px 12px var(--shadow); }
+  .btn-primary, .nav-link, .chip, button { transition: background .15s ease, color .15s ease, opacity .15s ease; }
+  @keyframes riseIn { from { opacity:0; transform: translateY(6px);} to { opacity:1; transform:none;} }
+  .tab-panel.active { animation: riseIn .22s ease both; }
+  @media (prefers-reduced-motion: reduce) { *, .tab-panel.active { animation:none !important; transition:none !important; } }
+  /* --- collapsible left rail --- */
+  #sideRail { transition: width .2s ease; }
+  body.rail-collapsed #sideRail { width:64px; }
+  body.rail-collapsed .rail-label { display:none; }
+  body.rail-collapsed .nav-link { justify-content:center; margin-right:8px; border-radius:12px; }
+  /* --- grouped navigation --- */
+  .nav-group + .nav-group { margin-top:2px; }
+  .nav-group-head {
+    display:flex; align-items:center; gap:8px; width:100%;
+    padding:10px 20px 6px; font-size:11px; font-weight:600; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--text-faint); background:none; border:0; cursor:pointer;
+  }
+  .nav-group-head:hover { color:var(--text-muted); }
+  .nav-group-head .chev { font-size:9px; transition:transform .18s ease; }
+  .nav-group.collapsed .nav-group-head .chev { transform:rotate(-90deg); }
+  .nav-group-items { overflow:hidden; transition:max-height .2s ease, opacity .18s ease; max-height:400px; }
+  .nav-group.collapsed .nav-group-items { max-height:0; opacity:0; }
+  /* when the rail is icon-only, groups always show their icons, separated by a rule */
+  body.rail-collapsed .nav-group-head { display:none; }
+  body.rail-collapsed .nav-group.collapsed .nav-group-items { max-height:400px; opacity:1; }
+  body.rail-collapsed .nav-group + .nav-group { margin-top:8px; padding-top:8px; border-top:1px solid var(--border); }
+  .icon-btn { width:36px; height:36px; border-radius:9999px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  /* --- expandable summary widgets (management view) --- */
+  .widget > summary { list-style:none; cursor:pointer; }
+  .widget > summary::-webkit-details-marker { display:none; }
+  .widget summary .chev { transition: transform .18s ease; }
+  .widget[open] summary .chev { transform: rotate(90deg); }
 </style>
 </head>
 <body>
 
 <!-- ===================== LOGIN ===================== -->
-<div id="loginScreen" class="min-h-screen flex items-center justify-center px-4" style="background:linear-gradient(135deg,#1a73e8 0%,#174ea6 100%)">
-  <div class="card elev w-full max-w-sm p-8">
-    <div class="text-center mb-6">
-      <div class="w-14 h-14 rounded-2xl btn-primary flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-satellite-dish text-2xl"></i></div>
-      <h1 class="text-lg font-medium" style="color:var(--text)">H2 2026 Command Center</h1>
-      <p class="text-xs mt-1" style="color:var(--text-muted)">PODS 2 &mdash; Deal Execution Tracker</p>
+<div id="loginScreen" class="min-h-screen flex items-center justify-center p-4 sm:p-8" style="background:radial-gradient(120% 120% at 15% 10%, #eef6ff 0%, #dfeeff 35%, #cfe3ff 65%, #bfd9ff 100%)">
+  <div class="w-full max-w-4xl grid md:grid-cols-2 rounded-3xl overflow-hidden" style="box-shadow:0 24px 70px -12px rgba(26,115,232,.35), 0 8px 24px rgba(26,115,232,.15)">
+
+    <!-- Left: translucent glass sign-in card -->
+    <div class="relative p-8 sm:p-11 flex flex-col justify-center" style="background:rgba(255,255,255,.68); backdrop-filter:blur(22px) saturate(160%); -webkit-backdrop-filter:blur(22px) saturate(160%); border-right:1px solid rgba(255,255,255,.4)">
+      <div class="mb-7">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style="background:linear-gradient(135deg,#1a73e8,#0d47a1); box-shadow:0 8px 20px -6px rgba(26,115,232,.6)">
+          <i class="fa-solid fa-satellite-dish text-xl text-white"></i>
+        </div>
+        <h1 class="text-2xl font-semibold" style="color:#0d1b34">Sign in</h1>
+        <p class="text-xs mt-1.5" style="color:#5c6c8a">PODS-2 Dashboard Tracker &mdash; deal execution &amp; strategy</p>
+      </div>
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium mb-1.5" style="color:#3c4a63">Username</label>
+          <div class="relative">
+            <i class="fa-regular fa-user absolute left-3 top-1/2 -translate-y-1/2 text-xs" style="color:#9aa8c2"></i>
+            <input id="loginUsername" type="text" required autocomplete="username" class="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl" style="background:rgba(255,255,255,.85); border:1px solid rgba(15,40,90,.12); color:#0d1b34" placeholder="Your username">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1.5" style="color:#3c4a63">Password</label>
+          <div class="relative">
+            <i class="fa-solid fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-xs" style="color:#9aa8c2"></i>
+            <input id="loginPassword" type="password" required autocomplete="current-password" class="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl" style="background:rgba(255,255,255,.85); border:1px solid rgba(15,40,90,.12); color:#0d1b34" placeholder="••••••••">
+          </div>
+        </div>
+        <p id="loginError" class="text-xs hidden" style="color:#d93025"></p>
+        <button type="submit" class="w-full text-sm font-medium py-2.5 rounded-xl text-white" style="background:linear-gradient(135deg,#1a73e8,#0d47a1); box-shadow:0 10px 24px -8px rgba(26,115,232,.6)">Sign in</button>
+      </form>
+      <p class="text-[11px] mt-7" style="color:#8895ac">Access is managed by your administrator. Contact them if you need an account or a password reset.</p>
     </div>
-    <form id="loginForm" class="space-y-4">
-      <div>
-        <label class="block text-xs mb-1" style="color:var(--text-muted)">Username</label>
-        <input id="loginUsername" type="text" required autocomplete="username" class="field w-full px-3 py-2.5 text-sm" placeholder="e.g. anisa">
+
+    <!-- Right: illustration panel -->
+    <div class="hidden md:flex relative flex-col items-center justify-center px-8 py-10 overflow-hidden" style="background:linear-gradient(160deg,#1a73e8 0%,#12388f 60%,#0a2559 100%)">
+      <div class="absolute rounded-full" style="width:280px;height:280px;top:-60px;right:-70px;background:rgba(255,255,255,.08);filter:blur(6px)"></div>
+      <div class="absolute rounded-full" style="width:220px;height:220px;bottom:-70px;left:-60px;background:rgba(79,195,247,.18);filter:blur(10px)"></div>
+
+      <div class="relative z-10 text-center mb-2">
+        <h2 class="text-white text-xl font-semibold leading-snug">Welcome to the<br>PODS-2 Dashboard Tracker</h2>
+        <p class="text-[12px] mt-2" style="color:rgba(255,255,255,.72)">Track every opportunity, strategy and target in one place</p>
       </div>
-      <div>
-        <label class="block text-xs mb-1" style="color:var(--text-muted)">Password</label>
-        <input id="loginPassword" type="password" required autocomplete="current-password" class="field w-full px-3 py-2.5 text-sm" placeholder="••••••••">
-      </div>
-      <p id="loginError" class="text-xs hidden" style="color:var(--danger)"></p>
-      <button type="submit" class="btn-primary w-full text-sm font-medium py-2.5 rounded-lg transition">Sign in</button>
-    </form>
-    <div class="mt-6 pt-4 text-[11px] leading-relaxed" style="border-top:1px solid var(--border); color:var(--text-faint)">
-      <p class="font-medium mb-1" style="color:var(--text-muted)">Demo accounts</p>
-      admin / admin123 &mdash; Administrator<br>
-      anisa / anisa123 &middot; arie / arie123 &middot; ashari / ashari123 &middot; dimas / dimas123 &mdash; Account Managers<br>
-      exec / exec123 &mdash; Management (view-only)
+
+      <svg viewBox="0 0 400 300" class="relative z-10 w-full max-w-[340px] mt-2" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="60,255 118,255 260,95 232,60" fill="#4fc3f7" opacity="0.85"/>
+        <polygon points="232,60 260,95 285,70 250,32" fill="#8fdcff" opacity="0.85"/>
+        <rect x="150" y="95" width="140" height="98" rx="8" fill="#f2f7ff"/>
+        <rect x="160" y="105" width="120" height="66" rx="4" fill="#0d2c66"/>
+        <polyline points="168,155 190,140 208,150 226,120 244,132 262,112 272,118" stroke="#4fc3f7" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="272" cy="118" r="4" fill="#8fdcff"/>
+        <rect x="205" y="193" width="30" height="14" fill="#dbe7fb"/>
+        <rect x="188" y="207" width="64" height="8" rx="4" fill="#c7d8f2"/>
+        <circle cx="112" cy="150" r="14" fill="#ffe0b2"/>
+        <rect x="98" y="164" width="28" height="46" rx="10" fill="#ffffff"/>
+        <rect x="98" y="164" width="28" height="46" rx="10" fill="#eef4ff" opacity="0.4"/>
+        <rect x="103" y="205" width="8" height="34" rx="4" fill="#173a7a"/>
+        <rect x="115" y="205" width="8" height="34" rx="4" fill="#173a7a"/>
+        <path d="M124 176 L152 158" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/>
+        <path d="M100 178 L82 190" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/>
+        <circle cx="300" cy="185" r="12" fill="#ffe0b2"/>
+        <rect x="288" y="197" width="24" height="42" rx="9" fill="#e8f1ff"/>
+        <rect x="292" y="235" width="7" height="30" rx="3.5" fill="#173a7a"/>
+        <rect x="302" y="235" width="7" height="30" rx="3.5" fill="#173a7a"/>
+        <path d="M290 207 L272 222" stroke="#e8f1ff" stroke-width="8" stroke-linecap="round"/>
+        <circle cx="70" cy="90" r="5" fill="#ffffff" opacity="0.7"/>
+        <circle cx="330" cy="70" r="4" fill="#ffffff" opacity="0.5"/>
+        <circle cx="345" cy="200" r="6" fill="#ffffff" opacity="0.5"/>
+        <circle cx="55" cy="220" r="4" fill="#ffffff" opacity="0.6"/>
+      </svg>
     </div>
   </div>
 </div>
@@ -95,36 +182,70 @@
 
   <!-- Top app bar -->
   <header class="flex items-center gap-3 px-4 h-16 flex-shrink-0" style="background:var(--surface); border-bottom:1px solid var(--border)">
+    <button id="railToggle" class="icon-btn" title="Collapse / expand menu"><i class="fa-solid fa-bars"></i></button>
     <div class="w-9 h-9 rounded-lg btn-primary flex items-center justify-center"><i class="fa-solid fa-satellite-dish"></i></div>
     <div>
-      <p class="text-sm font-medium leading-tight" style="color:var(--text)">PODS 2 Command Center</p>
+      <p class="text-sm font-semibold leading-tight" style="color:var(--text)">PODS-2 Dashboard Tracker</p>
       <p class="text-[11px] leading-tight" style="color:var(--text-muted)">H2 2026 Strategic Playbook</p>
     </div>
     <span class="chip ml-2 hidden sm:inline" style="color:var(--text-muted)">IDR &middot; Production</span>
     <div class="flex-1"></div>
-    <button id="themeToggle" title="Toggle theme" class="w-9 h-9 rounded-full flex items-center justify-center transition" style="color:var(--text-muted)" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'">
-      <i id="themeIcon" class="fa-solid fa-moon"></i>
-    </button>
-    <div class="flex items-center gap-2 pl-2">
-      <div class="text-right hidden sm:block">
+    <button id="quickConfigBtn" title="Configuration" class="icon-btn" style="display:none"><i class="fa-solid fa-list-check"></i></button>
+    <button id="quickSettingsBtn" title="Settings" class="icon-btn" style="display:none"><i class="fa-solid fa-gear"></i></button>
+    <button id="themeToggle" title="Toggle theme" class="icon-btn"><i id="themeIcon" class="fa-solid fa-moon"></i></button>
+    <div class="flex items-center gap-2 pl-1" style="border-left:1px solid var(--border)">
+      <div class="text-right hidden sm:block pl-2">
         <p id="topUserName" class="text-xs font-medium leading-tight" style="color:var(--text)"></p>
         <p id="topUserRole" class="text-[10px] uppercase tracking-wide leading-tight" style="color:var(--primary)"></p>
       </div>
-      <div id="avatar" class="w-9 h-9 rounded-full btn-primary flex items-center justify-center text-sm font-medium"></div>
-      <button id="logoutBtn" title="Sign out" class="w-9 h-9 rounded-full flex items-center justify-center transition" style="color:var(--text-muted)" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+      <div id="avatar" class="w-9 h-9 rounded-full btn-primary flex items-center justify-center text-sm font-semibold"></div>
+      <button id="logoutBtn" title="Sign out" class="icon-btn"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
     </div>
   </header>
 
   <div class="flex flex-1 min-h-0">
     <!-- Left nav rail -->
-    <aside class="w-56 flex-shrink-0 py-4 hidden md:block" style="background:var(--surface); border-right:1px solid var(--border)">
-      <nav class="space-y-1">
-        <button data-tab="management" id="mgmtNavBtn" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm transition"><i class="fa-solid fa-briefcase w-4"></i> Management View</button>
-        <button data-tab="tracker" class="nav-link active w-full flex items-center gap-3 px-5 py-2.5 text-sm transition"><i class="fa-solid fa-table-cells-large w-4"></i> Tracker</button>
-        <button data-tab="calendar" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm transition"><i class="fa-solid fa-calendar-days w-4"></i> Calendar</button>
-        <button data-tab="analytics" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm transition"><i class="fa-solid fa-chart-line w-4"></i> Analytics</button>
-        <button data-tab="configuration" id="configNavBtn" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm transition"><i class="fa-solid fa-list-check w-4"></i> Configuration</button>
-        <button data-tab="settings" id="settingsNavBtn" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm transition"><i class="fa-solid fa-sliders w-4"></i> Settings</button>
+    <aside id="sideRail" class="w-56 flex-shrink-0 py-4 hidden md:block" style="background:var(--surface); border-right:1px solid var(--border)">
+      <nav id="navGroups">
+        <!-- Overview -->
+        <div class="nav-group" data-group="overview">
+          <button class="nav-group-head rail-label" type="button">
+            <i class="fa-solid fa-chevron-down chev"></i><span>Overview</span>
+          </button>
+          <div class="nav-group-items space-y-1">
+            <button data-tab="management" id="mgmtNavBtn" title="Management View" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-briefcase w-4"></i> <span class="rail-label">Management View</span></button>
+          </div>
+        </div>
+        <!-- Tracker & updates -->
+        <div class="nav-group" data-group="work">
+          <button class="nav-group-head rail-label" type="button">
+            <i class="fa-solid fa-chevron-down chev"></i><span>Tracker &amp; Updates</span>
+          </button>
+          <div class="nav-group-items space-y-1">
+            <button data-tab="tracker" title="Tracker" class="nav-link active w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-table-cells-large w-4"></i> <span class="rail-label">Tracker</span></button>
+            <button data-tab="calendar" title="Calendar" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-calendar-days w-4"></i> <span class="rail-label">Calendar</span></button>
+          </div>
+        </div>
+        <!-- Analytics -->
+        <div class="nav-group" data-group="analytics">
+          <button class="nav-group-head rail-label" type="button">
+            <i class="fa-solid fa-chevron-down chev"></i><span>Analytics</span>
+          </button>
+          <div class="nav-group-items space-y-1">
+            <button data-tab="analytics" title="Pipeline Analytics" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-chart-line w-4"></i> <span class="rail-label">Pipeline Analytics</span></button>
+            <button data-tab="performance" id="perfNavBtn" title="Performance" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-gauge-high w-4"></i> <span class="rail-label">Performance</span></button>
+          </div>
+        </div>
+        <!-- Configuration -->
+        <div class="nav-group" data-group="config">
+          <button class="nav-group-head rail-label" type="button">
+            <i class="fa-solid fa-chevron-down chev"></i><span>Configuration</span>
+          </button>
+          <div class="nav-group-items space-y-1">
+            <button data-tab="configuration" id="configNavBtn" title="Lists &amp; Automation" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-list-check w-4"></i> <span class="rail-label">Lists &amp; Automation</span></button>
+            <button data-tab="settings" id="settingsNavBtn" title="Settings" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-sliders w-4"></i> <span class="rail-label">Settings</span></button>
+          </div>
+        </div>
       </nav>
     </aside>
 
@@ -184,33 +305,44 @@
           <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Framework Health</p><p id="mgFramework" class="text-lg font-medium mt-1">–</p></div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          <!-- Blockers -->
-          <div class="card elev p-5">
-            <div class="flex items-center justify-between mb-1">
-              <p class="text-sm font-medium"><i class="fa-solid fa-triangle-exclamation mr-1.5" style="color:var(--danger)"></i>Blockers needing escalation</p>
-              <span id="mgBlockerCount" class="chip" style="color:var(--text-muted)">0</span>
-            </div>
-            <p class="text-xs mb-3" style="color:var(--text-muted)">What is stuck and who owns it.</p>
-            <div id="mgBlockers" class="space-y-2"></div>
-          </div>
-          <!-- Action points -->
-          <div class="card elev p-5">
-            <div class="flex items-center justify-between mb-1">
-              <p class="text-sm font-medium"><i class="fa-solid fa-list-check mr-1.5" style="color:var(--primary)"></i>Action points (next 30 days &amp; overdue)</p>
-              <span id="mgActionCount" class="chip" style="color:var(--text-muted)">0</span>
-            </div>
-            <p class="text-xs mb-3" style="color:var(--text-muted)">Committed dates from the execution framework and next actions.</p>
-            <div id="mgActions" class="space-y-2"></div>
-          </div>
-        </div>
+        <!-- At-a-glance status line: expand only what needs attention -->
+        <div id="mgHeadline" class="card elev p-4 mb-4"></div>
 
-        <!-- Strategy by AM -->
-        <div class="card elev p-5">
-          <p class="text-sm font-medium mb-1"><i class="fa-solid fa-chess-knight mr-1.5" style="color:var(--primary)"></i>Strategy &mdash; how each deal will be won</p>
-          <p class="text-xs mb-3" style="color:var(--text-muted)">Top opportunities by value, with the AM's closing strategy and framework progress.</p>
-          <div id="mgStrategy" class="space-y-2"></div>
-        </div>
+        <details class="widget card elev mb-3" id="mgBlockersWidget">
+          <summary class="p-4 flex items-center gap-3">
+            <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
+            <i class="fa-solid fa-triangle-exclamation" style="color:var(--danger)"></i>
+            <span class="text-sm font-medium" style="color:var(--text)">Blockers</span>
+            <span id="mgBlockerSummary" class="text-xs" style="color:var(--text-muted)"></span>
+            <span class="flex-1"></span>
+            <span id="mgBlockerCount" class="chip" style="color:var(--text-muted)">0</span>
+          </summary>
+          <div class="px-4 pb-4"><div id="mgBlockers" class="space-y-2"></div></div>
+        </details>
+
+        <details class="widget card elev mb-3" id="mgActionsWidget">
+          <summary class="p-4 flex items-center gap-3">
+            <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
+            <i class="fa-solid fa-list-check" style="color:var(--primary)"></i>
+            <span class="text-sm font-medium" style="color:var(--text)">Action points</span>
+            <span id="mgActionSummary" class="text-xs" style="color:var(--text-muted)"></span>
+            <span class="flex-1"></span>
+            <span id="mgActionCount" class="chip" style="color:var(--text-muted)">0</span>
+          </summary>
+          <div class="px-4 pb-4"><div id="mgActions" class="space-y-2"></div></div>
+        </details>
+
+        <details class="widget card elev mb-3" id="mgStrategyWidget">
+          <summary class="p-4 flex items-center gap-3">
+            <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
+            <i class="fa-solid fa-chess-knight" style="color:var(--primary)"></i>
+            <span class="text-sm font-medium" style="color:var(--text)">Strategy &amp; execution</span>
+            <span id="mgStrategySummary" class="text-xs" style="color:var(--text-muted)"></span>
+            <span class="flex-1"></span>
+            <span id="mgStrategyCount" class="chip" style="color:var(--text-muted)">0</span>
+          </summary>
+          <div class="px-4 pb-4"><div id="mgStrategy" class="space-y-2"></div></div>
+        </details>
       </section>
 
       <!-- ============ TRACKER ============ -->
@@ -328,8 +460,13 @@
           <select id="aFilterStage" class="field text-sm px-3 py-1.5"><option value="">All Stages</option></select>
           <select id="aFilterQuarter" class="field text-sm px-3 py-1.5"><option value="">All Quarters</option></select>
           <button id="aFilterClear" class="text-sm px-3 py-1.5 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
-          <span id="aFilterActive" class="text-[11px] ml-auto" style="color:var(--text-faint)"></span>
+          <span id="aFilterActive" class="text-[11px]" style="color:var(--text-faint)"></span>
+          <div class="flex-1"></div>
+          <button id="exportTrackerBtn" class="text-sm card px-3 py-1.5" style="color:var(--text)" title="Export every AM's strategy and 8-proof activities in the shared Sales Activity Tracker layout">
+            <i class="fa-solid fa-file-excel mr-1.5" style="color:#1e8e3e"></i>Export Tracker sheet
+          </button>
         </div>
+        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i><b>Export Tracker sheet</b> produces one row per activity in the exact column order of the shared H2 2026 Sales Activity Tracker — paste straight into the <b>Tracker</b> sheet in OneDrive. Respects the Account Manager filter above.</p>
 
         <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
           <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Opportunities</p><p id="kpiCount" class="text-xl font-medium mt-1">0</p></div>
@@ -475,6 +612,121 @@
               <button id="importXlsxBtn" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-file-arrow-up mr-1.5"></i>Import</button>
             </div>
             <p id="importResult" class="text-xs mt-3" style="color:var(--text-muted)"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ PERFORMANCE (actuals from the monthly ACH workbook) ============ -->
+      <section id="tab-performance" class="tab-panel px-6 py-5">
+        <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
+          <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-gauge-high mr-1" style="color:var(--primary)"></i>Actual performance</span>
+          <span id="perfSnapshot" class="chip" style="color:var(--text-muted)">no data</span>
+          <select id="perfFilterAM" class="field text-sm px-3 py-1.5"><option value="">All Account Managers</option></select>
+          <div class="flex-1"></div>
+          <span id="perfUploadWrap" class="flex items-center gap-2" style="display:none">
+            <input id="perfFile" type="file" accept=".xlsx" class="text-xs" style="color:var(--text-muted)">
+            <input id="perfLabel" type="text" placeholder="Label e.g. Jul 2026" class="field text-xs px-2 py-1" style="width:130px">
+            <button id="perfImportBtn" class="btn-primary text-sm px-3 py-1.5 rounded-lg"><i class="fa-solid fa-file-arrow-up mr-1"></i>Upload monthly file</button>
+          </span>
+        </div>
+        <p id="perfEmpty" class="card elev p-8 text-center text-sm" style="color:var(--text-muted)">
+          No performance data yet. An admin can upload the monthly <b>PODS 2 - ACH</b> workbook from the performance team using the button above.
+        </p>
+
+        <div id="perfBody" style="display:none">
+          <!-- Team scorecard -->
+          <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
+            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Target FY26</p><p id="pfTarget" class="text-lg font-semibold mt-1 tabular">–</p></div>
+            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Actual YTD</p><p id="pfActual" class="text-lg font-semibold mt-1 tabular" style="color:var(--success)">–</p></div>
+            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">MRC (rest of yr)</p><p id="pfMrc" class="text-lg font-semibold mt-1 tabular" style="color:#12b5cb">–</p></div>
+            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">PO on Hand</p><p id="pfPo" class="text-lg font-semibold mt-1 tabular">–</p></div>
+            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Total Forecast</p><p id="pfForecast" class="text-lg font-semibold mt-1 tabular" style="color:var(--primary)">–</p></div>
+            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Gap to Target</p><p id="pfGap" class="text-lg font-semibold mt-1 tabular" style="color:var(--danger)">–</p></div>
+            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Attainment</p><p id="pfAttain" class="text-lg font-semibold mt-1 tabular">–</p></div>
+          </div>
+
+          <!-- Pipeline coverage vs required -->
+          <div class="card elev p-5 mb-4">
+            <div class="flex items-center justify-between mb-1">
+              <p class="text-sm font-medium">Pipeline cover for the gap</p>
+              <span class="text-[11px]" style="color:var(--text-faint)">conservative rule: 3&times; the gap needs to be in pipeline</span>
+            </div>
+            <p id="pfCoverSummary" class="text-xs mb-3" style="color:var(--text-muted)"></p>
+            <div id="pfCoverBars" class="space-y-2"></div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div class="card elev p-5">
+              <p class="text-sm font-medium mb-1">Monthly target vs actual / forecast</p>
+              <p class="text-xs mb-3" style="color:var(--text-muted)">Solid = booked actuals, hatched = forecast months.</p>
+              <div id="pfMonthlyChart"></div>
+            </div>
+            <div class="card elev p-5">
+              <p class="text-sm font-medium mb-1">MRC run-rate &amp; forward projection</p>
+              <p class="text-xs mb-3" style="color:var(--text-muted)">Recurring revenue trend, and what the latest month implies for the next quarter and full year assuming no churn.</p>
+              <div id="pfMrcChart"></div>
+              <div id="pfMrcProjection" class="mt-3 grid grid-cols-3 gap-2"></div>
+            </div>
+          </div>
+
+          <!-- Per-AM performance table -->
+          <div class="card elev p-5 mb-4">
+            <p class="text-sm font-medium mb-3">Account Manager performance</p>
+            <div class="overflow-x-auto"><table class="w-full text-sm tabular">
+              <thead style="color:var(--text-muted)"><tr class="text-xs uppercase" style="border-bottom:1px solid var(--border)">
+                <th class="text-left py-2">Account Manager</th><th class="text-right py-2">Target FY26</th>
+                <th class="text-right py-2">Actual YTD</th><th class="text-right py-2">% Ach</th>
+                <th class="text-right py-2">Forecast</th><th class="text-right py-2">Gap</th>
+                <th class="text-right py-2">Pipeline</th><th class="text-right py-2">Needed (3&times;)</th>
+                <th class="text-left py-2 w-32">Cover</th>
+              </tr></thead>
+              <tbody id="pfAmBody"></tbody>
+            </table></div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <!-- Churn watch -->
+            <div class="card elev p-5">
+              <div class="flex items-center justify-between mb-1">
+                <p class="text-sm font-medium"><i class="fa-solid fa-arrow-trend-down mr-1.5" style="color:var(--danger)"></i>Churn watch</p>
+                <select id="pfChurnBasis" class="field text-xs px-2 py-1">
+                  <option value="month">vs previous month</option>
+                  <option value="quarter">vs previous quarter</option>
+                </select>
+              </div>
+              <p id="pfChurnSummary" class="text-xs mb-3" style="color:var(--text-muted)"></p>
+              <div id="pfChurnList" class="space-y-1.5"></div>
+            </div>
+            <!-- Growth -->
+            <div class="card elev p-5">
+              <p class="text-sm font-medium mb-1"><i class="fa-solid fa-arrow-trend-up mr-1.5" style="color:var(--success)"></i>Growing accounts</p>
+              <p class="text-xs mb-3" style="color:var(--text-muted)">Biggest increases on the same basis — worth doubling down on.</p>
+              <div id="pfGrowthList" class="space-y-1.5"></div>
+            </div>
+          </div>
+
+          <!-- Top accounts vs pipeline coverage -->
+          <div class="card elev p-5 mb-4">
+            <div class="flex items-center justify-between mb-1">
+              <p class="text-sm font-medium"><i class="fa-solid fa-crown mr-1.5" style="color:var(--warning)"></i>Top revenue accounts &mdash; do we have pipeline there?</p>
+              <span id="pfTouchSummary" class="text-[11px]" style="color:var(--text-faint)"></span>
+            </div>
+            <p class="text-xs mb-3" style="color:var(--text-muted)">Your biggest earners cross-checked against opportunities in this dashboard. Accounts with no pipeline are your upsell blind spots.</p>
+            <div class="overflow-x-auto"><table class="w-full text-sm tabular">
+              <thead style="color:var(--text-muted)"><tr class="text-xs uppercase" style="border-bottom:1px solid var(--border)">
+                <th class="text-left py-2">Account</th><th class="text-left py-2">AM</th>
+                <th class="text-right py-2">Revenue YTD</th><th class="text-right py-2">Latest month</th>
+                <th class="text-right py-2">Trend</th><th class="text-left py-2">Pipeline in dashboard</th>
+              </tr></thead>
+              <tbody id="pfTopBody"></tbody>
+            </table></div>
+          </div>
+
+          <!-- Product mix -->
+          <div class="card elev p-5">
+            <p class="text-sm font-medium mb-1">Revenue by product pillar</p>
+            <p class="text-xs mb-3" style="color:var(--text-muted)">Where the recurring base actually comes from (MRC vs one-off).</p>
+            <div id="pfPillarChart"></div>
           </div>
         </div>
       </section>
@@ -724,6 +976,37 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 });
 function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
+/* ================= SHELL: collapsible rail + quick access ================= */
+if(localStorage.getItem('dt_rail')==='collapsed') document.body.classList.add('rail-collapsed');
+document.getElementById('railToggle').addEventListener('click',()=>{
+  document.body.classList.toggle('rail-collapsed');
+  localStorage.setItem('dt_rail',document.body.classList.contains('rail-collapsed')?'collapsed':'open');
+});
+document.getElementById('quickSettingsBtn').addEventListener('click',()=>switchTab('settings'));
+document.getElementById('quickConfigBtn').addEventListener('click',()=>switchTab('configuration'));
+
+/* --- grouped sidebar: collapse/expand, remembered per user --- */
+function navGroupState(){ try{ return JSON.parse(localStorage.getItem('dt_navgroups')||'{}'); }catch(e){ return {}; } }
+function saveNavGroupState(s){ localStorage.setItem('dt_navgroups',JSON.stringify(s)); }
+document.querySelectorAll('.nav-group').forEach(g=>{
+  const key=g.dataset.group;
+  if(navGroupState()[key]==='collapsed') g.classList.add('collapsed');
+  g.querySelector('.nav-group-head').addEventListener('click',()=>{
+    g.classList.toggle('collapsed');
+    const s=navGroupState(); s[key]=g.classList.contains('collapsed')?'collapsed':'open'; saveNavGroupState(s);
+  });
+});
+/* Hide a whole group when the user's role leaves it with no visible items,
+   and make sure the group holding the current tab is open. */
+function refreshNavGroups(activeTab){
+  document.querySelectorAll('.nav-group').forEach(g=>{
+    const items=[...g.querySelectorAll('.nav-link')];
+    const visible=items.filter(b=>b.style.display!=='none');
+    g.style.display = visible.length ? '' : 'none';
+    if(activeTab && visible.some(b=>b.dataset.tab===activeTab)) g.classList.remove('collapsed');
+  });
+}
+
 /* ================= HELPERS ================= */
 function fmtIDR(v) {
   if (v >= 1e9) return 'IDR ' + (v/1e9).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) + 'B';
@@ -784,6 +1067,9 @@ async function enterApp(){
   document.getElementById('settingsNavBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('configNavBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('mgmtNavBtn').style.display = (ROLE==='admin'||ROLE==='management') ? '' : 'none';
+  document.getElementById('quickSettingsBtn').style.display = ROLE==='admin' ? '' : 'none';
+  document.getElementById('quickConfigBtn').style.display = ROLE==='admin' ? '' : 'none';
+  document.getElementById('perfUploadWrap').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('addDealBtn').style.display = (ROLE==='admin'||ROLE==='account_manager') ? '' : 'none';
   try { PROOF_FRAMEWORK = await api('/api/proof_framework'); } catch(e) { /* keep fallback */ }
   // An AM only ever sees their own action plan on the calendar
@@ -801,6 +1087,7 @@ async function enterApp(){
     document.getElementById('amFocusNote').style.display='none';
   }
   await loadDeals();
+  await loadPerformance();
   if(ROLE==='admin') await loadUsers();
   // Management lands on the executive briefing; everyone else on the tracker
   switchTab(ROLE==='management' ? 'management' : 'tracker');
@@ -814,11 +1101,13 @@ function switchTab(tab){
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
+  refreshNavGroups(tab);
   if(tab==='analytics') renderAnalytics();
   if(tab==='settings') renderSettings();
   if(tab==='configuration') renderConfiguration();
   if(tab==='calendar') renderCalendar();
   if(tab==='management') renderManagement();
+  if(tab==='performance') renderPerformance();
 }
 
 /* ================= CONFIG / AMS ================= */
@@ -1258,6 +1547,10 @@ function renderManagement(){
   // --- Blockers ---
   const blocked=deals.filter(d=>d.is_blocked).sort((a,b)=>b.estimated_value-a.estimated_value);
   document.getElementById('mgBlockerCount').textContent=blocked.length;
+  const blockedValue=blocked.reduce((s,d)=>s+d.estimated_value,0);
+  document.getElementById('mgBlockerSummary').innerHTML = blocked.length
+    ? `<span style="color:var(--danger)">${blocked.length} stuck · ${fmtIDR(blockedValue)} at risk</span> — expand to see`
+    : `<span style="color:var(--success)">All clear, nothing blocked</span>`;
   document.getElementById('mgBlockers').innerHTML=blocked.map(d=>`
     <div class="mg-row clickable rounded-lg p-3" data-deal="${d.id}" style="background:var(--danger-soft)">
       <div class="flex items-center gap-2">
@@ -1284,6 +1577,11 @@ function renderManagement(){
   });
   items.sort((a,b)=>a.due.localeCompare(b.due));
   document.getElementById('mgActionCount').textContent=items.length;
+  const overdueCount=items.filter(x=>x.due<today).length;
+  document.getElementById('mgActionSummary').innerHTML = items.length
+    ? (overdueCount?`<span style="color:var(--danger)">${overdueCount} overdue</span> · ${items.length-overdueCount} due within 30 days`
+                   :`<span style="color:var(--success)">Nothing overdue</span> · ${items.length} due within 30 days`)
+    : 'No dated actions in the next 30 days';
   document.getElementById('mgActions').innerHTML=items.slice(0,12).map(x=>{
     const overdue=x.due<today;
     return `<div class="mg-row clickable flex items-center gap-2 rounded-lg px-3 py-2" data-deal="${x.deal.id}" style="background:var(--surface-2)">
@@ -1318,10 +1616,310 @@ function renderManagement(){
       </div>`;
     }).join('')||`<p class="text-xs" style="color:var(--text-faint)">No opportunities.</p>`;
 
+  // --- Strategy widget summary ---
+  const withStrategy=deals.filter(d=>(d.strategy||'').trim()).length;
+  document.getElementById('mgStrategyCount').textContent=deals.length;
+  document.getElementById('mgStrategySummary').innerHTML=deals.length
+    ? `${withStrategy}/${deals.length} have a documented strategy · framework ${fwAvg}% complete`
+    : 'No opportunities';
+
+  // --- Headline: one line telling management whether to dig in ---
+  const attention=[];
+  if(blocked.length) attention.push(`<b style="color:var(--danger)">${blocked.length} blocker(s)</b> holding ${fmtIDR(blockedValue)}`);
+  if(overdueCount) attention.push(`<b style="color:var(--danger)">${overdueCount} overdue action(s)</b>`);
+  if(deals.length-withStrategy>0) attention.push(`<b style="color:var(--warning)">${deals.length-withStrategy}</b> without a strategy`);
+  document.getElementById('mgHeadline').innerHTML = attention.length
+    ? `<div class="flex items-start gap-3">
+         <i class="fa-solid fa-circle-exclamation mt-0.5" style="color:var(--danger)"></i>
+         <div><p class="text-sm font-medium" style="color:var(--text)">Needs your attention</p>
+         <p class="text-xs mt-0.5" style="color:var(--text-muted)">${attention.join(' &nbsp;·&nbsp; ')}. Expand a section below for the detail.</p></div>
+       </div>`
+    : `<div class="flex items-start gap-3">
+         <i class="fa-solid fa-circle-check mt-0.5" style="color:var(--success)"></i>
+         <div><p class="text-sm font-medium" style="color:var(--text)">All clear</p>
+         <p class="text-xs mt-0.5" style="color:var(--text-muted)">No blockers, nothing overdue, and every opportunity has a strategy. Gap to target ${fmtIDR(gap)}.</p></div>
+       </div>`;
+
   document.querySelectorAll('#tab-management .mg-row').forEach(r=>{
     r.addEventListener('dblclick',()=>openDetail(parseInt(r.dataset.deal)));
     r.addEventListener('click',()=>openDetail(parseInt(r.dataset.deal)));
   });
+}
+
+/* ================= PERFORMANCE (monthly ACH workbook) ================= */
+let PERF=null;
+async function loadPerformance(){ try{ PERF=await api('/api/performance'); }catch(e){ PERF={available:false}; } }
+document.getElementById('perfFilterAM').addEventListener('change',renderPerformance);
+document.getElementById('pfChurnBasis').addEventListener('change',renderPerformance);
+document.getElementById('perfImportBtn').addEventListener('click',()=>{
+  const f=document.getElementById('perfFile').files[0];
+  if(!f){ showToast('Choose the monthly .xlsx first',true); return; }
+  openConfirm(`Upload "${f.name}" as the current performance snapshot? Previous snapshots are kept (last 12).`, async()=>{
+    try{
+      const fd=new FormData(); fd.append('file',f);
+      const lbl=document.getElementById('perfLabel').value.trim(); if(lbl) fd.append('label',lbl);
+      const res=await fetch('/api/performance/import',{method:'POST',headers:{'Authorization':'Bearer '+TOKEN},body:fd});
+      const data=await res.json();
+      if(!res.ok) throw new Error(data.error||'Import failed');
+      showToast(`Imported ${data.am_count} AMs, ${data.account_rows} account rows`);
+      await loadPerformance(); renderPerformance();
+    }catch(err){ showToast(err.message,true); }
+  });
+});
+
+const perfNum=v=>typeof v==='number'&&isFinite(v)?v:0;
+function perfAMRows(){
+  if(!PERF||!PERF.available) return [];
+  const sel=document.getElementById('perfFilterAM').value;
+  return PERF.am_summary.filter(a=>!sel||am_matches(a.am,sel));
+}
+function am_matches(a,b){
+  const n=s=>String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+  const x=n(a),y=n(b); if(!x||!y) return false;
+  return x===y||x.startsWith(y)||y.startsWith(x);
+}
+function perfAccounts(){
+  if(!PERF||!PERF.available) return [];
+  const sel=document.getElementById('perfFilterAM').value;
+  const ams=PERF.am_summary.map(a=>a.am);
+  // keep only accounts belonging to the AMs in this snapshot's pod
+  return PERF.accounts.filter(r=>{
+    if(sel) return am_matches(r.am,sel);
+    return ams.some(a=>am_matches(r.am,a));
+  });
+}
+function monthKeys(){
+  const acc=perfAccounts(); const keys=new Set();
+  acc.forEach(r=>Object.keys(r.months||{}).forEach(k=>keys.add(k)));
+  return [...keys].sort();
+}
+
+function renderPerformance(){
+  const body=document.getElementById('perfBody'), empty=document.getElementById('perfEmpty');
+  if(!PERF||!PERF.available){ body.style.display='none'; empty.style.display=''; document.getElementById('perfSnapshot').textContent='no data'; return; }
+  empty.style.display='none'; body.style.display='';
+  document.getElementById('perfSnapshot').textContent=`${PERF.label||'snapshot'} · uploaded ${(PERF.uploaded_at||'').split(' ')[0]}`;
+
+  // AM filter options come from the snapshot itself
+  const sel=document.getElementById('perfFilterAM'), keep=sel.value;
+  sel.innerHTML='<option value="">All Account Managers</option>'+PERF.am_summary.map(a=>`<option>${escapeHtml(a.am)}</option>`).join('');
+  sel.value=keep;
+
+  const rows=perfAMRows();
+  const sum=k=>rows.reduce((s,a)=>s+perfNum(a[k]),0);
+  const target=sum('target_fy'), actual=sum('actual_ytd'), mrc=sum('mrc_rest'),
+        po=sum('po_hand'), forecast=sum('forecast_fy'), gap=sum('gap'),
+        need=sum('conservative_pipeline'), pipe=sum('current_pipeline');
+  const attain=target?actual/target*100:0;
+  document.getElementById('pfTarget').textContent=fmtIDR(target);
+  document.getElementById('pfActual').textContent=fmtIDR(actual);
+  document.getElementById('pfMrc').textContent=fmtIDR(mrc);
+  document.getElementById('pfPo').textContent=fmtIDR(po);
+  document.getElementById('pfForecast').textContent=fmtIDR(forecast);
+  document.getElementById('pfGap').textContent=fmtIDR(gap);
+  const at=document.getElementById('pfAttain');
+  at.textContent=attain.toFixed(1)+'%';
+  at.style.color=attain>=60?'var(--success)':attain>=30?'var(--warning)':'var(--danger)';
+
+  // ---- pipeline cover ----
+  const coverPct=need?Math.min(pipe/need*100,100):0;
+  document.getElementById('pfCoverSummary').innerHTML=
+    `Gap of <b>${fmtIDR(gap)}</b> needs <b>${fmtIDR(need)}</b> of pipeline (3&times;). Current pipeline <b>${fmtIDR(pipe)}</b> — ` +
+    (pipe>=need?`<b style="color:var(--success)">covered</b>.`
+              :`<b style="color:var(--danger)">short by ${fmtIDR(need-pipe)}</b>.`);
+  document.getElementById('pfCoverBars').innerHTML=rows.map(a=>{
+    const n=perfNum(a.conservative_pipeline), p=perfNum(a.current_pipeline);
+    const pct=n?Math.min(p/n*100,100):0;
+    const color=pct>=100?'var(--success)':pct>=50?'var(--warning)':'var(--danger)';
+    return `<div class="flex items-center gap-3">
+      <span class="text-xs" style="color:var(--text);width:150px">${escapeHtml(a.am)}</span>
+      <div class="flex-1 rounded-full h-2" style="background:var(--surface-3)"><div class="h-2 rounded-full" style="width:${pct}%;background:${color}"></div></div>
+      <span class="text-[11px] tabular" style="color:var(--text-muted);width:190px;text-align:right">${fmtIDR(p)} / ${fmtIDR(n)} <b style="color:${color}">${n?Math.round(p/n*100):0}%</b></span>
+    </div>`;
+  }).join('');
+
+  // ---- monthly target vs actual/forecast ----
+  const months=MONTH_NAMES.map((m,i)=>{
+    let t=0,v=0,fc=false;
+    rows.forEach(a=>{ const mm=(a.monthly||[])[i]; if(mm){ t+=perfNum(mm.target); v+=perfNum(mm.value); fc=fc||mm.is_forecast; } });
+    return {month:m,target:t,value:v,is_forecast:fc};
+  });
+  document.getElementById('pfMonthlyChart').innerHTML=monthlyChart(months);
+
+  // ---- MRC trend + projection ----
+  const mrcSeries=MONTH_NAMES.map((m,i)=>({month:m,value:rows.reduce((s,a)=>s+perfNum((a.mrc_monthly||[])[i]),0)}));
+  document.getElementById('pfMrcChart').innerHTML=lineChart(mrcSeries);
+  const live=mrcSeries.filter(x=>x.value>0);
+  const latest=live.length?live[live.length-1].value:0;
+  const proj=[['Latest month',latest],['Next quarter (3×)',latest*3],['Full year (12×)',latest*12]];
+  document.getElementById('pfMrcProjection').innerHTML=proj.map(([l,v])=>
+    `<div class="card p-2 text-center"><p class="text-[10px]" style="color:var(--text-muted)">${l}</p><p class="text-sm font-semibold mt-0.5 tabular" style="color:#12b5cb">${fmtIDR(v)}</p></div>`).join('');
+
+  // ---- per-AM table ----
+  document.getElementById('pfAmBody').innerHTML=rows.map(a=>{
+    const t=perfNum(a.target_fy), ac=perfNum(a.actual_ytd), n=perfNum(a.conservative_pipeline), p=perfNum(a.current_pipeline);
+    const pctA=t?ac/t*100:0, cover=n?Math.min(p/n*100,100):0;
+    const cc=cover>=100?'var(--success)':cover>=50?'var(--warning)':'var(--danger)';
+    return `<tr style="border-top:1px solid var(--border)">
+      <td class="py-2 font-medium" style="color:var(--text)">${escapeHtml(a.am)}</td>
+      <td class="py-2 text-right">${fmtIDR(t)}</td>
+      <td class="py-2 text-right" style="color:var(--success)">${fmtIDR(ac)}</td>
+      <td class="py-2 text-right" style="color:${pctA>=60?'var(--success)':pctA>=30?'var(--warning)':'var(--danger)'}">${pctA.toFixed(1)}%</td>
+      <td class="py-2 text-right" style="color:var(--primary)">${fmtIDR(perfNum(a.forecast_fy))}</td>
+      <td class="py-2 text-right" style="color:var(--danger)">${fmtIDR(perfNum(a.gap))}</td>
+      <td class="py-2 text-right">${fmtIDR(p)}</td>
+      <td class="py-2 text-right" style="color:var(--text-muted)">${fmtIDR(n)}</td>
+      <td class="py-2 pl-3"><div class="rounded-full h-2" style="background:var(--surface-3)"><div class="h-2 rounded-full" style="width:${cover}%;background:${cc}"></div></div></td>
+    </tr>`;
+  }).join('')||`<tr><td colspan="9" class="py-3 text-xs" style="color:var(--text-faint)">No data</td></tr>`;
+
+  renderChurn();
+  renderTopAccounts();
+  renderPillarMix();
+}
+
+const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+/* Compare each account's revenue on the chosen basis to spot churn / growth */
+function churnDeltas(){
+  const basis=document.getElementById('pfChurnBasis').value;
+  const keys=monthKeys(); if(keys.length<2) return [];
+  const byAcc={};
+  perfAccounts().forEach(r=>{
+    const k=r.account; (byAcc[k]=byAcc[k]||{account:k,am:r.am,months:{}});
+    Object.entries(r.months||{}).forEach(([m,v])=>{ byAcc[k].months[m]=(byAcc[k].months[m]||0)+perfNum(v); });
+  });
+  const pick=(m,list)=>list.reduce((s,k)=>s+(m[k]||0),0);
+  let curKeys,prevKeys;
+  if(basis==='quarter'){
+    curKeys=keys.slice(-3); prevKeys=keys.slice(-6,-3);
+    if(!prevKeys.length) prevKeys=keys.slice(0,Math.max(keys.length-3,1));
+  } else { curKeys=[keys[keys.length-1]]; prevKeys=[keys[keys.length-2]]; }
+  return Object.values(byAcc).map(a=>{
+    const cur=pick(a.months,curKeys), prev=pick(a.months,prevKeys);
+    return {account:a.account,am:a.am,cur,prev,delta:cur-prev,pct:prev?((cur-prev)/prev*100):(cur?100:0)};
+  }).filter(x=>x.prev>0||x.cur>0);
+}
+
+function renderChurn(){
+  const basis=document.getElementById('pfChurnBasis').value;
+  const all=churnDeltas();
+  const down=all.filter(x=>x.delta<0).sort((a,b)=>a.delta-b.delta);
+  const up=all.filter(x=>x.delta>0).sort((a,b)=>b.delta-a.delta);
+  const lost=down.filter(x=>x.cur<=0&&x.prev>0);
+  const totalDown=down.reduce((s,x)=>s+x.delta,0);
+  document.getElementById('pfChurnSummary').innerHTML=
+    `<b style="color:var(--danger)">${down.length}</b> account(s) down ${basis==='quarter'?'vs last quarter':'vs last month'} ` +
+    `(${fmtIDR(Math.abs(totalDown))} lost)` + (lost.length?` · <b style="color:var(--danger)">${lost.length} dropped to zero</b>`:'');
+  const row=(x,color,sign)=>`<div class="flex items-center gap-2 text-xs rounded-lg px-2.5 py-1.5" style="background:var(--surface-2)">
+      <span class="flex-1 truncate" style="color:var(--text)" title="${escapeHtml(x.account)}">${escapeHtml(x.account)}</span>
+      <span class="chip" style="color:var(--text-muted)">${escapeHtml((x.am||'').split(' ')[0])}</span>
+      <span class="tabular" style="color:var(--text-muted);width:78px;text-align:right">${fmtIDR(x.prev)}</span>
+      <i class="fa-solid fa-arrow-right text-[9px]" style="color:var(--text-faint)"></i>
+      <span class="tabular" style="color:var(--text);width:78px;text-align:right">${fmtIDR(x.cur)}</span>
+      <span class="tabular" style="color:${color};width:74px;text-align:right">${sign}${fmtIDR(Math.abs(x.delta))}</span>
+    </div>`;
+  document.getElementById('pfChurnList').innerHTML=down.slice(0,10).map(x=>row(x,'var(--danger)','−')).join('')
+    ||`<p class="text-xs" style="color:var(--success)">No accounts declined.</p>`;
+  document.getElementById('pfGrowthList').innerHTML=up.slice(0,10).map(x=>row(x,'var(--success)','+')).join('')
+    ||`<p class="text-xs" style="color:var(--text-faint)">No growth recorded.</p>`;
+}
+
+/* Company-name matcher: strips legal/filler words, then requires a solid overlap so
+   short fragments (e.g. "OT") can't match unrelated names. */
+function normCompany(s){
+  return String(s||'').toLowerCase()
+    .replace(/\b(pt|pt\.|tbk|persero|indonesia|group|holding|inc|ltd|llc|co|corp|the)\b/g,' ')
+    .replace(/[^a-z0-9]/g,'');
+}
+function accountMatches(accountName,deal){
+  const a=normCompany(accountName);
+  const c=normCompany(deal.customer), d=normCompany(deal.deal_name);
+  if(a.length<5) return false;                 // too short to be reliable
+  const solid=(x,y)=> x.length>=5 && y.length>=5 && (x.includes(y)||y.includes(x));
+  return solid(a,c) || (d.length>=5 && a.length>=6 && d.includes(a));
+}
+
+/* Top accounts cross-referenced against pipeline in this dashboard */
+function renderTopAccounts(){
+  const byAcc={};
+  perfAccounts().forEach(r=>{
+    const k=r.account; (byAcc[k]=byAcc[k]||{account:k,am:r.am,total:0,months:{}});
+    Object.entries(r.months||{}).forEach(([m,v])=>{ byAcc[k].months[m]=(byAcc[k].months[m]||0)+perfNum(v); byAcc[k].total+=perfNum(v); });
+  });
+  const keys=monthKeys();
+  const top=Object.values(byAcc).sort((a,b)=>b.total-a.total).slice(0,15);
+  let touched=0;
+  document.getElementById('pfTopBody').innerHTML=top.map(a=>{
+    const last=keys.length?a.months[keys[keys.length-1]]||0:0;
+    const prev=keys.length>1?a.months[keys[keys.length-2]]||0:0;
+    const trend=last-prev;
+    const matches=(ALL_DEALS||[]).filter(d=>accountMatches(a.account,d));
+    if(matches.length) touched++;
+    const pipeVal=matches.reduce((s,d)=>s+d.estimated_value,0);
+    return `<tr style="border-top:1px solid var(--border)">
+      <td class="py-2 font-medium" style="color:var(--text)">${escapeHtml(a.account)}</td>
+      <td class="py-2"><span class="chip" style="color:var(--text-muted)">${escapeHtml((a.am||'').split(' ')[0])}</span></td>
+      <td class="py-2 text-right">${fmtIDR(a.total)}</td>
+      <td class="py-2 text-right" style="color:var(--text-muted)">${fmtIDR(last)}</td>
+      <td class="py-2 text-right" style="color:${trend<0?'var(--danger)':trend>0?'var(--success)':'var(--text-faint)'}">${trend===0?'–':(trend<0?'▼ ':'▲ ')+fmtIDR(Math.abs(trend))}</td>
+      <td class="py-2">${matches.length
+        ? `<span style="color:var(--success)"><i class="fa-solid fa-circle-check mr-1"></i>${matches.length} opp · ${fmtIDR(pipeVal)}</span>`
+        : `<span style="color:var(--danger)"><i class="fa-solid fa-circle-exclamation mr-1"></i>no pipeline — upsell gap</span>`}</td>
+    </tr>`;
+  }).join('')||`<tr><td colspan="6" class="py-3 text-xs" style="color:var(--text-faint)">No account data</td></tr>`;
+  document.getElementById('pfTouchSummary').innerHTML=
+    `${touched}/${top.length} of the top accounts have live pipeline`;
+}
+
+function renderPillarMix(){
+  const byPillar={}, byType={};
+  perfAccounts().forEach(r=>{
+    const t=Object.values(r.months||{}).reduce((s,v)=>s+perfNum(v),0);
+    byPillar[r.pillar||'—']=(byPillar[r.pillar||'—']||0)+t;
+    byType[r.mrc_type||'—']=(byType[r.mrc_type||'—']||0)+t;
+  });
+  const entries=Object.entries(byPillar).sort((a,b)=>b[1]-a[1]);
+  const total=entries.reduce((s,[,v])=>s+v,0)||1;
+  const bars=entries.map(([k,v],i)=>`<div class="flex items-center gap-3">
+      <span class="text-xs" style="color:var(--text);width:170px">${escapeHtml(k)}</span>
+      <div class="flex-1 rounded-full h-2.5" style="background:var(--surface-3)"><div class="h-2.5 rounded-full" style="width:${v/total*100}%;background:${CHART_COLORS[i%CHART_COLORS.length]}"></div></div>
+      <span class="text-[11px] tabular" style="color:var(--text-muted);width:110px;text-align:right">${fmtIDR(v)} · ${Math.round(v/total*100)}%</span>
+    </div>`).join('');
+  const typeChips=Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([k,v])=>
+    `<span class="chip" style="color:var(--text-muted)">${escapeHtml(k)}: <b style="color:var(--text)">${fmtIDR(v)}</b></span>`).join(' ');
+  document.getElementById('pfPillarChart').innerHTML=
+    `<div class="space-y-2 mb-3">${bars||'<p class="text-xs" style="color:var(--text-faint)">No data</p>'}</div>
+     <div class="flex flex-wrap gap-2">${typeChips}</div>`;
+}
+
+/* --- small charts for the performance tab --- */
+function monthlyChart(data){
+  const W=520,H=200,pad=26; const max=Math.max(...data.map(d=>Math.max(d.target,d.value)),1);
+  const bw=(W-pad*2)/data.length; const tc=cssVar('--chart-text'); let s='';
+  data.forEach((d,i)=>{
+    const x=pad+i*bw, th=d.target/max*130, vh=d.value/max*130;
+    s+=`<rect x="${x+bw*0.12}" y="${H-30-th}" width="${bw*0.34}" height="${th}" rx="2" fill="${cssVar('--surface-3')}"><title>${d.month} target ${fmtIDR(d.target)}</title></rect>`;
+    s+=`<rect x="${x+bw*0.5}" y="${H-30-vh}" width="${bw*0.34}" height="${vh}" rx="2" fill="${d.is_forecast?'var(--primary)':'var(--success)'}" opacity="${d.is_forecast?0.55:1}"><title>${d.month} ${d.is_forecast?'forecast':'actual'} ${fmtIDR(d.value)}</title></rect>`;
+    s+=`<text x="${x+bw/2}" y="${H-14}" font-size="9" fill="${tc}" text-anchor="middle">${d.month}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" style="height:200px">${s}</svg>
+    <div class="flex gap-3 mt-1 text-[10px]" style="color:var(--text-muted)">
+      <span><span style="display:inline-block;width:8px;height:8px;background:${cssVar('--surface-3')}"></span> Target</span>
+      <span><span style="display:inline-block;width:8px;height:8px;background:var(--success)"></span> Actual</span>
+      <span><span style="display:inline-block;width:8px;height:8px;background:var(--primary);opacity:.55"></span> Forecast</span>
+    </div>`;
+}
+function lineChart(data){
+  const W=520,H=170,pad=30; const max=Math.max(...data.map(d=>d.value),1);
+  const step=(W-pad*2)/Math.max(data.length-1,1); const tc=cssVar('--chart-text');
+  let pts='',circles='',labels='';
+  data.forEach((d,i)=>{ const x=pad+i*step, y=H-30-(d.value/max)*110;
+    pts+=`${x},${y} `; circles+=`<circle cx="${x}" cy="${y}" r="3" fill="#12b5cb"><title>${d.month}: ${fmtIDR(d.value)}</title></circle>`;
+    if(i%2===0) labels+=`<text x="${x}" y="${H-12}" font-size="9" fill="${tc}" text-anchor="middle">${d.month}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" style="height:170px">
+    <polyline points="${pts}" fill="none" stroke="#12b5cb" stroke-width="2"/>${circles}${labels}</svg>`;
 }
 
 /* ================= CALENDAR (next-action plan) ================= */
@@ -1855,6 +2453,22 @@ document.getElementById('userForm').addEventListener('submit',async e=>{
   } catch(err){ showToast(err.message,true); }
 });
 function confirmDeleteUser(id){ openConfirm('Delete this user account?',async()=>{ try{ await api(`/api/users/${id}`,{method:'DELETE'}); showToast('User deleted'); await loadUsers(); await loadAMs(); renderUsersTable(); }catch(err){ showToast(err.message,true);} }); }
+
+/* ================= TRACKER SHEET EXPORT ================= */
+document.getElementById('exportTrackerBtn').addEventListener('click',async()=>{
+  try{
+    showToast('Building Tracker sheet...');
+    const p=new URLSearchParams();
+    const am=analyticsFilters.assigned_am||''; if(am) p.set('am',am);
+    const res=await fetch('/api/export/tracker_xlsx?'+p.toString(),{headers:{'Authorization':'Bearer '+TOKEN}});
+    if(!res.ok){ const b=await res.json().catch(()=>({})); throw new Error(b.error||'Export failed'); }
+    const blob=await res.blob(), url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url;
+    a.download=`tracker_activities_${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    showToast('Tracker sheet downloaded — paste into the Tracker tab');
+  }catch(err){ showToast(err.message,true); }
+});
 
 /* ================= PDF ================= */
 document.getElementById('exportPdfBtn').addEventListener('click',async()=>{

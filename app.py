@@ -372,6 +372,15 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS performance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            label TEXT DEFAULT '',
+            source_file TEXT DEFAULT '',
+            am_summary TEXT DEFAULT '[]',
+            accounts TEXT DEFAULT '[]',
+            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS config (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             target_amount INTEGER DEFAULT 163000000000,
@@ -1318,6 +1327,277 @@ def import_xlsx():
 
     db.commit()
     return jsonify({"ok": True, "summary": summary})
+
+
+# --------------------------------------------------------------------------
+# Performance snapshot: import the monthly "ACH" workbook from the performance team
+# --------------------------------------------------------------------------
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _num(v):
+    """Excel cell -> float, tolerating blanks, text and tiny float noise."""
+    if v is None or isinstance(v, bool):
+        return 0.0
+    if isinstance(v, (int, float)):
+        return 0.0 if abs(v) < 1 else float(v)
+    try:
+        return float(str(v).replace(",", "").strip() or 0)
+    except ValueError:
+        return 0.0
+
+
+def am_key(name):
+    """Loose key so 'Ashari Asrar' matches the dashboard's 'Ashari'."""
+    return " ".join(str(name or "").lower().replace(".", " ").split())
+
+
+def am_matches(perf_name, dash_name):
+    a, b = am_key(perf_name), am_key(dash_name)
+    if not a or not b:
+        return False
+    return a == b or a.startswith(b) or b.startswith(a)
+
+
+def parse_performance_workbook(wb):
+    """Read the 'PODS (2)' and 'byAccount (BP)' sheets into plain dicts."""
+    am_rows, accounts = [], []
+
+    # ---- Sheet 1: per-AM monthly target/actual/forecast + MRC/pipeline/PO + summary
+    sheet = None
+    for nm in wb.sheetnames:
+        if nm.strip().lower().startswith("pods"):
+            sheet = wb[nm]
+            break
+    if sheet is not None:
+        # Monthly triplets start at col D (index 4, 1-based); 3 cols per month.
+        # Only the first block (down to its "Total" row) carries the FY summary;
+        # the YTD block further down repeats the AM names with a different layout.
+        for r in range(4, 40):
+            first_col = str(sheet.cell(row=r, column=1).value or "").strip().lower()
+            if first_col == "total":
+                break
+            am = sheet.cell(row=r, column=3).value
+            if not am or str(am).strip().lower() in ("total", "am name"):
+                continue
+            monthly = []
+            for mi, mname in enumerate(MONTHS):
+                base = 4 + mi * 3
+                monthly.append({
+                    "month": mname,
+                    "target": _num(sheet.cell(row=r, column=base).value),
+                    # Jan-Jun are actuals, Jul-Dec are forecast in this template
+                    "value": _num(sheet.cell(row=r, column=base + 1).value),
+                    "is_forecast": mi >= 6,
+                })
+            series = lambda start: [_num(sheet.cell(row=r, column=start + i).value)
+                                    for i in range(12)]
+            am_rows.append({
+                "am": str(am).strip(),
+                "monthly": monthly,
+                "mrc_monthly": series(41),        # AO..AZ
+                "pipeline_monthly": series(55),   # BC..BN
+                "po_monthly": series(69),         # BQ..CB
+                "target_fy": _num(sheet.cell(row=r, column=85).value),   # CG
+                "actual_ytd": _num(sheet.cell(row=r, column=86).value),  # CH
+                "mrc_rest": _num(sheet.cell(row=r, column=87).value),    # CI
+                "po_hand": _num(sheet.cell(row=r, column=88).value),     # CJ
+                "forecast_fy": _num(sheet.cell(row=r, column=89).value),  # CK
+                "gap": _num(sheet.cell(row=r, column=90).value),          # CL
+                "conservative_pipeline": _num(sheet.cell(row=r, column=91).value),  # CM
+                "current_pipeline": _num(sheet.cell(row=r, column=93).value),       # CO
+            })
+
+    # ---- Sheet 2: account-level monthly revenue
+    acc_sheet = None
+    for nm in wb.sheetnames:
+        if "account" in nm.strip().lower():
+            acc_sheet = wb[nm]
+            break
+    if acc_sheet is not None:
+        # header row 3: month columns start at col K (11) and run while dated
+        month_cols = []
+        for c in range(11, acc_sheet.max_column + 1):
+            h = acc_sheet.cell(row=3, column=c).value
+            if hasattr(h, "strftime"):
+                month_cols.append((c, h.strftime("%Y-%m")))
+            elif isinstance(h, str) and h[:4].isdigit() and "-" in h:
+                month_cols.append((c, h[:7]))
+        for r in range(4, acc_sheet.max_row + 1):
+            account = acc_sheet.cell(row=r, column=7).value
+            if not account:
+                continue
+            months = {}
+            for c, label in month_cols:
+                months[label] = _num(acc_sheet.cell(row=r, column=c).value)
+            if not any(months.values()):
+                continue
+            accounts.append({
+                "pillar": str(acc_sheet.cell(row=r, column=1).value or ""),
+                "revenue_category": str(acc_sheet.cell(row=r, column=4).value or ""),
+                "mrc_type": str(acc_sheet.cell(row=r, column=5).value or ""),
+                "account": str(account).strip(),
+                "pods": str(acc_sheet.cell(row=r, column=9).value or "").strip(),
+                "am": str(acc_sheet.cell(row=r, column=10).value or "").strip(),
+                "months": months,
+            })
+    return am_rows, accounts
+
+
+@app.route("/api/performance", methods=["GET"])
+@login_required()
+def get_performance():
+    db = get_db()
+    row = db.execute("SELECT * FROM performance ORDER BY id DESC LIMIT 1").fetchone()
+    if not row:
+        return jsonify({"available": False})
+    return jsonify({
+        "available": True,
+        "label": row["label"],
+        "source_file": row["source_file"],
+        "uploaded_at": row["uploaded_at"],
+        "am_summary": json.loads(row["am_summary"] or "[]"),
+        "accounts": json.loads(row["accounts"] or "[]"),
+    })
+
+
+@app.route("/api/performance/import", methods=["POST"])
+@login_required(roles=("admin",))
+def import_performance():
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return jsonify({"error": "openpyxl is not installed on the server. "
+                                 "Run: pip install --user openpyxl, then reload."}), 500
+
+    upload = request.files.get("file")
+    if not upload:
+        return jsonify({"error": "No file uploaded"}), 400
+    label = (request.form.get("label") or "").strip()
+
+    try:
+        wb = load_workbook(upload, data_only=True)
+    except Exception as exc:
+        return jsonify({"error": f"Could not read this file as .xlsx ({exc})"}), 400
+
+    am_rows, accounts = parse_performance_workbook(wb)
+    if not am_rows and not accounts:
+        return jsonify({"error": "No recognisable data. Expected a sheet named like "
+                                 "'PODS (2)' and one like 'byAccount (BP)'."}), 400
+
+    db = get_db()
+    db.execute(
+        "INSERT INTO performance (label, source_file, am_summary, accounts) VALUES (?, ?, ?, ?)",
+        (label or datetime.now().strftime("%b %Y"),
+         getattr(upload, "filename", "") or "",
+         json.dumps(am_rows), json.dumps(accounts)),
+    )
+    # keep the last 12 snapshots
+    db.execute("""DELETE FROM performance WHERE id NOT IN
+                  (SELECT id FROM performance ORDER BY id DESC LIMIT 12)""")
+    db.commit()
+    return jsonify({"ok": True, "am_count": len(am_rows), "account_rows": len(accounts)})
+
+
+# --------------------------------------------------------------------------
+# Execution framework export in the "Sales Activity Tracker" sheet format
+# --------------------------------------------------------------------------
+TRACKER_HEADERS = ["No.", "PODS ", "Opportunity Name", "Customer", "Account Manager",
+                   "TCV (IDR)", "Rev 2026 (IDR)", "Target Quarter",
+                   "Pillar (8 Enterprise Proof)", "Activity / Action", "Status",
+                   "Due Date", "Completed Date", "Notes"]
+TRACKER_STATUS = {"not_started": "Not Started", "in_progress": "In Progress",
+                  "done": "Done", "na": "Not Started"}
+
+
+@app.route("/api/export/tracker_xlsx", methods=["GET"])
+@login_required()
+def export_tracker_xlsx():
+    """One row per activity, ready to paste into the shared Tracker sheet."""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+    except ImportError:
+        return jsonify({"error": "openpyxl is not installed on the server. "
+                                 "Run: pip install --user openpyxl, then reload."}), 500
+
+    db = get_db()
+    query = "SELECT * FROM deals"
+    params = []
+    am = request.args.get("am")
+    if am:
+        query += " WHERE assigned_am = ?"
+        params.append(am)
+    query += " ORDER BY assigned_am, deal_name"
+    deals = [deal_to_dict(r) for r in db.execute(query, params).fetchall()]
+    pod_label = request.args.get("pod", "Pods 2")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Tracker"
+    ws.append(TRACKER_HEADERS)
+    for c in range(1, len(TRACKER_HEADERS) + 1):
+        cell = ws.cell(row=1, column=c)
+        cell.fill = PatternFill("solid", fgColor="1A73E8")
+        cell.font = Font(color="FFFFFF", bold=True)
+    ws.freeze_panes = "A2"
+
+    # By default only proofs with something to say are exported (evidence, a target
+    # date, or progress). ?include_empty=1 emits a row for every planned proof.
+    include_empty = str(request.args.get("include_empty", "")).lower() in ("1", "true", "yes")
+
+    n = 0
+    for d in deals:
+        proofs = d["proofs"]
+        for idx, key in enumerate(PROOF_KEYS, start=1):
+            item = proofs.get(key, {})
+            status = item.get("status", "not_started")
+            if status == "na":
+                continue
+            entries = item.get("entries", [])
+            has_content = bool(entries) or bool(item.get("due")) or status != "not_started"
+            if not has_content and not include_empty:
+                continue
+            pillar = f"{idx}. {PROOF_NAMES[key]}"
+            # one row per evidence entry; a proof with none still emits its row
+            rows = entries or [{"text": "", "date": ""}]
+            for e in rows:
+                n += 1
+                completed = e.get("date", "") if status == "done" else ""
+                ws.append([
+                    n, pod_label, d["deal_name"], d["customer"], d["assigned_am"],
+                    d["estimated_value"] or None, d["revenue_2026"] or None,
+                    d["target_quarter"], pillar,
+                    e.get("text") or "(activity to be defined)",
+                    TRACKER_STATUS.get(status, "Not Started"),
+                    item.get("due", ""), completed, d["strategy"],
+                ])
+        # ad-hoc next actions land against Proof of Qualification by default
+        for a in d["next_actions"]:
+            n += 1
+            ws.append([
+                n, pod_label, d["deal_name"], d["customer"], d["assigned_am"],
+                d["estimated_value"] or None, d["revenue_2026"] or None,
+                d["target_quarter"], "1. Proof of Qualification",
+                a.get("action", ""), "Done" if a.get("done") else "Not Started",
+                a.get("due", ""), a.get("due", "") if a.get("done") else "", d["strategy"],
+            ])
+
+    for col, width in zip("ABCDEFGHIJKLMN",
+                          [6, 10, 42, 28, 24, 16, 16, 14, 26, 42, 13, 13, 15, 46]):
+        ws.column_dimensions[col].width = width
+    for row in ws.iter_rows(min_row=2):
+        row[9].alignment = Alignment(wrap_text=True, vertical="top")
+        row[13].alignment = Alignment(wrap_text=True, vertical="top")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"tracker_activities_{date.today().isoformat()}.xlsx"
+    return send_file(
+        buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name=filename)
 
 
 # --------------------------------------------------------------------------

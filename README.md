@@ -105,10 +105,22 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 - **Account Manager focus** — when an AM signs in, the Tracker is pre-filtered to their own
   opportunities (clearly flagged, and they can widen it to the whole team at any time).
 - **Management View** (admin + management only) — a simple executive briefing that management lands
-  on by default: financial summary (target, achieved, recurring, pipeline, gap, framework health),
-  blockers needing escalation with owners, action points due in the next 30 days plus overdue, and
-  each deal's closing strategy with framework progress. Click or double-click anything to open the
-  full opportunity detail.
+  on by default. A **"Needs your attention"** headline states whether anything is wrong, then three
+  **collapsed widgets** (Blockers, Action points, Strategy & execution) each show a one-line summary
+  — expand only what you want to dig into. Click or double-click anything to open the full detail.
+- **Performance tab** — upload the monthly **PODS 2 - ACH** workbook from the performance team
+  (admin only) and the dashboard reads the `PODS (2)` and `byAccount (BP)` sheets to show:
+  team scorecard (Target FY, Actual YTD, MRC, PO on Hand, Forecast, Gap, attainment);
+  **pipeline cover** against the conservative 3× rule per AM; monthly target vs actual/forecast;
+  **MRC run-rate with next-quarter and full-year projection** (no-churn assumption);
+  **churn watch** and **growing accounts** compared to the previous month or quarter; and
+  **top revenue accounts cross-checked against pipeline in this dashboard** so you can see which
+  big earners have no opportunity attached (upsell blind spots). The last 12 uploads are retained.
+- **Tracker sheet export** — on Analytics, *Export Tracker sheet* produces one row per activity in
+  the exact column order of the shared **H2 2026 Sales Activity Tracker** (`No. / PODS / Opportunity
+  Name / Customer / Account Manager / TCV / Rev 2026 / Target Quarter / Pillar / Activity / Status /
+  Due Date / Completed Date / Notes`), ready to paste into the OneDrive **Tracker** sheet. Each proof's
+  evidence entries become activity rows; add `?include_empty=1` to also emit not-yet-started proofs.
 - **Rev 2026 column** — every opportunity carries a `revenue_2026` value: the revenue realizable in
   the remaining H2 2026 (vs. the full multi-year TCV). This is the number that counts toward the
   2026 result and is editable per deal. Seeded equal to TCV; refine per deal in the edit modal.
