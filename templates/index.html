@@ -61,6 +61,9 @@
   .modal-tab-btn { color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom:-1px; }
   .modal-tab-btn:hover { color: var(--text); }
   .modal-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight:500; }
+  .atab-btn { color: var(--text-muted); font-size:13px; padding:6px 14px; border-radius:8px; transition: background .15s ease, color .15s ease; }
+  .atab-btn:hover { color: var(--text); background: var(--surface-2); }
+  .atab-btn.active { color: #fff; background: var(--primary); font-weight:500; }
   .proof-row { border:1px solid var(--border); border-radius:8px; transition: border-color .15s ease; }
   .proof-row:hover { border-color: var(--primary); }
   .proof-num { width:22px; height:22px; border-radius:9999px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; }
@@ -359,12 +362,12 @@
           <button id="clearFilters" class="text-sm px-3 py-2 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
           <div class="flex-1"></div>
           <select id="sortSelect" class="field text-sm px-3 py-2" title="Sort opportunities">
-            <option value="value_desc">Sort: TCV (High → Low)</option>
+            <option value="progress_desc">Sort: Progress (High → Low)</option>
+            <option value="progress_asc">Progress (Low → High)</option>
+            <option value="value_desc">TCV (High → Low)</option>
             <option value="value_asc">TCV (Low → High)</option>
             <option value="rev_desc">Rev 2026 (High → Low)</option>
             <option value="rev_asc">Rev 2026 (Low → High)</option>
-            <option value="progress_desc">Progress (High → Low)</option>
-            <option value="progress_asc">Progress (Low → High)</option>
             <option value="name_asc">Name (A → Z)</option>
           </select>
           <button id="exportPdfBtn" class="text-sm card px-4 py-2 transition" style="color:var(--text)" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='var(--surface)'"><i class="fa-solid fa-file-pdf mr-1.5" style="color:var(--danger)"></i>Export PDF</button>
@@ -466,7 +469,14 @@
             <i class="fa-solid fa-file-excel mr-1.5" style="color:#1e8e3e"></i>Export Tracker sheet
           </button>
         </div>
-        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i><b>Export Tracker sheet</b> produces one row per activity in the exact column order of the shared H2 2026 Sales Activity Tracker — paste straight into the <b>Tracker</b> sheet in OneDrive. Respects the Account Manager filter above.</p>
+
+        <div class="flex flex-wrap items-center gap-1.5 mb-4 card elev p-1.5" style="width:fit-content">
+          <button data-atab="gap" class="atab-btn active">1. Gap &amp; Targets</button>
+          <button data-atab="breakdown" class="atab-btn">2. Pipeline Breakdown</button>
+          <button data-atab="framework" class="atab-btn">3. Execution Framework</button>
+          <button data-atab="strategy" class="atab-btn">4. Strategy</button>
+          <button data-atab="leaderboard" class="atab-btn">5. Leaderboard &amp; Summary</button>
+        </div>
 
         <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
           <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Opportunities</p><p id="kpiCount" class="text-xl font-medium mt-1">0</p></div>
@@ -478,73 +488,84 @@
           <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Blocked</p><p id="kpiBlocked" class="text-xl font-medium mt-1" style="color:var(--danger)">0</p></div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          <div class="card elev p-5"><div class="flex items-center justify-between mb-3"><p class="text-sm font-medium">Pipeline by Account Manager</p><span class="text-[11px]" style="color:var(--text-faint)">click a bar to drill down</span></div><div id="chartAM"></div></div>
-          <div class="card elev p-5"><div class="flex items-center justify-between mb-3"><p class="text-sm font-medium">Pipeline by Strategic Pillar</p><span class="text-[11px]" style="color:var(--text-faint)">click a bar to drill down</span></div><div id="chartPillar"></div></div>
-          <div class="card elev p-5"><p class="text-sm font-medium mb-3">Stage Distribution</p><div id="chartStage"></div></div>
-          <div class="card elev p-5"><p class="text-sm font-medium mb-3">Pipeline by Target Quarter</p><div id="chartQuarter"></div></div>
-          <div class="card elev p-5"><p class="text-sm font-medium mb-3">Pipeline by Squad</p><div id="chartSquad"></div></div>
-          <div class="card elev p-5"><p class="text-sm font-medium mb-3">Top 8 Opportunities by TCV</p><div id="chartTop"></div></div>
+        <div id="atab-gap" class="atab-pane">
+          <div class="card elev p-5 mb-4">
+            <div class="flex items-center justify-between mb-1">
+              <p class="text-sm font-medium">Pipeline vs Account Manager Gap</p>
+              <span class="text-[11px]" style="color:var(--text-faint)">Gap = Target &minus; YTD actual &minus; FY26 recurring (no churn) &minus; 2026 pipeline</span>
+            </div>
+            <p id="amTargetTeam" class="text-xs mb-3" style="color:var(--text-muted)"></p>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm" id="amGapTable">
+                <thead style="color:var(--text-muted)"><tr class="text-xs uppercase" style="border-bottom:1px solid var(--border)">
+                  <th class="text-left py-2">Account Manager</th>
+                  <th class="text-right py-2">Target</th>
+                  <th class="text-right py-2">YTD Actual</th>
+                  <th class="text-right py-2">Recurring FY26</th>
+                  <th class="text-right py-2">2026 Pipeline</th>
+                  <th class="text-right py-2">Covered</th>
+                  <th class="text-right py-2">Gap</th>
+                  <th class="text-left py-2 w-40">Coverage</th>
+                </tr></thead>
+                <tbody id="amGapBody"></tbody>
+              </table>
+            </div>
+            <p class="text-[11px] mt-3" style="color:var(--text-faint)">Enter each AM's target, YTD actual and FY26 recurring under <b>Settings &rarr; Account Manager Targets</b>. Recurring assumes no churn for the rest of FY 2026.</p>
+          </div>
         </div>
 
-        <div class="card elev p-5 mb-4">
-          <div class="flex items-center justify-between mb-1">
-            <p class="text-sm font-medium">Pipeline vs Account Manager Gap</p>
-            <span class="text-[11px]" style="color:var(--text-faint)">Gap = Target &minus; YTD actual &minus; FY26 recurring (no churn) &minus; 2026 pipeline</span>
+        <div id="atab-breakdown" class="atab-pane" style="display:none">
+          <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i><b>Export Tracker sheet</b> produces one row per activity in the exact column order of the shared H2 2026 Sales Activity Tracker — paste straight into the <b>Tracker</b> sheet in OneDrive. Respects the Account Manager filter above.</p>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div class="card elev p-5"><div class="flex items-center justify-between mb-3"><p class="text-sm font-medium">Pipeline by Account Manager</p><span class="text-[11px]" style="color:var(--text-faint)">click a bar to drill down</span></div><div id="chartAM"></div></div>
+            <div class="card elev p-5"><div class="flex items-center justify-between mb-3"><p class="text-sm font-medium">Pipeline by Strategic Pillar</p><span class="text-[11px]" style="color:var(--text-faint)">click a bar to drill down</span></div><div id="chartPillar"></div></div>
+            <div class="card elev p-5"><p class="text-sm font-medium mb-3">Stage Distribution</p><div id="chartStage"></div></div>
+            <div class="card elev p-5"><p class="text-sm font-medium mb-3">Pipeline by Target Quarter</p><div id="chartQuarter"></div></div>
+            <div class="card elev p-5"><p class="text-sm font-medium mb-3">Pipeline by Squad</p><div id="chartSquad"></div></div>
+            <div class="card elev p-5"><p class="text-sm font-medium mb-3">Top 8 Opportunities by TCV</p><div id="chartTop"></div></div>
           </div>
-          <p id="amTargetTeam" class="text-xs mb-3" style="color:var(--text-muted)"></p>
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm" id="amGapTable">
-              <thead style="color:var(--text-muted)"><tr class="text-xs uppercase" style="border-bottom:1px solid var(--border)">
-                <th class="text-left py-2">Account Manager</th>
-                <th class="text-right py-2">Target</th>
-                <th class="text-right py-2">YTD Actual</th>
-                <th class="text-right py-2">Recurring FY26</th>
-                <th class="text-right py-2">2026 Pipeline</th>
-                <th class="text-right py-2">Covered</th>
-                <th class="text-right py-2">Gap</th>
-                <th class="text-left py-2 w-40">Coverage</th>
-              </tr></thead>
-              <tbody id="amGapBody"></tbody>
-            </table>
-          </div>
-          <p class="text-[11px] mt-3" style="color:var(--text-faint)">Enter each AM's target, YTD actual and FY26 recurring under <b>Settings &rarr; Account Manager Targets</b>. Recurring assumes no churn for the rest of FY 2026.</p>
         </div>
 
-        <div class="card elev p-5 mb-4">
-          <div class="flex items-center justify-between mb-1">
-            <p class="text-sm font-medium"><i class="fa-solid fa-list-check mr-1.5" style="color:var(--primary)"></i>Execution Framework &mdash; 8 Enterprise Proofs</p>
-            <span id="fwAvgLabel" class="text-[11px]" style="color:var(--text-faint)"></span>
+        <div id="atab-framework" class="atab-pane" style="display:none">
+          <div class="card elev p-5 mb-4">
+            <div class="flex items-center justify-between mb-1">
+              <p class="text-sm font-medium"><i class="fa-solid fa-list-check mr-1.5" style="color:var(--primary)"></i>Execution Framework &mdash; 8 Enterprise Proofs</p>
+              <span id="fwAvgLabel" class="text-[11px]" style="color:var(--text-faint)"></span>
+            </div>
+            <p class="text-xs mb-3" style="color:var(--text-muted)">How far each proof has progressed across the filtered opportunities. Click a proof to see which deals are stuck there.</p>
+            <div id="fwFunnel" class="space-y-2 mb-4"></div>
+            <p class="text-xs font-medium mb-2" style="color:var(--text-muted)">Framework completion by Account Manager</p>
+            <div id="fwByAm" class="space-y-2"></div>
+            <div id="fwDrill" class="mt-3"></div>
           </div>
-          <p class="text-xs mb-3" style="color:var(--text-muted)">How far each proof has progressed across the filtered opportunities. Click a proof to see which deals are stuck there.</p>
-          <div id="fwFunnel" class="space-y-2 mb-4"></div>
-          <p class="text-xs font-medium mb-2" style="color:var(--text-muted)">Framework completion by Account Manager</p>
-          <div id="fwByAm" class="space-y-2"></div>
-          <div id="fwDrill" class="mt-3"></div>
         </div>
 
-        <div class="card elev p-5 mb-4">
-          <div class="flex items-center justify-between mb-1">
-            <p class="text-sm font-medium"><i class="fa-solid fa-chess-knight mr-1.5" style="color:var(--primary)"></i>Strategy Coverage &mdash; How to Close</p>
-            <span id="strategyCoverPct" class="text-[11px]" style="color:var(--text-faint)"></span>
+        <div id="atab-strategy" class="atab-pane" style="display:none">
+          <div class="card elev p-5 mb-4">
+            <div class="flex items-center justify-between mb-1">
+              <p class="text-sm font-medium"><i class="fa-solid fa-chess-knight mr-1.5" style="color:var(--primary)"></i>Strategy Coverage &mdash; How to Close</p>
+              <span id="strategyCoverPct" class="text-[11px]" style="color:var(--text-faint)"></span>
+            </div>
+            <p class="text-xs mb-3" style="color:var(--text-muted)">Which opportunities have a documented closing strategy. Click a deal to read it.</p>
+            <div id="strategyCoverBars" class="space-y-2 mb-4"></div>
+            <div id="strategyMissing" class="mb-3"></div>
+            <div id="strategyList" class="space-y-1"></div>
           </div>
-          <p class="text-xs mb-3" style="color:var(--text-muted)">Which opportunities have a documented closing strategy. Click a deal to read it.</p>
-          <div id="strategyCoverBars" class="space-y-2 mb-4"></div>
-          <div id="strategyMissing" class="mb-3"></div>
-          <div id="strategyList" class="space-y-1"></div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          <div class="card elev p-5">
-            <p class="text-sm font-medium mb-3">Account Manager Leaderboard</p>
-            <div class="overflow-x-auto"><table class="w-full text-sm">
-              <thead style="color:var(--text-muted)"><tr class="text-xs uppercase"><th class="text-left py-2">AM</th><th class="text-right py-2">Opps</th><th class="text-right py-2">Pipeline</th><th class="text-right py-2">Weighted</th><th class="text-right py-2">Avg %</th></tr></thead>
-              <tbody id="amLeaderboard"></tbody>
-            </table></div>
-          </div>
-          <div class="card elev p-5">
-            <p class="text-sm font-medium mb-2"><i class="fa-solid fa-lightbulb mr-1.5" style="color:var(--warning)"></i>Management Summary</p>
-            <div id="managementSummary" class="text-sm leading-relaxed space-y-2" style="color:var(--text-muted)"></div>
+        <div id="atab-leaderboard" class="atab-pane" style="display:none">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div class="card elev p-5">
+              <p class="text-sm font-medium mb-3">Account Manager Leaderboard</p>
+              <div class="overflow-x-auto"><table class="w-full text-sm">
+                <thead style="color:var(--text-muted)"><tr class="text-xs uppercase"><th class="text-left py-2">AM</th><th class="text-right py-2">Opps</th><th class="text-right py-2">Pipeline</th><th class="text-right py-2">Weighted</th><th class="text-right py-2">Avg %</th></tr></thead>
+                <tbody id="amLeaderboard"></tbody>
+              </table></div>
+            </div>
+            <div class="card elev p-5">
+              <p class="text-sm font-medium mb-2"><i class="fa-solid fa-lightbulb mr-1.5" style="color:var(--warning)"></i>Management Summary</p>
+              <div id="managementSummary" class="text-sm leading-relaxed space-y-2" style="color:var(--text-muted)"></div>
+            </div>
           </div>
         </div>
       </section>
@@ -918,14 +939,24 @@ const PROOF_STATUS_META = {
   done:{label:'Done', color:'#fff', bg:'var(--success)'},
   na:{label:'N/A', color:'var(--text-faint)', bg:'var(--surface-2)'}
 };
+const ENTRY_STATUS_META = {
+  not_started:{label:'Not started', color:'var(--text-faint)', bg:'var(--surface-3)', icon:'fa-circle'},
+  planned:{label:'Planned', color:'#fff', bg:'#a142f4', icon:'fa-calendar-days'},
+  in_progress:{label:'In progress', color:'#fff', bg:'var(--primary)', icon:'fa-spinner'},
+  done:{label:'Done', color:'#fff', bg:'var(--success)', icon:'fa-check'}
+};
 function normalizeProofs(raw){
   const src=(raw&&typeof raw==='object')?raw:{}; const out={};
   PROOF_FRAMEWORK.forEach(p=>{ const it=src[p.key]||{};
     const st=String(it.status||'not_started');
-    const entries=(it.entries||[]).map(e=>({text:String((e&&e.text)||'').trim(),date:String((e&&e.date)||'').slice(0,10)})).filter(e=>e.text);
+    const fallbackEntryStatus=st==='na'?'not_started':(ENTRY_STATUS_META[st]?st:'not_started');
+    const entries=(it.entries||[]).map(e=>{
+      const est=String((e&&e.status)||'').trim();
+      return {text:String((e&&e.text)||'').trim(),date:String((e&&e.date)||'').slice(0,10),status:ENTRY_STATUS_META[est]?est:fallbackEntryStatus};
+    }).filter(e=>e.text);
     // legacy single-note migrates into the evidence list
     const legacy=String(it.notes||'').trim();
-    if(legacy && !entries.some(e=>e.text===legacy)) entries.unshift({text:legacy,date:''});
+    if(legacy && !entries.some(e=>e.text===legacy)) entries.unshift({text:legacy,date:'',status:fallbackEntryStatus});
     out[p.key]={status:PROOF_STATUS_META[st]?st:'not_started', due:(it.due||'').slice(0,10), entries};
   });
   return out;
@@ -1102,7 +1133,7 @@ function switchTab(tab){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   refreshNavGroups(tab);
-  if(tab==='analytics') renderAnalytics();
+  if(tab==='analytics'){ switchAnalyticsTab('gap'); renderAnalytics(); }
   if(tab==='settings') renderSettings();
   if(tab==='configuration') renderConfiguration();
   if(tab==='calendar') renderCalendar();
@@ -1217,7 +1248,7 @@ function sortRows(rows){
     progress_asc:(a,b)=>a.progress-b.progress,
     name_asc:(a,b)=>a.deal_name.localeCompare(b.deal_name)
   };
-  return [...rows].sort(cmp[s]||cmp.value_desc);
+  return [...rows].sort(cmp[s]||cmp.progress_desc);
 }
 
 function renderDealsTable(){
@@ -1316,11 +1347,14 @@ function openDetail(id){
       <div class="space-y-1.5">${PROOF_FRAMEWORK.map((p,i)=>{
         const it=normalizeProofs(d.proofs)[p.key], m=PROOF_STATUS_META[it.status];
         const overdue=it.status!=='done'&&it.status!=='na'&&it.due&&it.due<todayStr();
-        const ev=(it.entries||[]).map(e=>`<div class="flex items-start gap-1.5 text-[11px] pl-6" style="color:var(--text-muted)">
-            <i class="fa-solid fa-check text-[9px] mt-0.5" style="color:var(--success)"></i>
+        const ev=(it.entries||[]).map(e=>{
+          const em=ENTRY_STATUS_META[e.status]||ENTRY_STATUS_META.not_started;
+          return `<div class="flex items-start gap-1.5 text-[11px] pl-6" style="color:var(--text-muted)">
+            <i class="fa-solid ${em.icon} text-[9px] mt-0.5" style="color:${em.bg}"></i>
             <span class="flex-1">${escapeHtml(e.text)}</span>
+            <span class="chip" style="color:${em.bg==='var(--surface-3)'?'var(--text-faint)':em.bg};font-size:9px;padding:1px 6px">${em.label}</span>
             ${e.date?`<span style="color:var(--text-faint)">${e.date}</span>`:''}
-          </div>`).join('');
+          </div>`;}).join('');
         return `<div>
           <div class="flex items-center gap-2 text-xs">
             <span class="proof-num" style="background:${m.bg};color:${m.color};width:18px;height:18px;font-size:10px">${i+1}</span>
@@ -1397,13 +1431,17 @@ function renderProofsDraft(){
   list.innerHTML=PROOF_FRAMEWORK.map((p,i)=>{
     const it=proofsDraft[p.key]||{status:'not_started',entries:[],due:''};
     const meta=PROOF_STATUS_META[it.status];
-    const entries=(it.entries||[]).map((e,ei)=>`
+    const entries=(it.entries||[]).map((e,ei)=>{
+      const em=ENTRY_STATUS_META[e.status]||ENTRY_STATUS_META.not_started;
+      return `
       <div class="flex items-center gap-1.5">
-        <i class="fa-solid fa-circle-check text-[10px]" style="color:var(--success)"></i>
+        <select data-key="${p.key}" data-ei="${ei}" class="pe-status field text-[10px] px-1 py-1" style="width:96px;background:${em.bg};color:${em.color};border-color:transparent">
+          ${Object.entries(ENTRY_STATUS_META).map(([v,m])=>`<option value="${v}" ${e.status===v?'selected':''}>${m.label}</option>`).join('')}
+        </select>
         <input type="date" value="${e.date||''}" data-key="${p.key}" data-ei="${ei}" class="pe-date field text-[11px] px-1.5 py-1" style="width:126px" title="When this was done">
         <input type="text" value="${escapeHtml(e.text)}" data-key="${p.key}" data-ei="${ei}" class="pe-text field flex-1 px-2 py-1 text-xs">
         <button type="button" data-key="${p.key}" data-ei="${ei}" class="pe-del" style="color:var(--text-faint)" title="Remove"><i class="fa-solid fa-xmark"></i></button>
-      </div>`).join('');
+      </div>`;}).join('');
     return `<div class="proof-row p-2.5">
       <div class="flex items-center gap-2 mb-1.5">
         <span class="proof-num" style="background:${meta.bg};color:${meta.color}">${i+1}</span>
@@ -1428,11 +1466,12 @@ function renderProofsDraft(){
   list.querySelectorAll('.proof-due').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].due=e.target.value; }));
   list.querySelectorAll('.pe-text').forEach(s=>s.addEventListener('input',e=>{ proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].text=e.target.value; }));
   list.querySelectorAll('.pe-date').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].date=e.target.value; }));
+  list.querySelectorAll('.pe-status').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].status=e.target.value; renderProofsDraft(); }));
   list.querySelectorAll('.pe-del').forEach(b=>b.addEventListener('click',e=>{ const t=e.currentTarget; proofsDraft[t.dataset.key].entries.splice(parseInt(t.dataset.ei),1); renderProofsDraft(); }));
   const addEntry=(key,row)=>{
     const txt=row.querySelector('.pe-new-text'), dt=row.querySelector('.pe-new-date');
     const v=txt.value.trim(); if(!v) return;
-    (proofsDraft[key].entries=proofsDraft[key].entries||[]).push({text:v,date:dt.value||''});
+    (proofsDraft[key].entries=proofsDraft[key].entries||[]).push({text:v,date:dt.value||'',status:'not_started'});
     renderProofsDraft();
   };
   list.querySelectorAll('.pe-add').forEach(b=>b.addEventListener('click',e=>addEntry(e.currentTarget.dataset.key,e.currentTarget.closest('.proof-row'))));
@@ -2029,6 +2068,13 @@ function syncAnalyticsFilterSelects(){
 function setDrill(field,value){ analyticsFilters[field]=value; renderAnalytics(); }
 Object.keys(AF_MAP).forEach(id=>document.getElementById(id).addEventListener('change',e=>{ analyticsFilters[AF_MAP[id]]=e.target.value; renderAnalytics(); }));
 document.getElementById('aFilterClear').addEventListener('click',()=>{ analyticsFilters={}; renderAnalytics(); });
+
+/* ---------- Analytics sub-tabs: Gap first, then breakdown detail ---------- */
+document.querySelectorAll('.atab-btn').forEach(b=>b.addEventListener('click',()=>switchAnalyticsTab(b.dataset.atab)));
+function switchAnalyticsTab(tab){
+  document.querySelectorAll('.atab-btn').forEach(b=>b.classList.toggle('active',b.dataset.atab===tab));
+  document.querySelectorAll('.atab-pane').forEach(p=>p.style.display=(p.id==='atab-'+tab)?'':'none');
+}
 
 function renderAnalytics(){
   const ds=analyticsDeals();

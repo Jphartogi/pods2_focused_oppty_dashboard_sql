@@ -63,13 +63,22 @@ PROOFS = [
 PROOF_KEYS = [p[0] for p in PROOFS]
 PROOF_NAMES = {p[0]: p[1] for p in PROOFS}
 PROOF_STATUSES = ("not_started", "in_progress", "done", "na")
+ENTRY_STATUSES = ("not_started", "planned", "in_progress", "done")
+ENTRY_STATUS_LABELS = {
+    "not_started": "Not started",
+    "planned": "Planned",
+    "in_progress": "In progress",
+    "done": "Done",
+}
 
 
 def normalize_proofs(raw):
     """Always return the full 8-proof structure, preserving whatever was stored.
 
-    Each proof holds a list of evidence `entries` ({text, date}). A legacy single
-    `notes` string is migrated into the first entry so nothing is ever lost.
+    Each proof holds a list of evidence `entries` ({text, date, status}). A legacy
+    single `notes` string is migrated into the first entry so nothing is ever lost.
+    Entries without their own status fall back to the parent proof's status
+    (an "na" proof falls back to "not_started") so older data keeps working.
     """
     incoming = raw if isinstance(raw, dict) else {}
     out = {}
@@ -80,21 +89,25 @@ def normalize_proofs(raw):
         status = str(item.get("status", "not_started")).strip().lower().replace(" ", "_")
         if status not in PROOF_STATUSES:
             status = "not_started"
+        fallback_entry_status = status if status in ENTRY_STATUSES else "not_started"
 
         entries = []
         for e in (item.get("entries") or []):
             if isinstance(e, dict):
                 text = str(e.get("text", "") or "").strip()
                 date = str(e.get("date", "") or "").strip()[:10]
+                estatus = str(e.get("status", "") or "").strip().lower().replace(" ", "_")
+                if estatus not in ENTRY_STATUSES:
+                    estatus = fallback_entry_status
             else:
-                text, date = str(e or "").strip(), ""
+                text, date, estatus = str(e or "").strip(), "", fallback_entry_status
             if text:
-                entries.append({"text": text, "date": date})
+                entries.append({"text": text, "date": date, "status": estatus})
 
         # Migrate a legacy notes string into the evidence list.
         legacy = str(item.get("notes", "") or "").strip()
         if legacy and not any(e["text"] == legacy for e in entries):
-            entries.insert(0, {"text": legacy, "date": ""})
+            entries.insert(0, {"text": legacy, "date": "", "status": fallback_entry_status})
 
         out[key] = {
             "status": status,
@@ -1507,7 +1520,7 @@ TRACKER_HEADERS = ["No.", "PODS ", "Opportunity Name", "Customer", "Account Mana
                    "TCV (IDR)", "Rev 2026 (IDR)", "Target Quarter",
                    "Pillar (8 Enterprise Proof)", "Activity / Action", "Status",
                    "Due Date", "Completed Date", "Notes"]
-TRACKER_STATUS = {"not_started": "Not Started", "in_progress": "In Progress",
+TRACKER_STATUS = {"not_started": "Not Started", "planned": "Planned", "in_progress": "In Progress",
                   "done": "Done", "na": "Not Started"}
 
 
@@ -1561,16 +1574,17 @@ def export_tracker_xlsx():
                 continue
             pillar = f"{idx}. {PROOF_NAMES[key]}"
             # one row per evidence entry; a proof with none still emits its row
-            rows = entries or [{"text": "", "date": ""}]
+            rows = entries or [{"text": "", "date": "", "status": status}]
             for e in rows:
                 n += 1
-                completed = e.get("date", "") if status == "done" else ""
+                e_status = e.get("status") or status
+                completed = e.get("date", "") if e_status == "done" else ""
                 ws.append([
                     n, pod_label, d["deal_name"], d["customer"], d["assigned_am"],
                     d["estimated_value"] or None, d["revenue_2026"] or None,
                     d["target_quarter"], pillar,
                     e.get("text") or "(activity to be defined)",
-                    TRACKER_STATUS.get(status, "Not Started"),
+                    TRACKER_STATUS.get(e_status, "Not Started"),
                     item.get("due", ""), completed, d["strategy"],
                 ])
         # ad-hoc next actions land against Proof of Qualification by default

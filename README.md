@@ -58,8 +58,9 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 - **Full-year coverage header** — Full-Year 2026 Target, Achieved (YTD), 2026 Pipeline + Recurring,
   and Remaining Gap, plus a stacked **coverage bar** (Achieved / Recurring / 2026 Pipeline / Gap) so
   you can see how much of the full-year target is already covered and what's left to close.
-- **Tracker** — search, filter by AM / Squad / Pillar / Stage, **sort** (TCV, Rev 2026, progress,
-  name), and **pagination** (10/25/50 rows per page). Inline progress sliders, blocker flags, and
+- **Tracker** — search, filter by AM / Squad / Pillar / Stage, **sort** (defaults to Progress
+  High → Low, so opportunities closest to 100% surface first; also TCV, Rev 2026, name), and
+  **pagination** (10/25/50 rows per page). Inline progress sliders, blocker flags, and
   next-action checklists. **Double-click any row** to open a full opportunity detail drawer.
 - **Strategy per opportunity** — every deal has a free-text **Strategy** ("how you'll win & close"),
   editable by the owning AM. It shows in the detail drawer and drives the next-action plan, and is
@@ -87,12 +88,15 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   Excel workbook; the same file is the import template for restoring or migrating to another host.
 - **Execution Framework — the 8 Enterprise Proofs.** Every opportunity has an *Execution Framework*
   tab in its edit modal implementing the PODS 2 standard: **1 Qualification, 2 Engagement, 3 Concept,
-  4 Value, 5 Contract, 6 Delivery, 7 Operation, 8 CLM**. Each proof carries a status
+  4 Value, 5 Contract, 6 Delivery, 7 Operation, 8 CLM**. Each proof carries an overall status
   (Not started / In progress / Done / N/A), a target date, and **an unlimited list of evidence
-  entries** — each with its own date — so an AM records everything they have done to fulfil that
-  proof and builds a real audit trail rather than a single note. Proof target dates flow into the
-  **Calendar**; N/A proofs are excluded from completion maths. Any pre-existing next actions are
-  preserved under "Other next actions".
+  entries** — each with its own date **and its own status** (Not started / Planned / In progress /
+  Done), clickable directly on every entry — so an AM records everything they have done to fulfil
+  that proof, tracks each piece of evidence through to completion, and builds a real audit trail
+  rather than a single note. Existing entries without their own status inherit the parent proof's
+  status automatically, so nothing already recorded needs to be re-entered. Proof target dates flow
+  into the **Calendar**; N/A proofs are excluded from completion maths. Any pre-existing next actions
+  are preserved under "Other next actions".
 - **Stage automation** — an opportunity's Stage is derived from how far its framework has
   progressed: the furthest proof reached (done or in progress) sets the stage, and a blocked deal
   always shows the blocked stage. The proof → stage mapping and an on/off switch live under
@@ -124,10 +128,14 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 - **Rev 2026 column** — every opportunity carries a `revenue_2026` value: the revenue realizable in
   the remaining H2 2026 (vs. the full multi-year TCV). This is the number that counts toward the
   2026 result and is editable per deal. Seeded equal to TCV; refine per deal in the edit modal.
-- **Analytics** — 7 KPIs (incl. 2026 Rev) plus charts for pipeline by AM, pillar, squad, target
-  quarter, stage distribution (donut) and top-8 opportunities, an AM leaderboard, and a management
-  summary. A **filter bar** (AM / Pillar / Squad / Stage / Quarter) scopes the whole tab, and
-  **clicking any chart bar/segment drills down** into the same filters.
+- **Analytics** — organized into five sub-tabs so each view stays focused: **1. Gap & Targets**
+  (the default landing tab — Pipeline vs Account Manager Gap comes first, since that's what
+  management needs to see immediately), **2. Pipeline Breakdown** (charts for pipeline by AM,
+  pillar, squad, target quarter, stage distribution and top-8 opportunities), **3. Execution
+  Framework** (the 8-proof funnel and completion by AM), **4. Strategy** (Strategy Coverage), and
+  **5. Leaderboard & Summary** (AM leaderboard + management summary). 7 KPI cards (incl. 2026 Rev)
+  and the **filter bar** (AM / Pillar / Squad / Stage / Quarter) stay visible across every sub-tab,
+  and **clicking any chart bar/segment drills down** into the same filters.
 - **AM target vs pipeline** — admins set a per-AM 2026 revenue target in Settings; the Analytics tab
   shows each AM's attainment (2026 revenue ÷ target) with a color-coded progress bar, gap, and TCV
   pipeline, plus a combined-team roll-up. Quickly spots which AMs are on/behind target.
