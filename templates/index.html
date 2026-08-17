@@ -246,6 +246,7 @@
           </button>
           <div class="nav-group-items space-y-1">
             <button data-tab="configuration" id="configNavBtn" title="Lists &amp; Automation" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-list-check w-4"></i> <span class="rail-label">Lists &amp; Automation</span></button>
+            <button data-tab="loginlogs" id="loginLogsNavBtn" title="Login Logs" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-user-clock w-4"></i> <span class="rail-label">Login Logs</span></button>
             <button data-tab="settings" id="settingsNavBtn" title="Settings" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-sliders w-4"></i> <span class="rail-label">Settings</span></button>
           </div>
         </div>
@@ -637,6 +638,37 @@
         </div>
       </section>
 
+      <!-- ============ LOGIN LOGS (admin only) ============ -->
+      <section id="tab-loginlogs" class="tab-panel px-6 py-5">
+        <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
+          <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-user-clock mr-1" style="color:var(--primary)"></i>Sign-in history</span>
+          <span id="loginLogsCount" class="chip" style="color:var(--text-muted)">0 logs</span>
+          <div class="flex-1"></div>
+          <label class="flex items-center gap-1.5 text-xs" style="color:var(--text-muted)">
+            Keep max
+            <input id="maxLoginLogsInput" type="number" min="10" max="2000" step="10" class="field text-sm px-2 py-1" style="width:80px">
+            most recent logs
+          </label>
+          <button id="saveMaxLoginLogsBtn" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)">Save</button>
+          <button id="exportLoginLogsBtn" class="btn-primary text-sm px-3 py-1.5 rounded-lg"><i class="fa-solid fa-file-arrow-down mr-1.5"></i>Export (.xlsx)</button>
+        </div>
+        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Every successful sign-in is recorded with its timestamp and IP address so you can see when each Account Manager last used the dashboard. Only the most recent logs (up to the limit above) are kept, so storage never grows unbounded.</p>
+        <div class="card elev p-0 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead style="color:var(--text-muted)"><tr class="text-xs uppercase" style="border-bottom:1px solid var(--border)">
+                <th class="text-left py-2 px-4">User</th>
+                <th class="text-left py-2 px-4">Role</th>
+                <th class="text-left py-2 px-4">Login At</th>
+                <th class="text-left py-2 px-4">IP Address</th>
+              </tr></thead>
+              <tbody id="loginLogsBody"></tbody>
+            </table>
+          </div>
+          <p id="loginLogsEmpty" class="text-sm text-center py-8" style="color:var(--text-faint);display:none">No sign-ins recorded yet.</p>
+        </div>
+      </section>
+
       <!-- ============ PERFORMANCE (actuals from the monthly ACH workbook) ============ -->
       <section id="tab-performance" class="tab-panel px-6 py-5">
         <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
@@ -644,6 +676,7 @@
           <span id="perfSnapshot" class="chip" style="color:var(--text-muted)">no data</span>
           <select id="perfFilterAM" class="field text-sm px-3 py-1.5"><option value="">All Account Managers</option></select>
           <div class="flex-1"></div>
+          <button id="perfExportPdfBtn" class="text-sm card px-3 py-1.5" style="color:var(--text)" title="Export the performance summary as a PDF report"><i class="fa-solid fa-file-pdf mr-1.5" style="color:var(--danger)"></i>Export PDF</button>
           <span id="perfUploadWrap" class="flex items-center gap-2" style="display:none">
             <input id="perfFile" type="file" accept=".xlsx" class="text-xs" style="color:var(--text-muted)">
             <input id="perfLabel" type="text" placeholder="Label e.g. Jul 2026" class="field text-xs px-2 py-1" style="width:130px">
@@ -918,7 +951,7 @@ let TOKEN = localStorage.getItem('dt_token');
 let ROLE = localStorage.getItem('dt_role');
 let USERNAME = localStorage.getItem('dt_username');
 let FULLNAME = localStorage.getItem('dt_fullname');
-let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[], squads:[], stages:[], am_targets:{}, am_achievements:{}, am_recurring:{}, current_achievement:0, recurring_revenue:0 }, USERS = [], AMS = [];
+let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[], squads:[], stages:[], am_targets:{}, am_achievements:{}, am_recurring:{}, current_achievement:0, recurring_revenue:0, max_login_logs:100 }, USERS = [], AMS = [];
 let nextActionsDraft = [], confirmCallback = null, analyticsFilters = {};
 let currentPage = 1, calMonth = new Date();
 let proofsDraft = {}, fwDrillKey = null;
@@ -1097,6 +1130,7 @@ async function enterApp(){
   document.getElementById('avatar').textContent = initials(FULLNAME);
   document.getElementById('settingsNavBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('configNavBtn').style.display = ROLE==='admin' ? '' : 'none';
+  document.getElementById('loginLogsNavBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('mgmtNavBtn').style.display = (ROLE==='admin'||ROLE==='management') ? '' : 'none';
   document.getElementById('quickSettingsBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('quickConfigBtn').style.display = ROLE==='admin' ? '' : 'none';
@@ -1127,7 +1161,7 @@ async function enterApp(){
 /* ================= TABS ================= */
 document.querySelectorAll('.nav-link').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 function switchTab(tab){
-  if((tab==='settings'||tab==='configuration') && ROLE!=='admin') return;
+  if((tab==='settings'||tab==='configuration'||tab==='loginlogs') && ROLE!=='admin') return;
   if(tab==='management' && !(ROLE==='admin'||ROLE==='management')) return;
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
@@ -1136,6 +1170,7 @@ function switchTab(tab){
   if(tab==='analytics'){ switchAnalyticsTab('gap'); renderAnalytics(); }
   if(tab==='settings') renderSettings();
   if(tab==='configuration') renderConfiguration();
+  if(tab==='loginlogs') renderLoginLogs();
   if(tab==='calendar') renderCalendar();
   if(tab==='management') renderManagement();
   if(tab==='performance') renderPerformance();
@@ -2526,6 +2561,59 @@ document.getElementById('exportPdfBtn').addEventListener('click',async()=>{
     const a=document.createElement('a'); a.href=url; a.download=`deal_tracker_report_${new Date().toISOString().split('T')[0]}.pdf`;
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   } catch(err){ showToast(err.message,true); }
+});
+
+/* ================= LOGIN LOGS (admin only) ================= */
+async function renderLoginLogs(){
+  document.getElementById('maxLoginLogsInput').value = CONFIG.max_login_logs || 100;
+  try{
+    const data = await api('/api/login_logs');
+    const tbody = document.getElementById('loginLogsBody');
+    const empty = document.getElementById('loginLogsEmpty');
+    document.getElementById('loginLogsCount').textContent = `${data.logs.length} / ${data.max_login_logs} logs`;
+    if(!data.logs.length){ tbody.innerHTML=''; empty.style.display=''; return; }
+    empty.style.display='none';
+    tbody.innerHTML = data.logs.map(l=>`<tr style="border-top:1px solid var(--border)">
+      <td class="py-2.5 px-4"><span class="font-medium" style="color:var(--text)">${escapeHtml(l.full_name||l.username)}</span> <span class="text-[11px]" style="color:var(--text-faint)">@${escapeHtml(l.username)}</span></td>
+      <td class="py-2.5 px-4"><span class="chip" style="color:var(--text-muted)">${escapeHtml((l.role||'').replace('_',' '))}</span></td>
+      <td class="py-2.5 px-4 tabular" style="color:var(--text-muted)">${escapeHtml(l.login_at||'')}</td>
+      <td class="py-2.5 px-4 tabular" style="color:var(--text-faint)">${escapeHtml(l.ip_address||'–')}</td>
+    </tr>`).join('');
+  }catch(err){ showToast(err.message,true); }
+}
+document.getElementById('saveMaxLoginLogsBtn').addEventListener('click',async()=>{
+  const v=parseInt(document.getElementById('maxLoginLogsInput').value,10);
+  if(!v || v<10 || v>2000){ showToast('Enter a value between 10 and 2000',true); return; }
+  CONFIG.max_login_logs=v;
+  await persistConfig();
+  showToast('Login log limit saved');
+  renderLoginLogs();
+});
+document.getElementById('exportLoginLogsBtn').addEventListener('click',async()=>{
+  try{
+    showToast('Building login log export...');
+    const res=await fetch('/api/login_logs/export_xlsx',{headers:{'Authorization':'Bearer '+TOKEN}});
+    if(!res.ok){ const b=await res.json().catch(()=>({})); throw new Error(b.error||'Export failed'); }
+    const blob=await res.blob(), url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url;
+    a.download=`login_logs_${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    showToast('Login logs downloaded');
+  }catch(err){ showToast(err.message,true); }
+});
+
+/* ================= PERFORMANCE PDF EXPORT ================= */
+document.getElementById('perfExportPdfBtn').addEventListener('click',async()=>{
+  try{
+    showToast('Generating performance PDF...');
+    const p=new URLSearchParams();
+    const am=document.getElementById('perfFilterAM').value; if(am) p.set('am',am);
+    const res=await fetch('/api/performance/export_pdf?'+p.toString(),{headers:{'Authorization':'Bearer '+TOKEN}});
+    if(!res.ok){ const b=await res.json().catch(()=>({})); throw new Error(b.error||'Failed to generate report'); }
+    const blob=await res.blob(); const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=`performance_summary_${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }catch(err){ showToast(err.message,true); }
 });
 
 /* ================= INIT ================= */

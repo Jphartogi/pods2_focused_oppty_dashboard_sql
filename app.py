@@ -348,6 +348,8 @@ def migrate_db(db):
     if "stage_rules" not in config_cols:
         db.execute("ALTER TABLE config ADD COLUMN stage_rules TEXT")
         db.execute("UPDATE config SET stage_rules = ?", (json.dumps(DEFAULT_STAGE_RULES),))
+    if "max_login_logs" not in config_cols:
+        db.execute("ALTER TABLE config ADD COLUMN max_login_logs INTEGER DEFAULT 100")
 
 
 def init_db():
@@ -385,6 +387,16 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS login_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            username TEXT DEFAULT '',
+            full_name TEXT DEFAULT '',
+            role TEXT DEFAULT '',
+            ip_address TEXT DEFAULT '',
+            login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS performance (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             label TEXT DEFAULT '',
@@ -407,6 +419,7 @@ def init_db():
             am_recurring TEXT DEFAULT '{}',
             auto_stage INTEGER DEFAULT 1,
             stage_rules TEXT,
+            max_login_logs INTEGER DEFAULT 100,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
@@ -545,6 +558,34 @@ def index():
 # --------------------------------------------------------------------------
 # Auth API
 # --------------------------------------------------------------------------
+def client_ip():
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or ""
+
+
+def trim_login_logs(db, max_logs):
+    """Keep only the most recent `max_logs` rows so the table never grows unbounded."""
+    db.execute(
+        """DELETE FROM login_logs WHERE id NOT IN (
+               SELECT id FROM login_logs ORDER BY login_at DESC, id DESC LIMIT ?
+           )""",
+        (max_logs,),
+    )
+
+
+def log_login(db, row):
+    """Record a successful sign-in and trim to the admin-configured retention limit."""
+    db.execute(
+        """INSERT INTO login_logs (user_id, username, full_name, role, ip_address)
+           VALUES (?, ?, ?, ?, ?)""",
+        (row["id"], row["username"], row["full_name"] or row["username"], row["role"], client_ip()),
+    )
+    max_logs = current_config(db).get("max_login_logs", 100)
+    trim_login_logs(db, max_logs)
+
+
 @app.route("/api/login", methods=["POST"])
 def api_login():
     data = request.get_json(force=True) or {}
@@ -563,6 +604,8 @@ def api_login():
         "role": row["role"],
         "full_name": row["full_name"] or row["username"],
     }
+    log_login(db, row)
+    db.commit()
     return jsonify({
         "token": token,
         "role": row["role"],
@@ -577,6 +620,68 @@ def api_logout():
     token = auth.replace("Bearer ", "").strip()
     TOKENS.pop(token, None)
     return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# Login Logs (ADMIN only) - who signed in and when, capped at a configurable
+# number of most-recent rows so the table can never grow unbounded.
+# --------------------------------------------------------------------------
+def login_log_to_dict(row):
+    return {
+        "id": row["id"],
+        "username": row["username"] or "",
+        "full_name": row["full_name"] or "",
+        "role": row["role"] or "",
+        "ip_address": row["ip_address"] or "",
+        "login_at": row["login_at"],
+    }
+
+
+@app.route("/api/login_logs", methods=["GET"])
+@login_required(roles=("admin",))
+def get_login_logs():
+    db = get_db()
+    rows = db.execute("SELECT * FROM login_logs ORDER BY login_at DESC, id DESC").fetchall()
+    return jsonify({
+        "logs": [login_log_to_dict(r) for r in rows],
+        "max_login_logs": current_config(db).get("max_login_logs", 100),
+    })
+
+
+@app.route("/api/login_logs/export_xlsx", methods=["GET"])
+@login_required(roles=("admin",))
+def export_login_logs_xlsx():
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill
+    except ImportError:
+        return jsonify({"error": "openpyxl is not installed on the server. "
+                                 "Run: pip install --user openpyxl, then reload."}), 500
+
+    db = get_db()
+    rows = db.execute("SELECT * FROM login_logs ORDER BY login_at DESC, id DESC").fetchall()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Login Logs"
+    ws.append(["Username", "Full Name", "Role", "Login At", "IP Address"])
+    for c in range(1, 6):
+        cell = ws.cell(row=1, column=c)
+        cell.fill = PatternFill("solid", fgColor="1A73E8")
+        cell.font = Font(color="FFFFFF", bold=True)
+    ws.freeze_panes = "A2"
+    for r in rows:
+        ws.append([r["username"], r["full_name"], r["role"], r["login_at"], r["ip_address"]])
+    for col, width in zip("ABCDE", [18, 24, 16, 20, 16]):
+        ws.column_dimensions[col].width = width
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"login_logs_{date.today().isoformat()}.xlsx"
+    return send_file(
+        buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name=filename)
 
 
 # --------------------------------------------------------------------------
@@ -918,6 +1023,7 @@ def config_to_dict(row):
         "blocked_stage": DEFAULT_BLOCKED_STAGE,
         "current_achievement": (row["current_achievement"] if "current_achievement" in keys else 0) or 0,
         "recurring_revenue": (row["recurring_revenue"] if "recurring_revenue" in keys else 0) or 0,
+        "max_login_logs": (row["max_login_logs"] if "max_login_logs" in keys and row["max_login_logs"] is not None else 100) or 100,
         "updated_at": row["updated_at"],
     }
 
@@ -954,17 +1060,21 @@ def update_config():
     auto_stage = 1 if data.get("auto_stage", current["auto_stage"]) else 0
     stage_rules = data.get("stage_rules", current["stage_rules"]) or {}
     stage_rules = {k: str(v or "") for k, v in stage_rules.items() if k in PROOF_KEYS}
+    # Keep the retained login-log count within a sane range so the table can never grow unbounded.
+    max_login_logs = int(data.get("max_login_logs", current["max_login_logs"]) or 100)
+    max_login_logs = max(10, min(max_login_logs, 2000))
 
     db.execute(
         """UPDATE config SET target_amount = ?, strategic_pillars = ?, squads = ?,
            stages = ?, am_targets = ?, am_achievements = ?, am_recurring = ?,
            current_achievement = ?, recurring_revenue = ?, auto_stage = ?, stage_rules = ?,
-           updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+           max_login_logs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
         (target_amount, json.dumps(strategic_pillars), json.dumps(squads),
          json.dumps(stages), json.dumps(am_targets), json.dumps(am_achievements),
          json.dumps(am_recurring), current_achievement, recurring_revenue,
-         auto_stage, json.dumps(stage_rules), row["id"]),
+         auto_stage, json.dumps(stage_rules), max_login_logs, row["id"]),
     )
+    trim_login_logs(db, max_login_logs)
     db.commit()
     row = db.execute("SELECT * FROM config WHERE id = ?", (row["id"],)).fetchone()
     return jsonify(config_to_dict(row))
@@ -1511,6 +1621,198 @@ def import_performance():
                   (SELECT id FROM performance ORDER BY id DESC LIMIT 12)""")
     db.commit()
     return jsonify({"ok": True, "am_count": len(am_rows), "account_rows": len(accounts)})
+
+
+def _perf_am_matches(a, b):
+    """Loose match: exact, or one name is a prefix of the other (mirrors the frontend)."""
+    an = " ".join(str(a or "").lower().split())
+    bn = " ".join(str(b or "").lower().split())
+    if not an or not bn:
+        return False
+    return an == bn or an.startswith(bn) or bn.startswith(an)
+
+
+def _perf_num(v):
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+@app.route("/api/performance/export_pdf", methods=["GET"])
+@login_required()
+def export_performance_pdf():
+    """Performance summary as a PDF: team scorecard, gap coverage, per-AM
+    breakdown, churn/growth and product-pillar mix — the same numbers shown
+    on the Performance tab, snapshotted for sharing outside the dashboard."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    db = get_db()
+    row = db.execute("SELECT * FROM performance ORDER BY id DESC LIMIT 1").fetchone()
+    if not row:
+        return jsonify({"error": "No performance data has been uploaded yet."}), 400
+
+    am_summary = json.loads(row["am_summary"] or "[]")
+    accounts = json.loads(row["accounts"] or "[]")
+    am_filter = (request.args.get("am") or "").strip()
+
+    am_rows = [a for a in am_summary if not am_filter or _perf_am_matches(a.get("am"), am_filter)]
+    am_names = [a.get("am") for a in am_summary]
+
+    def account_in_scope(r):
+        if am_filter:
+            return _perf_am_matches(r.get("am"), am_filter)
+        return any(_perf_am_matches(r.get("am"), n) for n in am_names)
+
+    acc_rows = [r for r in accounts if account_in_scope(r)]
+
+    def s(key):
+        return sum(_perf_num(a.get(key)) for a in am_rows)
+
+    target, actual = s("target_fy"), s("actual_ytd")
+    mrc, po, forecast, gap = s("mrc_rest"), s("po_hand"), s("forecast_fy"), s("gap")
+    need, pipe = s("conservative_pipeline"), s("current_pipeline")
+    attain = (actual / target * 100) if target else 0
+
+    # ---- churn / growth: most recent two months across in-scope accounts ----
+    month_keys = sorted({m for r in acc_rows for m in (r.get("months") or {}).keys()})
+    by_acc = {}
+    for r in acc_rows:
+        key = r.get("account")
+        entry = by_acc.setdefault(key, {"account": key, "am": r.get("am"), "months": {}})
+        for m, v in (r.get("months") or {}).items():
+            entry["months"][m] = entry["months"].get(m, 0) + _perf_num(v)
+    deltas = []
+    if len(month_keys) >= 2:
+        cur_k, prev_k = month_keys[-1], month_keys[-2]
+        for a in by_acc.values():
+            cur, prev = a["months"].get(cur_k, 0), a["months"].get(prev_k, 0)
+            if prev > 0 or cur > 0:
+                deltas.append({"account": a["account"], "am": a["am"] or "",
+                               "cur": cur, "prev": prev, "delta": cur - prev})
+    down = sorted([d for d in deltas if d["delta"] < 0], key=lambda x: x["delta"])[:10]
+    up = sorted([d for d in deltas if d["delta"] > 0], key=lambda x: x["delta"], reverse=True)[:10]
+
+    # ---- revenue by product pillar (sum across all months in scope) ----
+    by_pillar = {}
+    for r in acc_rows:
+        total = sum(_perf_num(v) for v in (r.get("months") or {}).values())
+        p = r.get("pillar") or "-"
+        by_pillar[p] = by_pillar.get(p, 0) + total
+    pillar_entries = sorted(by_pillar.items(), key=lambda x: x[1], reverse=True)
+    pillar_total = sum(v for _, v in pillar_entries) or 1
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm,
+        leftMargin=1.6 * cm, rightMargin=1.6 * cm,
+    )
+    styles = getSampleStyleSheet()
+    brand = colors.HexColor("#1a73e8")
+    title_style = ParagraphStyle("PTitle", parent=styles["Title"], fontSize=18, textColor=brand)
+    h2_style = ParagraphStyle("PH2", parent=styles["Heading2"], fontSize=13, textColor=brand,
+                              spaceBefore=14, spaceAfter=6)
+    body_style = styles["BodyText"]
+
+    def make_table(data, col_widths):
+        t = Table(data, colWidths=col_widths)
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), brand),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#dadce0")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f1f3f4")]),
+            ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        return t
+
+    story = [
+        Paragraph("H2 2026 Command Center - PODS 2", title_style),
+        Paragraph("Performance Summary Report" + (f" — {am_filter}" if am_filter else ""), styles["Heading3"]),
+        Paragraph(f"Snapshot: {row['label'] or 'untitled'} (uploaded {str(row['uploaded_at'])[:10]}) "
+                  f"&middot; Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", body_style),
+        Spacer(1, 0.4 * cm),
+    ]
+
+    # Gap first — the top-priority number for management.
+    story.append(Paragraph("Team Scorecard &amp; Gap", h2_style))
+    story.append(make_table([
+        ["Metric", "Value"],
+        ["Target FY26", _fmt_idr(target)],
+        ["Actual YTD", _fmt_idr(actual)],
+        ["MRC (rest of year)", _fmt_idr(mrc)],
+        ["PO on Hand", _fmt_idr(po)],
+        ["Total Forecast", _fmt_idr(forecast)],
+        ["Gap to Target", _fmt_idr(gap)],
+        ["Attainment", f"{attain:.1f}%"],
+    ], [8 * cm, 8 * cm]))
+    story.append(Spacer(1, 0.3 * cm))
+
+    story.append(Paragraph("Pipeline Cover for the Gap", h2_style))
+    cover_note = (f"Gap of {_fmt_idr(gap)} needs {_fmt_idr(need)} of pipeline (conservative 3x rule). "
+                  f"Current pipeline is {_fmt_idr(pipe)} — "
+                  + ("covered." if pipe >= need else f"short by {_fmt_idr(max(need - pipe, 0))}."))
+    story.append(Paragraph(cover_note, body_style))
+    story.append(Spacer(1, 0.4 * cm))
+
+    story.append(Paragraph("Account Manager Performance", h2_style))
+    am_table_rows = [["Account Manager", "Target FY26", "Actual YTD", "% Ach", "Forecast", "Gap", "Pipeline"]]
+    for a in sorted(am_rows, key=lambda x: _perf_num(x.get("target_fy")), reverse=True):
+        t, ac = _perf_num(a.get("target_fy")), _perf_num(a.get("actual_ytd"))
+        pct = f"{(ac / t * 100):.1f}%" if t else "-"
+        am_table_rows.append([a.get("am") or "", _fmt_idr(t), _fmt_idr(ac), pct,
+                              _fmt_idr(_perf_num(a.get("forecast_fy"))), _fmt_idr(_perf_num(a.get("gap"))),
+                              _fmt_idr(_perf_num(a.get("current_pipeline")))])
+    story.append(make_table(am_table_rows, [3.6 * cm, 2.6 * cm, 2.6 * cm, 1.6 * cm, 2.6 * cm, 2.4 * cm, 2.6 * cm]))
+    story.append(Spacer(1, 0.4 * cm))
+
+    if down or up:
+        small = ParagraphStyle("psm", parent=body_style, fontSize=8)
+        story.append(Paragraph("Churn Watch (vs previous month)", h2_style))
+        if down:
+            churn_rows = [["Account", "AM", "Previous", "Current", "Change"]]
+            for d in down:
+                churn_rows.append([Paragraph(d["account"], small), (d["am"] or "").split(" ")[0],
+                                   _fmt_idr(d["prev"]), _fmt_idr(d["cur"]), f"-{_fmt_idr(abs(d['delta']))}"])
+            story.append(make_table(churn_rows, [5.5 * cm, 2.5 * cm, 2.8 * cm, 2.8 * cm, 2.8 * cm]))
+        else:
+            story.append(Paragraph("No accounts declined month-over-month.", body_style))
+        story.append(Spacer(1, 0.3 * cm))
+
+        story.append(Paragraph("Growing Accounts (vs previous month)", h2_style))
+        if up:
+            growth_rows = [["Account", "AM", "Previous", "Current", "Change"]]
+            for d in up:
+                growth_rows.append([Paragraph(d["account"], small), (d["am"] or "").split(" ")[0],
+                                    _fmt_idr(d["prev"]), _fmt_idr(d["cur"]), f"+{_fmt_idr(d['delta'])}"])
+            story.append(make_table(growth_rows, [5.5 * cm, 2.5 * cm, 2.8 * cm, 2.8 * cm, 2.8 * cm]))
+        else:
+            story.append(Paragraph("No growth recorded month-over-month.", body_style))
+        story.append(Spacer(1, 0.4 * cm))
+
+    if pillar_entries:
+        story.append(Paragraph("Revenue by Product Pillar", h2_style))
+        pillar_rows = [["Pillar", "Revenue", "Share"]]
+        for p, v in pillar_entries:
+            pillar_rows.append([p, _fmt_idr(v), f"{v / pillar_total * 100:.0f}%"])
+        story.append(make_table(pillar_rows, [8 * cm, 5 * cm, 3 * cm]))
+        story.append(Spacer(1, 0.3 * cm))
+
+    story.append(Paragraph(
+        "For the full account-level pipeline cross-check (which top accounts have no opportunity "
+        "attached in this dashboard), see the Performance tab in the live app.", body_style))
+
+    doc.build(story)
+    buf.seek(0)
+    filename = f"performance_summary_{date.today().isoformat()}.pdf"
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 
 # --------------------------------------------------------------------------
