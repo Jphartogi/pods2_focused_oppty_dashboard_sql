@@ -10,7 +10,7 @@ import json
 import os
 import secrets
 import sqlite3
-from datetime import datetime, date
+from datetime import datetime, date, timedelta, timezone
 from functools import wraps
 
 from flask import Flask, g, jsonify, render_template, request, send_file
@@ -558,6 +558,13 @@ def index():
 # --------------------------------------------------------------------------
 # Auth API
 # --------------------------------------------------------------------------
+JAKARTA_TZ = timezone(timedelta(hours=7))  # GMT+7 / WIB, no DST
+
+
+def jakarta_now_str():
+    return datetime.now(JAKARTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+
 def client_ip():
     forwarded = request.headers.get("X-Forwarded-For", "")
     if forwarded:
@@ -576,11 +583,13 @@ def trim_login_logs(db, max_logs):
 
 
 def log_login(db, row):
-    """Record a successful sign-in and trim to the admin-configured retention limit."""
+    """Record a successful sign-in (timestamped in Jakarta/WIB, GMT+7) and trim
+    to the admin-configured retention limit."""
     db.execute(
-        """INSERT INTO login_logs (user_id, username, full_name, role, ip_address)
-           VALUES (?, ?, ?, ?, ?)""",
-        (row["id"], row["username"], row["full_name"] or row["username"], row["role"], client_ip()),
+        """INSERT INTO login_logs (user_id, username, full_name, role, ip_address, login_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (row["id"], row["username"], row["full_name"] or row["username"], row["role"],
+         client_ip(), jakarta_now_str()),
     )
     max_logs = current_config(db).get("max_login_logs", 100)
     trim_login_logs(db, max_logs)
@@ -664,7 +673,7 @@ def export_login_logs_xlsx():
     wb = Workbook()
     ws = wb.active
     ws.title = "Login Logs"
-    ws.append(["Username", "Full Name", "Role", "Login At", "IP Address"])
+    ws.append(["Username", "Full Name", "Role", "Login At (GMT+7)", "IP Address"])
     for c in range(1, 6):
         cell = ws.cell(row=1, column=c)
         cell.fill = PatternFill("solid", fgColor="1A73E8")

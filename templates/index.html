@@ -652,14 +652,14 @@
           <button id="saveMaxLoginLogsBtn" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)">Save</button>
           <button id="exportLoginLogsBtn" class="btn-primary text-sm px-3 py-1.5 rounded-lg"><i class="fa-solid fa-file-arrow-down mr-1.5"></i>Export (.xlsx)</button>
         </div>
-        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Every successful sign-in is recorded with its timestamp and IP address so you can see when each Account Manager last used the dashboard. Only the most recent logs (up to the limit above) are kept, so storage never grows unbounded.</p>
+        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Every successful sign-in is recorded with its timestamp (Jakarta time, GMT+7) and IP address so you can see when each Account Manager last used the dashboard. Only the most recent logs (up to the limit above) are kept, so storage never grows unbounded.</p>
         <div class="card elev p-0 overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead style="color:var(--text-muted)"><tr class="text-xs uppercase" style="border-bottom:1px solid var(--border)">
                 <th class="text-left py-2 px-4">User</th>
                 <th class="text-left py-2 px-4">Role</th>
-                <th class="text-left py-2 px-4">Login At</th>
+                <th class="text-left py-2 px-4">Login At (GMT+7)</th>
                 <th class="text-left py-2 px-4">IP Address</th>
               </tr></thead>
               <tbody id="loginLogsBody"></tbody>

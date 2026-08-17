@@ -125,8 +125,9 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   breakdown, churn watch and growing accounts (vs previous month), and revenue by product pillar —
   the gap comes first since that's the number management needs immediately, saved as
   `performance_summary_<date>.pdf`.
-- **Login Logs** (admin only) — every successful sign-in is recorded with a timestamp, the user, their
-  role and IP address, so an admin can see exactly when each Account Manager last used the dashboard.
+- **Login Logs** (admin only) — every successful sign-in is recorded with a timestamp (Jakarta time,
+  GMT+7), the user, their role and IP address, so an admin can see exactly when each Account Manager
+  last used the dashboard.
   Only the most recent logs are kept — the limit defaults to **100** and is adjustable (10–2000) right
   on the Login Logs page — so storage never grows unbounded. Logs can be exported to Excel at any time
   (`login_logs_<date>.xlsx`). This page and its API are strictly admin-only; it does not appear in the
