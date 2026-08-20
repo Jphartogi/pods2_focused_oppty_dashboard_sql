@@ -14,25 +14,27 @@
 </script>
 <style>
   :root {
-    --bg:#f8f9fa; --surface:#ffffff; --surface-2:#f1f3f4; --surface-3:#e8eaed;
-    --border:#dadce0; --text:#202124; --text-muted:#5f6368; --text-faint:#80868b;
-    --primary:#1a73e8; --primary-hover:#1765cc; --primary-soft:#e8f0fe; --on-primary:#ffffff;
-    --nav-active-bg:#e8f0fe; --nav-active-text:#1967d2;
-    --success:#1e8e3e; --warning:#e37400; --danger:#d93025; --danger-soft:#fce8e6;
-    --shadow:rgba(60,64,67,.15); --shadow-2:rgba(60,64,67,.3);
-    --chart-grid:#e8eaed; --chart-text:#5f6368;
+    --bg:#f4f5f7; --surface:#ffffff; --surface-2:#f0f2f5; --surface-3:#e5e8ed;
+    --border:#e2e5e9; --text:#16191f; --text-muted:#545b64; --text-faint:#828a94;
+    --primary:#0972d3; --primary-hover:#075fb0; --primary-soft:#eaf3fd; --on-primary:#ffffff;
+    --nav-active-bg:#eaf3fd; --nav-active-text:#075fb0;
+    --navy:#16222c; --navy-2:#1f2e3d;
+    --success:#037f51; --warning:#8a5900; --danger:#cc1b1b; --danger-soft:#fbe9e7;
+    --shadow:rgba(22,25,31,.10); --shadow-2:rgba(22,25,31,.22);
+    --chart-grid:#e5e8ed; --chart-text:#545b64;
   }
   [data-theme="dark"] {
-    --bg:#202124; --surface:#292a2d; --surface-2:#35363a; --surface-3:#3c4043;
-    --border:#5f6368; --text:#e8eaed; --text-muted:#9aa0a6; --text-faint:#80868b;
-    --primary:#8ab4f8; --primary-hover:#aecbfa; --primary-soft:#1f3a5f; --on-primary:#202124;
-    --nav-active-bg:#1f3a5f; --nav-active-text:#8ab4f8;
-    --success:#81c995; --warning:#fdd663; --danger:#f28b82; --danger-soft:#3c2a29;
-    --shadow:rgba(0,0,0,.4); --shadow-2:rgba(0,0,0,.6);
-    --chart-grid:#3c4043; --chart-text:#9aa0a6;
+    --bg:#0f1b2a; --surface:#152230; --surface-2:#1c2c3d; --surface-3:#26384c;
+    --border:#324459; --text:#e9edf1; --text-muted:#9aa7b6; --text-faint:#748094;
+    --primary:#539fe5; --primary-hover:#7cb9f0; --primary-soft:#1b3350; --on-primary:#0f1b2a;
+    --nav-active-bg:#1b3350; --nav-active-text:#7cb9f0;
+    --navy:#0a141f; --navy-2:#111f2e;
+    --success:#4fd39e; --warning:#e0a336; --danger:#f27272; --danger-soft:#3a2321;
+    --shadow:rgba(0,0,0,.35); --shadow-2:rgba(0,0,0,.55);
+    --chart-grid:#26384c; --chart-text:#9aa7b6;
   }
   html, body { background: var(--bg); color: var(--text); }
-  body { font-family:'Inter','Google Sans','Roboto','Segoe UI',Arial,sans-serif; -webkit-font-smoothing: antialiased; letter-spacing:-0.011em; }
+  body { font-family:'Inter','Amazon Ember','Helvetica Neue',Roboto,Arial,sans-serif; -webkit-font-smoothing: antialiased; letter-spacing:-0.003em; }
   h1,h2,.metric-value { letter-spacing:-0.02em; }
   /* numbers line up in tables */
   .tabular { font-variant-numeric: tabular-nums; }
@@ -99,8 +101,16 @@
   body.rail-collapsed .nav-group-head { display:none; }
   body.rail-collapsed .nav-group.collapsed .nav-group-items { max-height:400px; opacity:1; }
   body.rail-collapsed .nav-group + .nav-group { margin-top:8px; padding-top:8px; border-top:1px solid var(--border); }
-  .icon-btn { width:36px; height:36px; border-radius:9999px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); }
-  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  .icon-btn { width:36px; height:36px; border-radius:9999px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); transition: background .15s ease, color .15s ease, transform .15s ease; }
+  .icon-btn:hover { background: var(--primary-soft); color: var(--primary); transform: translateY(-1px); }
+  .btn-primary { transition: background .15s ease, transform .15s ease, box-shadow .15s ease; }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 10px -2px var(--shadow-2); }
+  #searchTriggerBtn { transition: border-color .15s ease, background .15s ease; cursor:pointer; }
+  #searchTriggerBtn:hover { border-color: var(--primary); background: var(--surface); }
+  /* --- command palette (feature search) --- */
+  #cmdResults .cmd-row { cursor:pointer; transition: background .1s ease; }
+  #cmdResults .cmd-row:hover, #cmdResults .cmd-row.active { background: var(--surface-2); }
+  #cmdResults .cmd-row.active { box-shadow: inset 3px 0 0 var(--primary); }
   /* --- expandable summary widgets (management view) --- */
   .widget > summary { list-style:none; cursor:pointer; }
   .widget > summary::-webkit-details-marker { display:none; }
@@ -112,12 +122,12 @@
 
 <!-- ===================== LOGIN ===================== -->
 <div id="loginScreen" class="min-h-screen flex items-center justify-center p-4 sm:p-8" style="background:radial-gradient(120% 120% at 15% 10%, #eef6ff 0%, #dfeeff 35%, #cfe3ff 65%, #bfd9ff 100%)">
-  <div class="w-full max-w-4xl grid md:grid-cols-2 rounded-3xl overflow-hidden" style="box-shadow:0 24px 70px -12px rgba(26,115,232,.35), 0 8px 24px rgba(26,115,232,.15)">
+  <div class="w-full max-w-4xl grid md:grid-cols-2 rounded-3xl overflow-hidden" style="box-shadow:0 24px 70px -12px rgba(9,114,211,.32), 0 8px 24px rgba(9,114,211,.14)">
 
     <!-- Left: translucent glass sign-in card -->
     <div class="relative p-8 sm:p-11 flex flex-col justify-center" style="background:rgba(255,255,255,.68); backdrop-filter:blur(22px) saturate(160%); -webkit-backdrop-filter:blur(22px) saturate(160%); border-right:1px solid rgba(255,255,255,.4)">
       <div class="mb-7">
-        <div class="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style="background:linear-gradient(135deg,#1a73e8,#0d47a1); box-shadow:0 8px 20px -6px rgba(26,115,232,.6)">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style="background:linear-gradient(135deg,#0972d3,#06315c); box-shadow:0 8px 20px -6px rgba(9,114,211,.55)">
           <i class="fa-solid fa-satellite-dish text-xl text-white"></i>
         </div>
         <h1 class="text-2xl font-semibold" style="color:#0d1b34">Sign in</h1>
@@ -139,13 +149,13 @@
           </div>
         </div>
         <p id="loginError" class="text-xs hidden" style="color:#d93025"></p>
-        <button type="submit" class="w-full text-sm font-medium py-2.5 rounded-xl text-white" style="background:linear-gradient(135deg,#1a73e8,#0d47a1); box-shadow:0 10px 24px -8px rgba(26,115,232,.6)">Sign in</button>
+        <button type="submit" class="w-full text-sm font-medium py-2.5 rounded-xl text-white" style="background:linear-gradient(135deg,#0972d3,#06315c); box-shadow:0 10px 24px -8px rgba(9,114,211,.55)">Sign in</button>
       </form>
       <p class="text-[11px] mt-7" style="color:#8895ac">Access is managed by your administrator. Contact them if you need an account or a password reset.</p>
     </div>
 
     <!-- Right: illustration panel -->
-    <div class="hidden md:flex relative flex-col items-center justify-center px-8 py-10 overflow-hidden" style="background:linear-gradient(160deg,#1a73e8 0%,#12388f 60%,#0a2559 100%)">
+    <div class="hidden md:flex relative flex-col items-center justify-center px-8 py-10 overflow-hidden" style="background:linear-gradient(160deg,#0972d3 0%,#0a3d70 60%,#0a2044 100%)">
       <div class="absolute rounded-full" style="width:280px;height:280px;top:-60px;right:-70px;background:rgba(255,255,255,.08);filter:blur(6px)"></div>
       <div class="absolute rounded-full" style="width:220px;height:220px;bottom:-70px;left:-60px;background:rgba(79,195,247,.18);filter:blur(10px)"></div>
 
@@ -187,16 +197,23 @@
 <!-- ===================== APP ===================== -->
 <div id="appScreen" class="hidden min-h-screen flex flex-col">
 
+  <!-- Thin utility strip, AWS-style -->
+  <div class="w-full flex-shrink-0" style="height:3px;background:var(--navy)"></div>
+
   <!-- Top app bar -->
-  <header class="flex items-center gap-3 px-4 h-16 flex-shrink-0" style="background:var(--surface); border-bottom:1px solid var(--border)">
+  <header class="flex items-center gap-3 px-4 h-14 flex-shrink-0" style="background:var(--surface); border-bottom:1px solid var(--border)">
     <button id="railToggle" class="icon-btn" title="Collapse / expand menu"><i class="fa-solid fa-bars"></i></button>
     <div class="w-9 h-9 rounded-lg btn-primary flex items-center justify-center"><i class="fa-solid fa-satellite-dish"></i></div>
     <div>
-      <p class="text-sm font-semibold leading-tight" style="color:var(--text)">PODS-2 Dashboard Tracker</p>
+      <p class="text-sm font-semibold leading-tight" style="color:var(--text);letter-spacing:-0.01em">PODS-2 Dashboard Tracker</p>
       <p class="text-[11px] leading-tight" style="color:var(--text-muted)">H2 2026 Strategic Playbook</p>
     </div>
     <span class="chip ml-2 hidden sm:inline" style="color:var(--text-muted)">IDR &middot; Production</span>
+    <button id="searchTriggerBtn" type="button" class="hidden lg:flex items-center gap-2 ml-5 px-3 py-1.5 rounded-lg text-xs" style="background:var(--surface-2);color:var(--text-faint);border:1px solid var(--border);min-width:230px" title="Search (Ctrl+K)">
+      <i class="fa-solid fa-magnifying-glass"></i><span class="flex-1 text-left">Search features…</span><span class="chip" style="padding:1px 6px;font-size:9px;color:var(--text-faint)">Ctrl K</span>
+    </button>
     <div class="flex-1"></div>
+    <button id="searchTriggerBtnMobile" type="button" class="icon-btn lg:hidden" title="Search (Ctrl+K)"><i class="fa-solid fa-magnifying-glass"></i></button>
     <button id="quickConfigBtn" title="Configuration" class="icon-btn" style="display:none"><i class="fa-solid fa-list-check"></i></button>
     <button id="quickSettingsBtn" title="Settings" class="icon-btn" style="display:none"><i class="fa-solid fa-gear"></i></button>
     <button id="themeToggle" title="Toggle theme" class="icon-btn"><i id="themeIcon" class="fa-solid fa-moon"></i></button>
@@ -988,6 +1005,18 @@
   <div class="card w-full max-w-sm elev p-6"><p id="confirmMessage" class="text-sm mb-5" style="color:var(--text)">Are you sure?</p><div class="flex justify-end gap-2"><button id="confirmCancelBtn" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button id="confirmOkBtn" class="text-sm px-4 py-2 rounded-lg text-white" style="background:var(--danger)">Delete</button></div></div>
 </div>
 
+<!-- ===================== COMMAND PALETTE (feature search) ===================== -->
+<div id="cmdPalette" class="hidden fixed inset-0 z-[70] flex items-start justify-center pt-24 px-4" style="background:rgba(15,20,28,.5)">
+  <div class="card elev w-full max-w-lg overflow-hidden" style="max-height:70vh">
+    <div class="flex items-center gap-2.5 px-4 py-3" style="border-bottom:1px solid var(--border)">
+      <i class="fa-solid fa-magnifying-glass text-sm" style="color:var(--text-faint)"></i>
+      <input id="cmdInput" type="text" placeholder="Search features — Tracker, Calendar, Analytics, Settings…" class="flex-1 text-sm bg-transparent outline-none" style="color:var(--text)">
+      <button data-close-modal="cmdPalette" class="chip" style="color:var(--text-faint)">Esc</button>
+    </div>
+    <div id="cmdResults" class="overflow-y-auto" style="max-height:calc(70vh - 52px)"></div>
+  </div>
+</div>
+
 <div id="toast" class="hidden fixed bottom-6 right-6 text-white text-sm px-4 py-2.5 rounded-lg z-[60]" style="box-shadow:0 4px 12px var(--shadow-2)"></div>
 
 <script>
@@ -1062,7 +1091,7 @@ function proofDoneCount(proofs){
           total:Object.values(p).filter(v=>v.status!=='na').length};
 }
 
-const CHART_COLORS = ['#4285f4','#34a853','#fbbc04','#ea4335','#12b5cb','#a142f4','#ff6d01','#24c1e0'];
+const CHART_COLORS = ['#0972d3','#037f51','#fbbc04','#cc1b1b','#12b5cb','#8b3fd6','#d81b60','#0b6e99'];
 const BASE_STAGE_COLORS = { 'Prospecting':'#fbbc04','Negotiation':'#4285f4','Closed':'#34a853','Blocked':'#ea4335' };
 // Stages are configurable: known names keep their colour, new ones get one from the palette.
 function stageColor(stage){
@@ -2819,6 +2848,77 @@ document.getElementById('perfExportPdfBtn').addEventListener('click',async()=>{
     const a=document.createElement('a'); a.href=url; a.download=`performance_summary_${new Date().toISOString().split('T')[0]}.pdf`;
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   }catch(err){ showToast(err.message,true); }
+});
+
+/* ================= COMMAND PALETTE (feature search) ================= */
+const CMD_FEATURES = [
+  {label:'Management View', desc:'Executive briefing — headline, blockers, AM performance & insights', icon:'fa-briefcase', tab:'management', roles:['admin','management']},
+  {label:'Tracker', desc:'Search, filter, sort and edit opportunities', icon:'fa-table-cells-large', tab:'tracker'},
+  {label:'Calendar', desc:'Week/month view of every scheduled action item', icon:'fa-calendar-days', tab:'calendar'},
+  {label:'Pipeline Analytics', desc:'Gap & targets, breakdown, execution framework, strategy, leaderboard', icon:'fa-chart-line', tab:'analytics'},
+  {label:'Performance', desc:'Monthly ACH actuals, targets, pipeline cover, churn watch', icon:'fa-gauge-high', tab:'performance'},
+  {label:'Lists & Automation', desc:'Deal stages, pillars, squads, stage automation rules', icon:'fa-list-check', tab:'configuration', roles:['admin']},
+  {label:'Login Logs', desc:'Sign-in history, retention limit, export', icon:'fa-user-clock', tab:'loginlogs', roles:['admin']},
+  {label:'Settings', desc:'Targets, AM figures, users, data backup & restore', icon:'fa-sliders', tab:'settings', roles:['admin']},
+];
+const CMD_ACTIONS = [
+  {label:'Add Opportunity', desc:'Create a new deal', icon:'fa-plus', roles:['admin','account_manager'],
+   action:()=>{ switchTab('tracker'); openDealModal(null); }},
+  {label:'Export Tracker report (PDF)', desc:'Download the full Tracker PDF report', icon:'fa-file-pdf',
+   action:()=>{ switchTab('tracker'); document.getElementById('exportPdfBtn').click(); }},
+  {label:'Toggle theme', desc:'Switch between light and dark mode', icon:'fa-circle-half-stroke',
+   action:()=>document.getElementById('themeToggle').click()},
+];
+function cmdItems(){ return [...CMD_FEATURES, ...CMD_ACTIONS].filter(x=>!x.roles||x.roles.includes(ROLE)); }
+let cmdActiveIdx=0, cmdFiltered=[];
+function renderCmdResults(){
+  const q=document.getElementById('cmdInput').value.trim().toLowerCase();
+  cmdFiltered = cmdItems().filter(x=>!q || x.label.toLowerCase().includes(q) || (x.desc||'').toLowerCase().includes(q));
+  cmdActiveIdx = 0;
+  const el=document.getElementById('cmdResults');
+  el.innerHTML = cmdFiltered.map((x,i)=>`
+    <div class="cmd-row flex items-center gap-3 px-4 py-2.5 ${i===0?'active':''}" data-idx="${i}">
+      <i class="fa-solid ${x.icon} w-4 text-center" style="color:var(--primary)"></i>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium truncate" style="color:var(--text)">${escapeHtml(x.label)}</p>
+        <p class="text-[11px] truncate" style="color:var(--text-faint)">${escapeHtml(x.desc||'')}</p>
+      </div>
+      ${x.tab?'<i class="fa-solid fa-arrow-right text-xs" style="color:var(--text-faint)"></i>':''}
+    </div>`).join('') || `<p class="text-xs px-4 py-6 text-center" style="color:var(--text-faint)">No matching feature.</p>`;
+  el.querySelectorAll('.cmd-row').forEach(r=>r.addEventListener('click',()=>runCmd(parseInt(r.dataset.idx))));
+}
+function runCmd(idx){
+  const x=cmdFiltered[idx]; if(!x) return;
+  closeModal('cmdPalette');
+  if(x.tab) switchTab(x.tab); else if(x.action) x.action();
+}
+function cmdMove(delta){
+  if(!cmdFiltered.length) return;
+  cmdActiveIdx=(cmdActiveIdx+delta+cmdFiltered.length)%cmdFiltered.length;
+  document.querySelectorAll('#cmdResults .cmd-row').forEach((r,i)=>r.classList.toggle('active',i===cmdActiveIdx));
+  const activeEl=document.querySelector('#cmdResults .cmd-row.active'); if(activeEl) activeEl.scrollIntoView({block:'nearest'});
+}
+function openCmdPalette(){
+  openModal('cmdPalette');
+  const inp=document.getElementById('cmdInput'); inp.value='';
+  renderCmdResults();
+  setTimeout(()=>inp.focus(),30);
+}
+document.getElementById('searchTriggerBtn').addEventListener('click',openCmdPalette);
+document.getElementById('searchTriggerBtnMobile').addEventListener('click',openCmdPalette);
+document.getElementById('cmdInput').addEventListener('input',renderCmdResults);
+document.getElementById('cmdInput').addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'){ e.preventDefault(); cmdMove(1); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); cmdMove(-1); }
+  else if(e.key==='Enter'){ e.preventDefault(); runCmd(cmdActiveIdx); }
+  else if(e.key==='Escape'){ closeModal('cmdPalette'); }
+});
+document.getElementById('cmdPalette').addEventListener('click',e=>{ if(e.target.id==='cmdPalette') closeModal('cmdPalette'); });
+document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k'){
+    const app=document.getElementById('appScreen');
+    if(app && !app.classList.contains('hidden')){ e.preventDefault(); openCmdPalette(); }
+  }
 });
 
 /* ================= INIT ================= */

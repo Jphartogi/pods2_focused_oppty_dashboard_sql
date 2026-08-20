@@ -53,8 +53,13 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 
 - **Theme** — light/dark toggle in the top app bar (persists in `localStorage`, follows the OS
   preference on first load).
-- **GCP-style design** — light top app bar, left nav rail, Material-inspired cards/elevation,
-  Google brand colors, Roboto/Google Sans typography.
+- **AWS-inspired design** — compact top app bar, left nav rail, card-based layout, an AWS
+  Cloudscape-style blue accent (no orange), and Inter/Amazon Ember-style typography.
+- **Feature search (Ctrl/Cmd+K)** — click the search bar in the top app bar (or press **Ctrl+K** /
+  **Cmd+K**) to open a command palette that searches every section of the dashboard (Tracker,
+  Calendar, Pipeline Analytics, Performance, Login Logs, Settings, etc.) plus a few quick actions
+  (Add Opportunity, Export PDF, Toggle theme). Type to filter, use the arrow keys + Enter, or click
+  a result to jump straight there. Only shows what your role can access.
 - **Full-year coverage header** — Full-Year 2026 Target, Achieved (YTD), 2026 Pipeline + Recurring,
   and Remaining Gap, plus a stacked **coverage bar** (Achieved / Recurring / 2026 Pipeline / Gap) so
   you can see how much of the full-year target is already covered and what's left to close.
