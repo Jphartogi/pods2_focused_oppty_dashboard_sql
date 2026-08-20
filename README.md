@@ -53,16 +53,18 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 
 - **Theme** — light/dark toggle in the top app bar (persists in `localStorage`, follows the OS
   preference on first load).
-- **AWS-inspired design** — compact top app bar, left nav rail, card-based layout, an AWS
-  Cloudscape-style blue accent (no orange), and Inter/Amazon Ember-style typography.
+- **AWS-inspired design** — a fixed dark-navy top app bar (stays dark in both light and dark theme,
+  like aws.amazon.com), left nav rail, card-based layout, an AWS Cloudscape-style blue accent
+  (no orange), and Inter/Amazon Ember-style typography.
 - **Feature search (Ctrl/Cmd+K)** — click the search bar in the top app bar (or press **Ctrl+K** /
   **Cmd+K**) to open a command palette that searches every section of the dashboard (Tracker,
   Calendar, Pipeline Analytics, Performance, Login Logs, Settings, etc.) plus a few quick actions
   (Add Opportunity, Export PDF, Toggle theme). Type to filter, use the arrow keys + Enter, or click
   a result to jump straight there. Only shows what your role can access.
 - **Full-year coverage header** — Full-Year 2026 Target, Achieved (YTD), 2026 Pipeline + Recurring,
-  and Remaining Gap, plus a stacked **coverage bar** (Achieved / Recurring / 2026 Pipeline / Gap) so
-  you can see how much of the full-year target is already covered and what's left to close.
+  and Remaining Gap as icon-badged metric cards, plus a stacked **coverage bar** (Achieved /
+  Recurring / 2026 Pipeline / Gap) with pill-style legend chips, so you can see how much of the
+  full-year target is already covered and what's left to close.
 - **Tracker** — search, filter by AM / Squad / Pillar / Stage, **sort** (defaults to Progress
   High → Low, so opportunities closest to 100% surface first; also TCV, Rev 2026, name), and
   **pagination** (10/25/50 rows per page). Inline progress sliders, blocker flags, and
@@ -116,12 +118,9 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   moment it's no longer Planned). Below it, **Next actions** (ad-hoc items that don't belong to a
   specific proof) now lives in its own tab too, instead of being tucked away in a collapsible on the
   Execution Framework tab.
-- **Stage automation** — an opportunity's Stage is derived from how far its framework has
-  progressed: the furthest proof reached (done or in progress) sets the stage, and a blocked deal
-  always shows the blocked stage. The proof → stage mapping and an on/off switch live under
-  **Configuration → Stage automation**, with an **Apply to all opportunities** button to
-  re-run it in bulk. Any single deal can opt out via "Set stage manually" in its edit form.
-  Deals with no framework progress keep whatever stage they already had.
+- **Stage — manual** — an opportunity's Stage is set directly by the AM/admin in its edit form.
+  (Earlier builds could auto-derive it from execution-framework progress; that automation has been
+  removed so the team controls Stage explicitly.)
 - **Framework analytics** — Analytics shows a proof-by-proof funnel (done / in progress / not
   started across the filtered deals), completion by Account Manager, and a click-to-drill list of the
   deals stuck at any given proof. The PDF report includes the same breakdown.
@@ -262,10 +261,10 @@ live PythonAnywhere instance:
    (Everything else keeps working without it; only Export/Import will report that it's missing.)
 3. Go to the **Web** tab and click **Reload**. On reload the app auto-migrates the database — it adds
    any missing columns (`deals.strategy`, `deals.proofs`, `config.current_achievement`,
-   `config.recurring_revenue`, `config.stages`, `config.am_achievements`, `config.am_recurring`,
-   `config.auto_stage`, `config.stage_rules`) and preserves every existing deal, user, password and
-   setting. A proof's older single note is folded into its evidence list automatically, and stage
-   automation only ever changes a deal that already has framework progress.
+   `config.recurring_revenue`, `config.stages`, `config.am_achievements`, `config.am_recurring`) and
+   preserves every existing deal, user, password and setting. A proof's older single note is folded
+   into its evidence list automatically. (`config.auto_stage`/`config.stage_rules` may still exist
+   from older releases but are no longer read — Stage is manual only.)
 4. Recommended right after reloading: **Settings → Data Backup → Export all data** so you have a
    restore point, then fill in the per-AM Target / YTD / Recurring figures.
 

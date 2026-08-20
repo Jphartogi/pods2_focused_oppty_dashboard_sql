@@ -116,6 +116,22 @@
   .widget > summary::-webkit-details-marker { display:none; }
   .widget summary .chev { transition: transform .18s ease; }
   .widget[open] summary .chev { transform: rotate(90deg); }
+  /* --- dark top bar, AWS-style: fixed navy chrome regardless of light/dark theme --- */
+  header.app-topbar {
+    background: #16222c; border-bottom: 1px solid rgba(255,255,255,.08);
+    --text:#f4f7fb; --text-muted:#aebccf; --text-faint:#8ea0b8; --border:rgba(255,255,255,.16);
+    --surface:#1c2c3a; --surface-2:rgba(255,255,255,.08); --surface-3:rgba(255,255,255,.16);
+    --primary:#7cb9f0; --primary-hover:#a9d2f7; --primary-soft:rgba(124,185,240,.18); --on-primary:#0f1b2a;
+  }
+  /* --- fresh, dynamic metric cards (top KPI strip) --- */
+  .metric-card { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:16px 18px; display:flex; align-items:center; gap:14px; position:relative; overflow:hidden; transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease; }
+  .metric-card::before { content:''; position:absolute; inset:0 0 auto 0; height:3px; background:linear-gradient(90deg,var(--metric-accent),transparent 85%); }
+  .metric-card:hover { transform:translateY(-3px); box-shadow:0 10px 24px -8px var(--shadow-2); border-color:var(--metric-accent); }
+  .metric-icon { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; background:var(--metric-soft); color:var(--metric-accent); }
+  .metric-label { font-size:11.5px; color:var(--text-muted); margin-bottom:2px; }
+  .metric-value { font-size:1.55rem; font-weight:600; letter-spacing:-0.02em; color:var(--text); line-height:1.2; }
+  .cov-seg { transition: width .6s cubic-bezier(.22,.9,.35,1); }
+  .cov-pill { display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:4px 10px 4px 8px; border-radius:9999px; background:var(--surface-2); color:var(--text-muted); }
 </style>
 </head>
 <body>
@@ -197,11 +213,8 @@
 <!-- ===================== APP ===================== -->
 <div id="appScreen" class="hidden min-h-screen flex flex-col">
 
-  <!-- Thin utility strip, AWS-style -->
-  <div class="w-full flex-shrink-0" style="height:3px;background:var(--navy)"></div>
-
-  <!-- Top app bar -->
-  <header class="flex items-center gap-3 px-4 h-14 flex-shrink-0" style="background:var(--surface); border-bottom:1px solid var(--border)">
+  <!-- Top app bar — dark navy chrome, AWS-style, regardless of light/dark theme -->
+  <header class="app-topbar flex items-center gap-3 px-4 h-14 flex-shrink-0">
     <button id="railToggle" class="icon-btn" title="Collapse / expand menu"><i class="fa-solid fa-bars"></i></button>
     <div class="w-9 h-9 rounded-lg btn-primary flex items-center justify-center"><i class="fa-solid fa-satellite-dish"></i></div>
     <div>
@@ -280,34 +293,46 @@
       <!-- Metric strip -->
       <div class="px-6 pt-6">
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div class="card elev p-4">
-            <p class="text-xs" style="color:var(--text-muted)"><i class="fa-solid fa-bullseye mr-1"></i>Full-Year 2026 Target</p>
-            <p id="metricTarget" class="text-2xl font-medium mt-1" style="color:var(--text)">–</p>
+          <div class="metric-card" style="--metric-accent:var(--primary);--metric-soft:var(--primary-soft)">
+            <div class="metric-icon"><i class="fa-solid fa-bullseye"></i></div>
+            <div class="min-w-0">
+              <p class="metric-label">Full-Year 2026 Target</p>
+              <p id="metricTarget" class="metric-value">–</p>
+            </div>
           </div>
-          <div class="card elev p-4">
-            <p class="text-xs" style="color:var(--text-muted)"><i class="fa-solid fa-circle-check mr-1"></i>Achieved (YTD)</p>
-            <p id="metricAchieved" class="text-2xl font-medium mt-1" style="color:var(--success)">–</p>
+          <div class="metric-card" style="--metric-accent:var(--success);--metric-soft:color-mix(in srgb, var(--success) 16%, transparent)">
+            <div class="metric-icon"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="min-w-0">
+              <p class="metric-label">Achieved (YTD)</p>
+              <p id="metricAchieved" class="metric-value" style="color:var(--success)">–</p>
+            </div>
           </div>
-          <div class="card elev p-4">
-            <p class="text-xs" style="color:var(--text-muted)"><i class="fa-solid fa-layer-group mr-1"></i>2026 Pipeline + Recurring</p>
-            <p id="metricPipeline" class="text-2xl font-medium mt-1" style="color:var(--primary)">–</p>
+          <div class="metric-card" style="--metric-accent:#12b5cb;--metric-soft:rgba(18,181,203,.16)">
+            <div class="metric-icon"><i class="fa-solid fa-layer-group"></i></div>
+            <div class="min-w-0">
+              <p class="metric-label">2026 Pipeline + Recurring</p>
+              <p id="metricPipeline" class="metric-value" style="color:#12b5cb">–</p>
+            </div>
           </div>
-          <div class="card elev p-4">
-            <p class="text-xs" style="color:var(--text-muted)"><i class="fa-solid fa-arrow-trend-down mr-1"></i>Remaining Gap</p>
-            <p id="metricGap" class="text-2xl font-medium mt-1" style="color:var(--danger)">–</p>
+          <div class="metric-card" style="--metric-accent:var(--danger);--metric-soft:var(--danger-soft)">
+            <div class="metric-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
+            <div class="min-w-0">
+              <p class="metric-label">Remaining Gap</p>
+              <p id="metricGap" class="metric-value" style="color:var(--danger)">–</p>
+            </div>
           </div>
         </div>
-        <div class="card elev p-4 mt-4">
-          <div class="flex items-center justify-between mb-2">
-            <p class="text-xs font-medium" style="color:var(--text)">Coverage toward full-year 2026 target</p>
-            <p id="coveragePct" class="text-xs font-medium" style="color:var(--text-muted)"></p>
+        <div class="card elev p-5 mt-4" style="border-radius:18px">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-sm font-medium" style="color:var(--text)"><i class="fa-solid fa-gauge-high mr-1.5" style="color:var(--primary)"></i>Coverage toward full-year 2026 target</p>
+            <p id="coveragePct" class="text-sm font-semibold" style="color:var(--primary)"></p>
           </div>
-          <div class="w-full rounded-full overflow-hidden flex" style="height:14px;background:var(--surface-3)">
-            <div id="covAchieved" style="width:0%;background:var(--success)" title="Achieved"></div>
-            <div id="covRecurring" style="width:0%;background:#12b5cb" title="Recurring"></div>
-            <div id="covPipeline" style="width:0%;background:var(--primary)" title="2026 Pipeline"></div>
+          <div class="w-full rounded-full overflow-hidden flex" style="height:16px;background:var(--surface-3)">
+            <div id="covAchieved" class="cov-seg" style="width:0%;background:var(--success)" title="Achieved"></div>
+            <div id="covRecurring" class="cov-seg" style="width:0%;background:#12b5cb" title="Recurring"></div>
+            <div id="covPipeline" class="cov-seg" style="width:0%;background:var(--primary)" title="2026 Pipeline"></div>
           </div>
-          <div id="coverageLegend" class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px]" style="color:var(--text-muted)"></div>
+          <div id="coverageLegend" class="flex flex-wrap gap-2 mt-3"></div>
         </div>
       </div>
 
@@ -838,21 +863,6 @@
       <section id="tab-configuration" class="tab-panel px-6 py-5">
         <p class="text-xs mb-4" style="color:var(--text-muted)">Manage the lists that drive the dropdowns across the app. Renaming an item here does not rewrite existing opportunities — update those from the Tracker if needed.</p>
 
-        <div class="card elev p-5 mb-4">
-          <div class="flex items-center justify-between mb-1">
-            <p class="text-sm font-medium"><i class="fa-solid fa-wand-magic-sparkles mr-1.5" style="color:var(--primary)"></i>Stage automation</p>
-            <label class="flex items-center gap-2 text-xs" style="color:var(--text-muted)">
-              <input id="cfgAutoStage" type="checkbox"> Derive stage from the execution framework
-            </label>
-          </div>
-          <p class="text-[11px] mb-3" style="color:var(--text-faint)">When on, an opportunity's stage is set automatically from the furthest proof reached (done or in progress). A blocked opportunity always shows the blocked stage. Individual deals can still be overridden with "Set stage manually" in their edit form. Opportunities with no framework progress keep their current stage.</p>
-          <div id="stageRulesList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3"></div>
-          <div class="flex flex-wrap items-center gap-3">
-            <button id="saveStageRulesBtn" class="btn-primary text-sm px-4 py-2 rounded-lg">Save automation</button>
-            <button id="recalcStagesBtn" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-rotate mr-1.5"></i>Apply to all opportunities</button>
-            <span id="recalcResult" class="text-[11px]" style="color:var(--text-muted)"></span>
-          </div>
-        </div>
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div class="card elev p-5">
             <p class="text-sm font-medium mb-1">Deal Stages</p>
@@ -921,10 +931,6 @@
         <div>
           <label class="block text-xs mb-1" style="color:var(--text-muted)">Stage</label>
           <select id="dealStage" class="field w-full px-3 py-2 text-sm"></select>
-          <p id="stageAutoNote" class="text-[10px] mt-0.5" style="color:var(--primary)"></p>
-          <label class="flex items-center gap-1 text-[10px] mt-0.5" style="color:var(--text-faint)">
-            <input id="dealStageOverride" type="checkbox"> Set stage manually
-          </label>
         </div>
       </div>
       <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Progress: <span id="dealProgressLabel">0</span>%</label><input id="dealProgress" type="range" min="0" max="100" value="0" class="w-full"></div>
@@ -1070,14 +1076,6 @@ function normalizeProofs(raw){
     out[p.key]={status:PROOF_STATUS_META[st]?st:'not_started', due:(it.due||'').slice(0,10), entries};
   });
   return out;
-}
-/* Stage implied by how far the framework has progressed (mirrors the server rule) */
-function deriveStage(proofs,isBlocked,fallback){
-  if(isBlocked) return (CONFIG.blocked_stage||'Blocked');
-  const p=normalizeProofs(proofs); let reached=null;
-  PROOF_FRAMEWORK.forEach(x=>{ if(['done','in_progress'].includes(p[x.key].status)) reached=x.key; });
-  if(!reached) return fallback;
-  return (CONFIG.stage_rules||{})[reached] || fallback;
 }
 function proofProgress(proofs){
   const p=normalizeProofs(proofs);
@@ -1314,8 +1312,8 @@ function updateMetrics(){
   document.getElementById('coveragePct').textContent=target>0?`${Math.round(covered/target*100)}% covered`:'';
   document.getElementById('coverageLegend').innerHTML=[
     ['var(--success)','Achieved',achieved],['#12b5cb','Recurring',recurring],
-    ['var(--primary)','2026 Pipeline',pipeline2026],['var(--surface-3)','Remaining gap',gap]
-  ].map(([c,l,v])=>`<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:${c}"></span>${l}: <b style="color:var(--text)">${fmtIDR(v)}</b></span>`).join('');
+    ['var(--primary)','2026 Pipeline',pipeline2026],['var(--text-faint)','Remaining gap',gap]
+  ].map(([c,l,v])=>`<span class="cov-pill"><span class="w-2 h-2 rounded-full" style="background:${c}"></span>${l}: <b style="color:var(--text)">${fmtIDR(v)}</b></span>`).join('');
 }
 
 /* ================= DEALS ================= */
@@ -1520,15 +1518,11 @@ function openDealModal(id){
   document.getElementById('dealStrategy').value=d?(d.strategy||''):'';
   nextActionsDraft=d?JSON.parse(JSON.stringify(d.next_actions)):[];
   proofsDraft=normalizeProofs(d?d.proofs:{});
-  document.getElementById('dealStageOverride').checked=false;
   renderNextActionsDraft();
   renderProofsDraft();
-  syncAutoStage();
   switchModalTab('details');
   openModal('dealModal');
 }
-document.getElementById('dealStageOverride').addEventListener('change',syncAutoStage);
-document.getElementById('dealIsBlocked').addEventListener('change',syncAutoStage);
 document.getElementById('dealProgress').addEventListener('input',e=>document.getElementById('dealProgressLabel').textContent=e.target.value);
 
 /* ---------- Modal tabs: Details | Execution Framework ---------- */
@@ -1580,7 +1574,7 @@ function renderProofsDraft(){
       </div>
     </div>`;
   }).join('');
-  list.querySelectorAll('.proof-status').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].status=e.target.value; renderProofsDraft(); syncAutoStage(); }));
+  list.querySelectorAll('.proof-status').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].status=e.target.value; renderProofsDraft(); }));
   list.querySelectorAll('.proof-due').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].due=e.target.value; }));
   list.querySelectorAll('.pe-text').forEach(s=>s.addEventListener('input',e=>{ proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].text=e.target.value; }));
   list.querySelectorAll('.pe-start').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].date=e.target.value; renderProofsDraft(); }));
@@ -1634,23 +1628,6 @@ function updateActionPlanBadge(){
   document.getElementById('mtabApBadge').textContent=String(planned+openActions);
 }
 
-/* Keep the Stage field in step with the framework while editing */
-function syncAutoStage(){
-  const sel=document.getElementById('dealStage'), note=document.getElementById('stageAutoNote');
-  const override=document.getElementById('dealStageOverride');
-  const auto=CONFIG.auto_stage && !(override && override.checked);
-  sel.disabled=!!auto;
-  if(auto){
-    const blocked=document.getElementById('dealIsBlocked').checked;
-    const derived=deriveStage(proofsDraft,blocked,sel.value);
-    if(derived && [...sel.options].some(o=>o.value===derived)) sel.value=derived;
-    note.innerHTML=`<i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Auto-set from the execution framework${blocked?' (blocked)':''}`;
-    note.style.color='var(--primary)';
-  } else {
-    note.innerHTML=CONFIG.auto_stage?'Manual override — this deal ignores the automation':'Automation is off (Configuration)';
-    note.style.color='var(--text-faint)';
-  }
-}
 document.getElementById('addActionBtn').addEventListener('click',()=>{
   const i=document.getElementById('newActionInput'), dd=document.getElementById('newActionDue');
   const t=i.value.trim(); if(!t)return;
@@ -1694,7 +1671,6 @@ document.getElementById('dealForm').addEventListener('submit',async e=>{
     strategy:document.getElementById('dealStrategy').value.trim(),
     next_actions:nextActionsDraft,
     proofs:proofsDraft,
-    stage_override:document.getElementById('dealStageOverride').checked
   };
   try {
     if(id){ await api(`/api/deals/${id}`,{method:'PUT',body:JSON.stringify(payload)}); showToast('Opportunity updated'); }
@@ -2617,41 +2593,7 @@ function renderConfiguration(){
   renderEditableList('stagesList','stages');
   renderEditableList('pillarsList','strategic_pillars');
   renderEditableList('squadsList','squads');
-  renderStageRules();
 }
-function renderStageRules(){
-  document.getElementById('cfgAutoStage').checked=!!CONFIG.auto_stage;
-  const rules=CONFIG.stage_rules||{}, st=stageList();
-  document.getElementById('stageRulesList').innerHTML=PROOF_FRAMEWORK.map((p,i)=>`
-    <div>
-      <label class="block text-[11px] mb-1" style="color:var(--text-muted)">${i+1}. ${escapeHtml(p.name.replace('Proof of ',''))} &rarr;</label>
-      <select data-key="${p.key}" class="stage-rule-sel field w-full px-2 py-1.5 text-xs">
-        ${st.map(s=>`<option ${rules[p.key]===s?'selected':''}>${escapeHtml(s)}</option>`).join('')}
-      </select>
-    </div>`).join('');
-}
-document.getElementById('cfgAutoStage').addEventListener('change',async e=>{
-  CONFIG.auto_stage=e.target.checked; await persistConfig(); showToast(e.target.checked?'Stage automation on':'Stage automation off');
-});
-document.getElementById('saveStageRulesBtn').addEventListener('click',async()=>{
-  const r={}; document.querySelectorAll('.stage-rule-sel').forEach(s=>{ r[s.dataset.key]=s.value; });
-  CONFIG.stage_rules=r; CONFIG.auto_stage=document.getElementById('cfgAutoStage').checked;
-  await persistConfig(); showToast('Stage automation saved');
-});
-document.getElementById('recalcStagesBtn').addEventListener('click',()=>{
-  openConfirm('Re-apply the stage automation to every opportunity now? Deals with no framework progress keep their current stage.', async()=>{
-    const out=document.getElementById('recalcResult');
-    try{
-      out.textContent='Working...';
-      const res=await api('/api/deals/recalculate_stages',{method:'POST'});
-      out.innerHTML=res.changed
-        ? `<span style="color:var(--success)">${res.changed} opportunity(ies) updated.</span> ${res.details.slice(0,4).map(d=>escapeHtml(d.deal_name)+': '+d.from+' → '+d.to).join(' · ')}${res.details.length>4?' …':''}`
-        : 'No stages needed changing.';
-      await loadDeals();
-      showToast('Stages recalculated');
-    }catch(err){ out.innerHTML=`<span style="color:var(--danger)">${escapeHtml(err.message)}</span>`; }
-  });
-});
 function renderAmTargets(){
   const el=document.getElementById('amTargetsList');
   const t=CONFIG.am_targets||{}, y=CONFIG.am_achievements||{}, r=CONFIG.am_recurring||{};

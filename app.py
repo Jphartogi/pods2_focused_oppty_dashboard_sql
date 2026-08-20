@@ -134,37 +134,6 @@ def proof_progress(proofs):
     return round(done / len(applicable) * 100)
 
 
-# Which stage each proof implies once it is reached. Admin-editable in Configuration.
-DEFAULT_STAGE_RULES = {
-    "qualification": "Prospecting",
-    "engagement": "Prospecting",
-    "concept": "Negotiation",
-    "value": "Negotiation",
-    "contract": "Negotiation",
-    "delivery": "Closed",
-    "operation": "Closed",
-    "clm": "Closed",
-}
-DEFAULT_BLOCKED_STAGE = "Blocked"
-
-
-def derive_stage(proofs, is_blocked, rules, blocked_stage, fallback):
-    """Stage implied by how far the execution framework has progressed.
-
-    A blocked deal always shows the blocked stage. Otherwise we take the furthest
-    proof that has been reached (done or in progress) and use its mapped stage.
-    """
-    if is_blocked and blocked_stage:
-        return blocked_stage
-    p = normalize_proofs(proofs)
-    reached = None
-    for key in PROOF_KEYS:                      # PROOF_KEYS is in framework order
-        if p[key]["status"] in ("done", "in_progress"):
-            reached = key
-    if reached is None:
-        return fallback
-    return (rules or {}).get(reached) or fallback
-
 # Seed Account Managers: (username, password, full_name)
 SEED_AMS = [
     ("anisa", "anisa123", "Anisa Rahmy"),
@@ -347,12 +316,11 @@ def migrate_db(db):
     if "am_recurring" not in config_cols:
         db.execute("ALTER TABLE config ADD COLUMN am_recurring TEXT DEFAULT '{}'")
     if "auto_stage" not in config_cols:
-        # Safe to enable on upgrade: a deal with no framework progress keeps its
-        # current stage (derive_stage falls back to it), so nothing is rewritten.
+        # Column kept for backward compatibility with older backups; stage automation
+        # has been removed from the app, so this is no longer read anywhere.
         db.execute("ALTER TABLE config ADD COLUMN auto_stage INTEGER DEFAULT 1")
     if "stage_rules" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN stage_rules TEXT")
-        db.execute("UPDATE config SET stage_rules = ?", (json.dumps(DEFAULT_STAGE_RULES),))
+        db.execute("ALTER TABLE config ADD COLUMN stage_rules TEXT DEFAULT '{}'")
     if "max_login_logs" not in config_cols:
         db.execute("ALTER TABLE config ADD COLUMN max_login_logs INTEGER DEFAULT 100")
 
@@ -454,12 +422,10 @@ def init_db():
     # Seed config if empty
     if db.execute("SELECT COUNT(*) FROM config").fetchone()[0] == 0:
         db.execute(
-            """INSERT INTO config (target_amount, strategic_pillars, squads, am_targets,
-                                   stages, auto_stage, stage_rules)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO config (target_amount, strategic_pillars, squads, am_targets, stages)
+               VALUES (?, ?, ?, ?, ?)""",
             (163_000_000_000, json.dumps(DEFAULT_PILLARS), json.dumps(DEFAULT_SQUADS),
-             json.dumps(DEFAULT_AM_TARGETS), json.dumps(DEFAULT_STAGES),
-             1, json.dumps(DEFAULT_STAGE_RULES)),
+             json.dumps(DEFAULT_AM_TARGETS), json.dumps(DEFAULT_STAGES)),
         )
 
     # Seed deals if empty
@@ -519,12 +485,8 @@ def current_config(db):
 
 
 def resolve_stage(db, data, proofs, is_blocked, requested_stage, fallback_stage):
-    """Apply the auto-derive rule unless it's off or the client asked to override."""
-    cfg = current_config(db)
-    if not cfg.get("auto_stage") or data.get("stage_override"):
-        return requested_stage or fallback_stage
-    return derive_stage(proofs, is_blocked, cfg.get("stage_rules"),
-                        cfg.get("blocked_stage"), requested_stage or fallback_stage)
+    """Stage is set manually by the AM/admin - no auto-derivation from the framework."""
+    return requested_stage or fallback_stage
 
 
 def deal_to_dict(row):
@@ -701,28 +663,6 @@ def export_login_logs_xlsx():
 # --------------------------------------------------------------------------
 # Account Managers (for filters / assignment dropdowns) - any authenticated user
 # --------------------------------------------------------------------------
-@app.route("/api/deals/recalculate_stages", methods=["POST"])
-@login_required(roles=("admin",))
-def recalculate_stages():
-    """Re-apply the auto-derive rule to every opportunity (admin, on demand)."""
-    db = get_db()
-    cfg = current_config(db)
-    rules, blocked_stage = cfg.get("stage_rules"), cfg.get("blocked_stage")
-    changed = []
-    for row in db.execute("SELECT * FROM deals").fetchall():
-        proofs = normalize_proofs(
-            json.loads((row["proofs"] if "proofs" in row.keys() else "") or "{}"))
-        new_stage = derive_stage(proofs, bool(row["is_blocked"]), rules,
-                                 blocked_stage, row["stage"])
-        if new_stage != row["stage"]:
-            db.execute("UPDATE deals SET stage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                       (new_stage, row["id"]))
-            changed.append({"id": row["id"], "deal_name": row["deal_name"],
-                            "from": row["stage"], "to": new_stage})
-    db.commit()
-    return jsonify({"ok": True, "changed": len(changed), "details": changed[:50]})
-
-
 @app.route("/api/proof_framework", methods=["GET"])
 @login_required()
 def get_proof_framework():
@@ -1032,9 +972,6 @@ def config_to_dict(row):
         "am_targets": jload("am_targets", {}),
         "am_achievements": jload("am_achievements", {}),
         "am_recurring": jload("am_recurring", {}),
-        "auto_stage": bool(row["auto_stage"]) if "auto_stage" in keys and row["auto_stage"] is not None else True,
-        "stage_rules": jload("stage_rules", dict(DEFAULT_STAGE_RULES)),
-        "blocked_stage": DEFAULT_BLOCKED_STAGE,
         "current_achievement": (row["current_achievement"] if "current_achievement" in keys else 0) or 0,
         "recurring_revenue": (row["recurring_revenue"] if "recurring_revenue" in keys else 0) or 0,
         "max_login_logs": (row["max_login_logs"] if "max_login_logs" in keys and row["max_login_logs"] is not None else 100) or 100,
@@ -1071,9 +1008,6 @@ def update_config():
     am_recurring = int_map(data.get("am_recurring", current["am_recurring"]))
     current_achievement = int(data.get("current_achievement", current["current_achievement"]) or 0)
     recurring_revenue = int(data.get("recurring_revenue", current["recurring_revenue"]) or 0)
-    auto_stage = 1 if data.get("auto_stage", current["auto_stage"]) else 0
-    stage_rules = data.get("stage_rules", current["stage_rules"]) or {}
-    stage_rules = {k: str(v or "") for k, v in stage_rules.items() if k in PROOF_KEYS}
     # Keep the retained login-log count within a sane range so the table can never grow unbounded.
     max_login_logs = int(data.get("max_login_logs", current["max_login_logs"]) or 100)
     max_login_logs = max(10, min(max_login_logs, 2000))
@@ -1081,12 +1015,12 @@ def update_config():
     db.execute(
         """UPDATE config SET target_amount = ?, strategic_pillars = ?, squads = ?,
            stages = ?, am_targets = ?, am_achievements = ?, am_recurring = ?,
-           current_achievement = ?, recurring_revenue = ?, auto_stage = ?, stage_rules = ?,
+           current_achievement = ?, recurring_revenue = ?,
            max_login_logs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
         (target_amount, json.dumps(strategic_pillars), json.dumps(squads),
          json.dumps(stages), json.dumps(am_targets), json.dumps(am_achievements),
          json.dumps(am_recurring), current_achievement, recurring_revenue,
-         auto_stage, json.dumps(stage_rules), max_login_logs, row["id"]),
+         max_login_logs, row["id"]),
     )
     trim_login_logs(db, max_login_logs)
     db.commit()
