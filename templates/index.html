@@ -64,6 +64,10 @@
   .atab-btn { color: var(--text-muted); font-size:13px; padding:6px 14px; border-radius:8px; transition: background .15s ease, color .15s ease; }
   .atab-btn:hover { color: var(--text); background: var(--surface-2); }
   .atab-btn.active { color: #fff; background: var(--primary); font-weight:500; }
+  .calview-btn { color: var(--text-muted); font-size:12px; padding:5px 12px; border-radius:6px; transition: background .15s ease, color .15s ease; }
+  .calview-btn:hover { color: var(--text); background: var(--surface-2); }
+  .calview-btn.active { color: #fff; background: var(--primary); font-weight:500; }
+  #calKpiAllCard.active, #calKpiOverdueCard.active, #calKpiProgressCard.active, #calKpiDoneCard.active, #calKpiUndatedCard.active { outline:2px solid var(--primary); outline-offset:-1px; }
   .proof-row { border:1px solid var(--border); border-radius:8px; transition: border-color .15s ease; }
   .proof-row:hover { border-color: var(--primary); }
   .proof-num { width:22px; height:22px; border-radius:9999px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; }
@@ -336,16 +340,22 @@
           <div class="px-4 pb-4"><div id="mgActions" class="space-y-2"></div></div>
         </details>
 
-        <details class="widget card elev mb-3" id="mgStrategyWidget">
+        <details class="widget card elev mb-3" id="mgAmPerfWidget" open>
           <summary class="p-4 flex items-center gap-3">
             <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
-            <i class="fa-solid fa-chess-knight" style="color:var(--primary)"></i>
-            <span class="text-sm font-medium" style="color:var(--text)">Strategy &amp; execution</span>
-            <span id="mgStrategySummary" class="text-xs" style="color:var(--text-muted)"></span>
+            <i class="fa-solid fa-user-tie" style="color:var(--primary)"></i>
+            <span class="text-sm font-medium" style="color:var(--text)">Account Manager performance</span>
+            <span id="mgAmPerfSummary" class="text-xs" style="color:var(--text-muted)"></span>
             <span class="flex-1"></span>
-            <span id="mgStrategyCount" class="chip" style="color:var(--text-muted)">0</span>
+            <span id="mgAmPerfCount" class="chip" style="color:var(--text-muted)">0</span>
           </summary>
-          <div class="px-4 pb-4"><div id="mgStrategy" class="space-y-2"></div></div>
+          <div class="px-4 pb-4">
+            <div id="mgAmPerf" class="space-y-2 mb-4"></div>
+            <div class="rounded-lg p-3" style="background:var(--surface-2)">
+              <p class="text-xs font-medium mb-2" style="color:var(--text-muted)"><i class="fa-solid fa-lightbulb mr-1.5" style="color:var(--warning)"></i>Insight — why is the gap not covered?</p>
+              <div id="mgGapInsights" class="space-y-1.5"></div>
+            </div>
+          </div>
         </details>
       </section>
 
@@ -424,35 +434,57 @@
           <button id="calToday" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)">Today</button>
           <button id="calNext" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-right"></i></button>
           <p id="calMonthLabel" class="text-base font-medium ml-2" style="color:var(--text)"></p>
+          <div class="flex items-center gap-1 ml-2 card p-1" style="width:fit-content">
+            <button data-calview="week" class="calview-btn active">Week</button>
+            <button data-calview="month" class="calview-btn">Month</button>
+          </div>
           <div class="flex-1"></div>
           <span class="text-xs" style="color:var(--text-muted)">Account Manager</span>
           <select id="calFilterAM" class="field text-sm px-3 py-1.5"><option value="">All Account Managers</option></select>
           <label class="flex items-center gap-1.5 text-xs ml-2" style="color:var(--text-muted)"><input id="calHideDone" type="checkbox"> Hide completed</label>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Scheduled actions</p><p id="calKpiTotal" class="text-xl font-medium mt-1">0</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Overdue</p><p id="calKpiOverdue" class="text-xl font-medium mt-1" style="color:var(--danger)">0</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Due this month</p><p id="calKpiMonth" class="text-xl font-medium mt-1" style="color:var(--primary)">0</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">No date set</p><p id="calKpiUndated" class="text-xl font-medium mt-1" style="color:var(--text-muted)">0</p></div>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+          <div id="calKpiAllCard" class="card elev p-3 clickable"><p class="text-[11px]" style="color:var(--text-muted)">Scheduled actions</p><p id="calKpiTotal" class="text-xl font-medium mt-1">0</p></div>
+          <div id="calKpiOverdueCard" class="card elev p-3 clickable"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Overdue</p><p id="calKpiOverdue" class="text-xl font-medium mt-1" style="color:var(--danger)">0</p></div>
+          <div id="calKpiProgressCard" class="card elev p-3 clickable"><p class="text-[11px]" style="color:var(--text-muted)">In progress</p><p id="calKpiProgress" class="text-xl font-medium mt-1" style="color:var(--primary)">0</p></div>
+          <div id="calKpiDoneCard" class="card elev p-3 clickable"><p class="text-[11px]" style="color:var(--text-muted)">Done</p><p id="calKpiDone" class="text-xl font-medium mt-1" style="color:var(--success)">0</p></div>
+          <div id="calKpiUndatedCard" class="card elev p-3 clickable"><p class="text-[11px]" style="color:var(--text-muted)">No date set</p><p id="calKpiUndated" class="text-xl font-medium mt-1" style="color:var(--text-muted)">0</p></div>
         </div>
+        <p id="calFilterNote" class="text-[11px] mb-3" style="color:var(--primary);display:none"><i class="fa-solid fa-filter mr-1"></i><span id="calFilterNoteText"></span> — <button id="calFilterClear" type="button" class="underline">clear</button></p>
         <div class="card elev p-4 mb-4">
-          <div class="grid grid-cols-7 gap-1 mb-1">
-            <div class="text-[11px] font-medium text-center py-1" style="color:var(--text-muted)">Mon</div>
-            <div class="text-[11px] font-medium text-center py-1" style="color:var(--text-muted)">Tue</div>
-            <div class="text-[11px] font-medium text-center py-1" style="color:var(--text-muted)">Wed</div>
-            <div class="text-[11px] font-medium text-center py-1" style="color:var(--text-muted)">Thu</div>
-            <div class="text-[11px] font-medium text-center py-1" style="color:var(--text-muted)">Fri</div>
-            <div class="text-[11px] font-medium text-center py-1" style="color:var(--text-muted)">Sat</div>
-            <div class="text-[11px] font-medium text-center py-1" style="color:var(--text-muted)">Sun</div>
-          </div>
+          <div id="calDowRow" class="grid grid-cols-7 gap-1 mb-1"></div>
           <div id="calGrid" class="grid grid-cols-7 gap-1"></div>
         </div>
         <div class="card elev p-5">
           <p class="text-sm font-medium mb-1"><i class="fa-solid fa-list-ul mr-1.5" style="color:var(--primary)"></i>Action plan list</p>
-          <p class="text-xs mb-3" style="color:var(--text-muted)">Overdue and upcoming actions for the current filter. Click any row to open its opportunity.</p>
+          <p class="text-xs mb-3" style="color:var(--text-muted)">Actions for the current filter. Click any row to see the item — then open its opportunity if you need to.</p>
           <div id="calList" class="space-y-2"></div>
         </div>
       </section>
+
+      <!-- ===================== CALENDAR ITEM DETAIL ===================== -->
+      <div id="calItemModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
+        <div class="card w-full max-w-md elev p-6">
+          <div class="flex items-start justify-between mb-3">
+            <span id="calItemKind" class="chip" style="color:var(--text-muted)"></span>
+            <button data-close-modal="calItemModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button>
+          </div>
+          <p id="calItemText" class="text-sm font-medium mb-3" style="color:var(--text)"></p>
+          <div class="grid grid-cols-2 gap-3 mb-3">
+            <div class="card p-2.5"><p class="text-[10px]" style="color:var(--text-muted)">Status</p><p id="calItemStatus" class="text-sm font-medium mt-0.5"></p></div>
+            <div class="card p-2.5"><p class="text-[10px]" style="color:var(--text-muted)">Date</p><p id="calItemDate" class="text-sm font-medium mt-0.5" style="color:var(--text)"></p></div>
+          </div>
+          <div class="card p-2.5 mb-4">
+            <p class="text-[10px]" style="color:var(--text-muted)">Opportunity</p>
+            <p id="calItemDeal" class="text-sm font-medium mt-0.5" style="color:var(--text)"></p>
+            <p id="calItemMeta" class="text-xs mt-0.5" style="color:var(--text-muted)"></p>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button type="button" data-close-modal="calItemModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Close</button>
+            <button type="button" id="calItemViewOppty" class="btn-primary text-sm px-4 py-2 rounded-lg"><i class="fa-solid fa-arrow-up-right-from-square mr-1.5"></i>View opportunity</button>
+          </div>
+        </div>
+      </div>
 
       <!-- ============ ANALYTICS ============ -->
       <section id="tab-analytics" class="tab-panel px-6 py-5">
@@ -837,7 +869,7 @@
 
 <!-- ===================== DEAL MODAL ===================== -->
 <div id="dealModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
-  <div class="card w-full max-w-2xl max-h-[92vh] overflow-y-auto elev">
+  <div class="card w-full max-w-4xl max-h-[92vh] overflow-y-auto elev">
     <div class="px-6 py-4 flex items-center justify-between" style="border-bottom:1px solid var(--border)">
       <h2 id="dealModalTitle" class="text-base font-medium">Add Opportunity</h2>
       <button data-close-modal="dealModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button>
@@ -846,6 +878,9 @@
       <button type="button" class="modal-tab-btn active text-sm px-4 py-2" data-mtab="details">Opportunity Details</button>
       <button type="button" class="modal-tab-btn text-sm px-4 py-2" data-mtab="framework">
         Execution Framework <span id="mtabFwBadge" class="chip ml-1" style="color:var(--text-muted)">0/8</span>
+      </button>
+      <button type="button" class="modal-tab-btn text-sm px-4 py-2" data-mtab="actionplan">
+        Action Plan <span id="mtabApBadge" class="chip ml-1" style="color:var(--text-muted)">0</span>
       </button>
     </div>
     <form id="dealForm" class="px-6 py-5 space-y-4">
@@ -897,23 +932,33 @@
           <div class="w-full rounded-full h-1.5 mb-3" style="background:var(--surface-3)"><div id="proofsBar" class="h-1.5 rounded-full" style="width:0%;background:var(--primary)"></div></div>
           <div id="proofsList" class="space-y-2"></div>
         </div>
-
-        <details class="rounded-lg" style="border:1px solid var(--border)">
-          <summary class="clickable px-3 py-2 text-xs font-medium" style="color:var(--text-muted);list-style:none">
-            <i class="fa-solid fa-chevron-right text-[10px] mr-1" style="color:var(--text-faint)"></i>Other next actions <span id="nextActionsProgress" class="chip ml-1" style="color:var(--text-faint)">0 / 0</span>
-          </summary>
-          <div class="px-3 pb-3">
-            <p class="text-[10px] mb-2" style="color:var(--text-faint)">Ad-hoc actions that don't belong to a specific proof. Existing actions you captured before the framework are kept here.</p>
-            <div class="w-full rounded-full h-1.5 mb-3" style="background:var(--surface-3)"><div id="nextActionsBar" class="h-1.5 rounded-full" style="width:0%;background:var(--primary)"></div></div>
-            <div id="nextActionsList" class="space-y-2 mb-2"></div>
-            <div class="flex gap-2">
-              <input id="newActionInput" type="text" placeholder="Add a next action..." class="field flex-1 px-3 py-2 text-sm">
-              <input id="newActionDue" type="date" title="Target date" class="field px-3 py-2 text-sm" style="width:150px">
-              <button type="button" id="addActionBtn" class="text-sm px-3 py-2 rounded-lg" style="background:var(--surface-2);color:var(--text)">Add</button>
-            </div>
-          </div>
-        </details>
       </div><!-- /framework pane -->
+
+      <div id="mtab-actionplan" class="modal-tab-pane space-y-4" style="display:none">
+        <div class="rounded-lg p-3" style="border:1px solid var(--border)">
+          <div class="flex items-center justify-between mb-1">
+            <p class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-map mr-1" style="color:var(--primary)"></i>Planned execution steps</p>
+            <span id="plannedStepsCount" class="text-[11px]" style="color:var(--text-faint)">0 planned</span>
+          </div>
+          <p class="text-[10px] mb-2" style="color:var(--text-faint)">Every evidence entry across the 8 Enterprise Proofs currently marked <b>Planned</b> — what the team still has to do for this opportunity. Bump the status here as work moves along, or edit it from the Execution Framework tab.</p>
+          <div id="plannedStepsList" class="space-y-1.5"></div>
+        </div>
+
+        <div class="rounded-lg p-3" style="border:1px solid var(--border)">
+          <div class="flex items-center justify-between mb-1">
+            <p class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-list-check mr-1" style="color:var(--primary)"></i>Next actions</p>
+            <span id="nextActionsProgress" class="chip" style="color:var(--text-faint)">0 / 0</span>
+          </div>
+          <p class="text-[10px] mb-2" style="color:var(--text-faint)">Ad-hoc actions that don't belong to a specific proof.</p>
+          <div class="w-full rounded-full h-1.5 mb-3" style="background:var(--surface-3)"><div id="nextActionsBar" class="h-1.5 rounded-full" style="width:0%;background:var(--primary)"></div></div>
+          <div id="nextActionsList" class="space-y-2 mb-2"></div>
+          <div class="flex gap-2">
+            <input id="newActionInput" type="text" placeholder="Add a next action..." class="field flex-1 px-3 py-2 text-sm">
+            <input id="newActionDue" type="date" title="Target date" class="field px-3 py-2 text-sm" style="width:150px">
+            <button type="button" id="addActionBtn" class="text-sm px-3 py-2 rounded-lg" style="background:var(--surface-2);color:var(--text)">Add</button>
+          </div>
+        </div>
+      </div><!-- /actionplan pane -->
 
       <div class="flex justify-end gap-2 pt-2">
         <button type="button" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button>
@@ -985,11 +1030,14 @@ function normalizeProofs(raw){
     const fallbackEntryStatus=st==='na'?'not_started':(ENTRY_STATUS_META[st]?st:'not_started');
     const entries=(it.entries||[]).map(e=>{
       const est=String((e&&e.status)||'').trim();
-      return {text:String((e&&e.text)||'').trim(),date:String((e&&e.date)||'').slice(0,10),status:ENTRY_STATUS_META[est]?est:fallbackEntryStatus};
+      const start=String((e&&e.date)||'').slice(0,10);
+      let end=String((e&&e.end)||'').slice(0,10);
+      if(end && start && end<start) end='';   // guard against an inverted range
+      return {text:String((e&&e.text)||'').trim(),date:start,end,status:ENTRY_STATUS_META[est]?est:fallbackEntryStatus};
     }).filter(e=>e.text);
     // legacy single-note migrates into the evidence list
     const legacy=String(it.notes||'').trim();
-    if(legacy && !entries.some(e=>e.text===legacy)) entries.unshift({text:legacy,date:'',status:fallbackEntryStatus});
+    if(legacy && !entries.some(e=>e.text===legacy)) entries.unshift({text:legacy,date:'',end:'',status:fallbackEntryStatus});
     out[p.key]={status:PROOF_STATUS_META[st]?st:'not_started', due:(it.due||'').slice(0,10), entries};
   });
   return out;
@@ -1078,6 +1126,8 @@ function fmtIDR(v) {
   return 'IDR ' + v.toLocaleString('en-US');
 }
 function escapeHtml(s){ const d=document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+/* "2026-08-10" for a single day, "2026-08-10 → 2026-08-12" when an end date is set */
+function fmtEntryDateRange(e){ return (e.end && e.end!==e.date) ? `${e.date} → ${e.end}` : (e.date||''); }
 // Thousand-separated input helpers (Indonesian style: 163.000.000.000)
 function fmtThousands(v){ const n=String(v==null?'':v).replace(/[^\d]/g,''); return n ? n.replace(/\B(?=(\d{3})+(?!\d))/g,'.') : ''; }
 function parseThousands(v){ const n=String(v==null?'':v).replace(/[^\d]/g,''); return n ? parseInt(n,10) : 0; }
@@ -1388,7 +1438,7 @@ function openDetail(id){
             <i class="fa-solid ${em.icon} text-[9px] mt-0.5" style="color:${em.bg}"></i>
             <span class="flex-1">${escapeHtml(e.text)}</span>
             <span class="chip" style="color:${em.bg==='var(--surface-3)'?'var(--text-faint)':em.bg};font-size:9px;padding:1px 6px">${em.label}</span>
-            ${e.date?`<span style="color:var(--text-faint)">${e.date}</span>`:''}
+            ${e.date?`<span style="color:var(--text-faint)">${fmtEntryDateRange(e)}</span>`:''}
           </div>`;}).join('');
         return `<div>
           <div class="flex items-center gap-2 text-xs">
@@ -1470,11 +1520,13 @@ function renderProofsDraft(){
       const em=ENTRY_STATUS_META[e.status]||ENTRY_STATUS_META.not_started;
       return `
       <div class="flex items-center gap-1.5">
-        <select data-key="${p.key}" data-ei="${ei}" class="pe-status field text-[10px] px-1 py-1" style="width:96px;background:${em.bg};color:${em.color};border-color:transparent">
+        <select data-key="${p.key}" data-ei="${ei}" class="pe-status field text-[10px] px-1 py-1" style="width:104px;background:${em.bg};color:${em.color};border-color:transparent">
           ${Object.entries(ENTRY_STATUS_META).map(([v,m])=>`<option value="${v}" ${e.status===v?'selected':''}>${m.label}</option>`).join('')}
         </select>
-        <input type="date" value="${e.date||''}" data-key="${p.key}" data-ei="${ei}" class="pe-date field text-[11px] px-1.5 py-1" style="width:126px" title="When this was done">
-        <input type="text" value="${escapeHtml(e.text)}" data-key="${p.key}" data-ei="${ei}" class="pe-text field flex-1 px-2 py-1 text-xs">
+        <input type="date" value="${e.date||''}" data-key="${p.key}" data-ei="${ei}" class="pe-start field text-[11px] px-1.5 py-1" style="width:132px" title="Start date">
+        <span class="text-[10px]" style="color:var(--text-faint)">&rarr;</span>
+        <input type="date" value="${e.end||''}" min="${e.date||''}" data-key="${p.key}" data-ei="${ei}" class="pe-end field text-[11px] px-1.5 py-1" style="width:132px" title="End date (optional — leave blank for a single-day activity)">
+        <input type="text" value="${escapeHtml(e.text)}" data-key="${p.key}" data-ei="${ei}" class="pe-text field flex-1 px-2 py-1 text-xs" placeholder="What was/will be done...">
         <button type="button" data-key="${p.key}" data-ei="${ei}" class="pe-del" style="color:var(--text-faint)" title="Remove"><i class="fa-solid fa-xmark"></i></button>
       </div>`;}).join('');
     return `<div class="proof-row p-2.5">
@@ -1489,10 +1541,12 @@ function renderProofsDraft(){
         </select>
         <input type="date" value="${it.due||''}" data-key="${p.key}" class="proof-due field text-xs px-2 py-1" style="width:140px" title="Target date">
       </div>
-      <div class="space-y-1 mb-1.5">${entries||`<p class="text-[10px]" style="color:var(--text-faint)">No evidence recorded yet — add what you have done to fulfil this proof.</p>`}</div>
-      <div class="flex gap-1.5">
-        <input type="date" data-key="${p.key}" class="pe-new-date field text-[11px] px-1.5 py-1" style="width:126px" title="Date done">
-        <input type="text" data-key="${p.key}" class="pe-new-text field flex-1 px-2 py-1 text-xs" placeholder="Add what you have done for this proof...">
+      <div class="space-y-1 mb-1.5">${entries||`<p class="text-[10px]" style="color:var(--text-faint)">No evidence recorded yet — add what you have done (or plan to do) to fulfil this proof.</p>`}</div>
+      <div class="flex gap-1.5 items-center">
+        <input type="date" data-key="${p.key}" class="pe-new-start field text-[11px] px-1.5 py-1" style="width:132px" title="Start date">
+        <span class="text-[10px]" style="color:var(--text-faint)">&rarr;</span>
+        <input type="date" data-key="${p.key}" class="pe-new-end field text-[11px] px-1.5 py-1" style="width:132px" title="End date (optional — leave blank for a single-day activity)">
+        <input type="text" data-key="${p.key}" class="pe-new-text field flex-1 px-2 py-1 text-xs" placeholder="Add what you have done or plan to do for this proof...">
         <button type="button" data-key="${p.key}" class="pe-add text-xs px-2.5 py-1 rounded-lg" style="background:var(--surface-2);color:var(--text)">Add</button>
       </div>
     </div>`;
@@ -1500,13 +1554,14 @@ function renderProofsDraft(){
   list.querySelectorAll('.proof-status').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].status=e.target.value; renderProofsDraft(); syncAutoStage(); }));
   list.querySelectorAll('.proof-due').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].due=e.target.value; }));
   list.querySelectorAll('.pe-text').forEach(s=>s.addEventListener('input',e=>{ proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].text=e.target.value; }));
-  list.querySelectorAll('.pe-date').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].date=e.target.value; }));
+  list.querySelectorAll('.pe-start').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].date=e.target.value; renderProofsDraft(); }));
+  list.querySelectorAll('.pe-end').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].end=e.target.value; }));
   list.querySelectorAll('.pe-status').forEach(s=>s.addEventListener('change',e=>{ proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].status=e.target.value; renderProofsDraft(); }));
   list.querySelectorAll('.pe-del').forEach(b=>b.addEventListener('click',e=>{ const t=e.currentTarget; proofsDraft[t.dataset.key].entries.splice(parseInt(t.dataset.ei),1); renderProofsDraft(); }));
   const addEntry=(key,row)=>{
-    const txt=row.querySelector('.pe-new-text'), dt=row.querySelector('.pe-new-date');
+    const txt=row.querySelector('.pe-new-text'), st=row.querySelector('.pe-new-start'), en=row.querySelector('.pe-new-end');
     const v=txt.value.trim(); if(!v) return;
-    (proofsDraft[key].entries=proofsDraft[key].entries||[]).push({text:v,date:dt.value||'',status:'not_started'});
+    (proofsDraft[key].entries=proofsDraft[key].entries||[]).push({text:v,date:st.value||'',end:en.value||'',status:'not_started'});
     renderProofsDraft();
   };
   list.querySelectorAll('.pe-add').forEach(b=>b.addEventListener('click',e=>addEntry(e.currentTarget.dataset.key,e.currentTarget.closest('.proof-row'))));
@@ -1517,6 +1572,37 @@ function renderProofsDraft(){
   document.getElementById('proofsProgressLabel').textContent=`${c.done} / ${c.total} complete (${pct}%)`;
   document.getElementById('proofsBar').style.width=pct+'%';
   document.getElementById('mtabFwBadge').textContent=`${c.done}/${c.total}`;
+  renderPlannedSteps();
+}
+
+/* Action Plan tab: every proof entry currently marked "Planned", across all 8 proofs */
+function renderPlannedSteps(){
+  const rows=[];
+  PROOF_FRAMEWORK.forEach((p,i)=>{
+    const it=proofsDraft[p.key]; if(!it) return;
+    (it.entries||[]).forEach((e,ei)=>{ if(e.status==='planned') rows.push({p,i,ei,e}); });
+  });
+  rows.sort((a,b)=>(a.e.date||'9999').localeCompare(b.e.date||'9999'));
+  const list=document.getElementById('plannedStepsList');
+  document.getElementById('plannedStepsCount').textContent=`${rows.length} planned`;
+  list.innerHTML = rows.map(({p,i,ei,e})=>`
+    <div class="flex items-center gap-2 rounded-lg px-3 py-2" style="background:var(--surface-2)">
+      <span class="chip" style="color:var(--text-muted)">${i+1}. ${escapeHtml(p.name.replace('Proof of ',''))}</span>
+      <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(e.text)}</span>
+      <span class="text-xs" style="color:var(--text-faint)">${e.date?fmtEntryDateRange(e):'no date'}</span>
+      <select class="ap-status field text-xs px-2 py-1" data-key="${p.key}" data-ei="${ei}" style="width:104px">
+        ${Object.entries(ENTRY_STATUS_META).map(([v,m])=>`<option value="${v}" ${e.status===v?'selected':''}>${m.label}</option>`).join('')}
+      </select>
+    </div>`).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing planned yet — set an entry's status to Planned on the Execution Framework tab.</p>`;
+  list.querySelectorAll('.ap-status').forEach(s=>s.addEventListener('change',e=>{
+    proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].status=e.target.value; renderProofsDraft();
+  }));
+  updateActionPlanBadge();
+}
+function updateActionPlanBadge(){
+  const planned=Object.values(proofsDraft).reduce((s,it)=>s+(it.entries||[]).filter(e=>e.status==='planned').length,0);
+  const openActions=nextActionsDraft.filter(a=>!a.done).length;
+  document.getElementById('mtabApBadge').textContent=String(planned+openActions);
 }
 
 /* Keep the Stage field in step with the framework while editing */
@@ -1558,6 +1644,7 @@ function renderNextActionsDraft(){
   const done=nextActionsDraft.filter(a=>a.done).length, total=nextActionsDraft.length;
   document.getElementById('nextActionsProgress').textContent=`${done} / ${total}`;
   document.getElementById('nextActionsBar').style.width=(total?done/total*100:0)+'%';
+  updateActionPlanBadge();
 }
 document.getElementById('dealForm').addEventListener('submit',async e=>{
   e.preventDefault();
@@ -1668,40 +1755,66 @@ function renderManagement(){
   if(items.length>12) document.getElementById('mgActions').insertAdjacentHTML('beforeend',
     `<p class="text-[11px] mt-1" style="color:var(--text-faint)">+${items.length-12} more — see the Calendar</p>`);
 
-  // --- Strategy by opportunity ---
-  document.getElementById('mgStrategy').innerHTML=[...deals]
-    .sort((a,b)=>b.estimated_value-a.estimated_value).slice(0,12).map(d=>{
-      const c=proofDoneCount(d.proofs), pct=proofProgress(d.proofs);
-      const color=pct>=60?'var(--success)':pct>=30?'var(--warning)':'var(--danger)';
-      return `<div class="mg-row clickable rounded-lg p-3" data-deal="${d.id}" style="background:var(--surface-2)">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="text-sm font-medium" style="color:var(--text)">${escapeHtml(d.deal_name)}</span>
-          <span class="text-[11px]" style="color:var(--text-muted)">${escapeHtml(d.customer)}</span>
-          <span class="flex-1"></span>
-          <span class="chip" style="color:var(--text-muted)">${escapeHtml((d.assigned_am||'').split(' ')[0])}</span>
-          <span class="text-xs" style="color:var(--text)">${fmtIDR(d.estimated_value)}</span>
-        </div>
-        <div class="flex items-center gap-2 mb-1">
-          <div class="rounded-full h-1.5" style="width:120px;background:var(--surface-3)"><div class="h-1.5 rounded-full" style="width:${pct}%;background:${color}"></div></div>
-          <span class="text-[10px]" style="color:var(--text-muted)">framework ${c.done}/${c.total}</span>
-          <span class="text-[10px]" style="color:var(--text-faint)">· ${escapeHtml(d.stage)} · ${d.progress}%</span>
-        </div>
-        <p class="text-xs" style="color:${d.strategy?'var(--text-muted)':'var(--text-faint)'};white-space:pre-wrap">${d.strategy?escapeHtml(d.strategy):'— No strategy captured yet —'}</p>
-      </div>`;
-    }).join('')||`<p class="text-xs" style="color:var(--text-faint)">No opportunities.</p>`;
+  // --- Account Manager performance: target vs covered (achieved + recurring + pipeline),
+  // mirroring the Gap = Target − YTD actual − FY26 recurring − 2026 pipeline rule used on Analytics ---
+  const amList = amFilter ? [amFilter] : AMS.slice();
+  const amPerf = amList.map(am=>{
+    const amDeals = (ALL_DEALS||[]).filter(d=>d.assigned_am===am);
+    const amTarget = (CONFIG.am_targets||{})[am]||0;
+    const amAchieved = (CONFIG.am_achievements||{})[am]||0;
+    const amRecurring = (CONFIG.am_recurring||{})[am]||0;
+    const amPipeline = amDeals.reduce((s,d)=>s+(d.revenue_2026||0),0);
+    const covered = amAchieved+amRecurring+amPipeline;
+    const amGap = Math.max(amTarget-covered,0);
+    const pct = amTarget?Math.round(covered/amTarget*100):null;
+    const amBlocked = amDeals.filter(d=>d.is_blocked);
+    return {am, amTarget, covered, amGap, pct, amBlocked};
+  });
+  const behind = amPerf.filter(x=>x.pct!==null && x.pct<100);
+  document.getElementById('mgAmPerfCount').textContent=amPerf.length;
+  document.getElementById('mgAmPerfSummary').innerHTML = amPerf.length
+    ? (behind.length ? `<span style="color:var(--warning)">${behind.length}/${amPerf.length} behind target</span>` : `<span style="color:var(--success)">Everyone covering their target</span>`)
+    : 'No Account Managers';
+  document.getElementById('mgAmPerf').innerHTML = amPerf.map(x=>{
+    if(x.pct===null) return `<div class="rounded-lg p-3" style="background:var(--surface-2)">
+      <span class="text-sm font-medium" style="color:var(--text)">${escapeHtml(x.am)}</span>
+      <span class="chip ml-2" style="color:var(--text-muted)">No target set</span>
+    </div>`;
+    const color=x.pct>=100?'var(--success)':x.pct>=60?'var(--warning)':'var(--danger)';
+    const badge=x.pct>=100?`<span class="chip" style="color:var(--success)">On target</span>`
+      :x.pct>=60?`<span class="chip" style="color:var(--warning)"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Behind target</span>`
+      :`<span class="chip" style="color:var(--danger)"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Significantly behind</span>`;
+    return `<div class="rounded-lg p-3" style="background:var(--surface-2)">
+      <div class="flex items-center gap-2 mb-1.5">
+        <span class="text-sm font-medium flex-1" style="color:var(--text)">${escapeHtml(x.am)}</span>
+        ${badge}
+        <span class="text-xs" style="color:var(--text-muted)">${fmtIDR(x.covered)} / ${fmtIDR(x.amTarget)}</span>
+      </div>
+      <div class="w-full rounded-full h-2" style="background:var(--surface-3)"><div class="h-2 rounded-full" style="width:${Math.min(x.pct,100)}%;background:${color}"></div></div>
+      <div class="flex items-center gap-3 mt-1 text-[11px]" style="color:var(--text-muted)">
+        <span>Attainment ${x.pct}%</span><span>Gap ${fmtIDR(x.amGap)}</span>
+        ${x.amBlocked.length?`<span style="color:var(--danger)">${x.amBlocked.length} blocked deal(s)</span>`:''}
+      </div>
+    </div>`;
+  }).join('')||`<p class="text-xs" style="color:var(--text-faint)">No Account Managers to show.</p>`;
 
-  // --- Strategy widget summary ---
-  const withStrategy=deals.filter(d=>(d.strategy||'').trim()).length;
-  document.getElementById('mgStrategyCount').textContent=deals.length;
-  document.getElementById('mgStrategySummary').innerHTML=deals.length
-    ? `${withStrategy}/${deals.length} have a documented strategy · framework ${fwAvg}% complete`
-    : 'No opportunities';
+  // --- Insight: for AMs short of target, is a blocker plausibly contributing? ---
+  const shortfalls=amPerf.filter(x=>x.amGap>0).sort((a,b)=>b.amGap-a.amGap).slice(0,8);
+  document.getElementById('mgGapInsights').innerHTML = shortfalls.length ? shortfalls.map(x=>{
+    if(x.amBlocked.length){
+      const bv=x.amBlocked.reduce((s,d)=>s+d.estimated_value,0);
+      return `<p class="text-xs" style="color:var(--text-muted)"><b style="color:var(--text)">${escapeHtml(x.am)}</b> is ${fmtIDR(x.amGap)} short of target —
+        <span style="color:var(--danger)">${x.amBlocked.length} blocked deal(s) worth ${fmtIDR(bv)}</span> may be contributing. See Blockers above.</p>`;
+    }
+    return `<p class="text-xs" style="color:var(--text-muted)"><b style="color:var(--text)">${escapeHtml(x.am)}</b> is ${fmtIDR(x.amGap)} short of target —
+      no blockers on file for them, so the gap likely needs more pipeline generation rather than escalation.</p>`;
+  }).join('') : `<p class="text-xs" style="color:var(--success)"><i class="fa-solid fa-circle-check mr-1"></i>No gaps to explain — every AM with a target is covering it.</p>`;
 
   // --- Headline: one line telling management whether to dig in ---
   const attention=[];
   if(blocked.length) attention.push(`<b style="color:var(--danger)">${blocked.length} blocker(s)</b> holding ${fmtIDR(blockedValue)}`);
   if(overdueCount) attention.push(`<b style="color:var(--danger)">${overdueCount} overdue action(s)</b>`);
-  if(deals.length-withStrategy>0) attention.push(`<b style="color:var(--warning)">${deals.length-withStrategy}</b> without a strategy`);
+  if(behind.length) attention.push(`<b style="color:var(--warning)">${behind.length} AM(s)</b> behind target`);
   document.getElementById('mgHeadline').innerHTML = attention.length
     ? `<div class="flex items-start gap-3">
          <i class="fa-solid fa-circle-exclamation mt-0.5" style="color:var(--danger)"></i>
@@ -1711,7 +1824,7 @@ function renderManagement(){
     : `<div class="flex items-start gap-3">
          <i class="fa-solid fa-circle-check mt-0.5" style="color:var(--success)"></i>
          <div><p class="text-sm font-medium" style="color:var(--text)">All clear</p>
-         <p class="text-xs mt-0.5" style="color:var(--text-muted)">No blockers, nothing overdue, and every opportunity has a strategy. Gap to target ${fmtIDR(gap)}.</p></div>
+         <p class="text-xs mt-0.5" style="color:var(--text-muted)">No blockers, nothing overdue, and every AM with a target is covering it. Gap to target ${fmtIDR(gap)}.</p></div>
        </div>`;
 
   document.querySelectorAll('#tab-management .mg-row').forEach(r=>{
@@ -1999,96 +2112,188 @@ function lineChart(data){
 /* ================= CALENDAR (next-action plan) ================= */
 function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function ymd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function startOfWeek(d){ const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x; }
 
-// Flatten every next action across the visible deals, honouring role + filters
+let calView='week', calStatusFilter=null, calRenderedItems=[];
+
+// Flatten every scheduled item across the visible deals: each evidence entry
+// logged against any of the 8 Enterprise Proofs (regardless of whether that
+// proof is planned, in progress or done — nothing is filtered out here) plus
+// every ad-hoc next action. Calendar labels use only the AM's own wording.
 function calendarActions(){
   const amFilter = ROLE==='account_manager' ? FULLNAME : document.getElementById('calFilterAM').value;
   const hideDone = document.getElementById('calHideDone').checked;
   const out=[];
   (ALL_DEALS||[]).forEach(d=>{
     if(amFilter && d.assigned_am!==amFilter) return;
-    // 8 Enterprise Proof milestones (the execution framework)
     const pr=normalizeProofs(d.proofs);
-    PROOF_FRAMEWORK.forEach((p,i)=>{
-      const it=pr[p.key]; if(!it || it.status==='na') return;
-      const done=it.status==='done';
-      if(hideDone && done) return;
-      const last=(it.entries||[]).slice(-1)[0];
-      out.push({ action:`${i+1}. ${p.name}${last?' — '+last.text:''}`, done, due:it.due||'', proof:true,
-                 dealId:d.id, dealName:d.deal_name, customer:d.customer, am:d.assigned_am });
+    PROOF_FRAMEWORK.forEach(p=>{
+      const it=pr[p.key]; if(!it) return;
+      (it.entries||[]).forEach(e=>{
+        if(hideDone && e.status==='done') return;
+        out.push({
+          action:e.text, done:e.status==='done', status:e.status,
+          start:e.date||'', end:e.end||e.date||'',
+          dealId:d.id, dealName:d.deal_name, customer:d.customer, am:d.assigned_am,
+          kind:'proof', proofName:p.name,
+        });
+      });
     });
     (d.next_actions||[]).forEach(a=>{
       if(hideDone && a.done) return;
-      out.push({ action:a.action, done:!!a.done, due:a.due||'', proof:false,
-                 dealId:d.id, dealName:d.deal_name, customer:d.customer, am:d.assigned_am });
+      out.push({ action:a.action, done:!!a.done, status:a.done?'done':'planned',
+                 start:a.due||'', end:a.due||'',
+                 dealId:d.id, dealName:d.deal_name, customer:d.customer, am:d.assigned_am,
+                 kind:'action', proofName:'' });
     });
   });
   return out;
 }
 
-document.getElementById('calPrev').addEventListener('click',()=>{ calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1); renderCalendar(); });
-document.getElementById('calNext').addEventListener('click',()=>{ calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1); renderCalendar(); });
+document.querySelectorAll('.calview-btn').forEach(b=>b.addEventListener('click',()=>{
+  calView=b.dataset.calview;
+  document.querySelectorAll('.calview-btn').forEach(x=>x.classList.toggle('active',x===b));
+  renderCalendar();
+}));
+document.getElementById('calPrev').addEventListener('click',()=>{ calMonth = calView==='week' ? addDays(calMonth,-7) : new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1); renderCalendar(); });
+document.getElementById('calNext').addEventListener('click',()=>{ calMonth = calView==='week' ? addDays(calMonth,7) : new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1); renderCalendar(); });
 document.getElementById('calToday').addEventListener('click',()=>{ calMonth=new Date(); renderCalendar(); });
 document.getElementById('calFilterAM').addEventListener('change',renderCalendar);
 document.getElementById('calHideDone').addEventListener('change',renderCalendar);
+document.getElementById('calFilterClear').addEventListener('click',()=>{ calStatusFilter=null; renderCalendar(); });
+[['calKpiAllCard',null],['calKpiOverdueCard','overdue'],['calKpiProgressCard','in_progress'],['calKpiDoneCard','done'],['calKpiUndatedCard','no_date']].forEach(([id,key])=>{
+  document.getElementById(id).addEventListener('click',()=>{ calStatusFilter = calStatusFilter===key ? null : key; renderCalendar(); });
+});
+const CAL_FILTER_LABELS={overdue:'Overdue only',in_progress:'In progress only',done:'Done only',no_date:'No date set'};
 
 function renderCalendar(){
-  const acts=calendarActions();
+  const all=calendarActions();
+  calRenderedItems=all;
   const today=todayStr();
-  const y=calMonth.getFullYear(), m=calMonth.getMonth();
-  document.getElementById('calMonthLabel').textContent=
-    calMonth.toLocaleString('en-US',{month:'long',year:'numeric'});
 
-  // KPIs
-  const dated=acts.filter(a=>a.due);
-  const monthPrefix=`${y}-${String(m+1).padStart(2,'0')}`;
+  const dated=all.filter(a=>a.start);
+  const undated=all.filter(a=>!a.start);
   document.getElementById('calKpiTotal').textContent=dated.length;
-  document.getElementById('calKpiOverdue').textContent=dated.filter(a=>!a.done&&a.due<today).length;
-  document.getElementById('calKpiMonth').textContent=dated.filter(a=>a.due.startsWith(monthPrefix)).length;
-  document.getElementById('calKpiUndated').textContent=acts.filter(a=>!a.due).length;
+  document.getElementById('calKpiOverdue').textContent=dated.filter(a=>!a.done&&a.end<today).length;
+  document.getElementById('calKpiProgress').textContent=dated.filter(a=>a.status==='in_progress').length;
+  document.getElementById('calKpiDone').textContent=dated.filter(a=>a.status==='done').length;
+  document.getElementById('calKpiUndated').textContent=undated.length;
 
-  // Group by date
-  const byDate={}; dated.forEach(a=>{ (byDate[a.due]=byDate[a.due]||[]).push(a); });
+  ['calKpiAllCard','calKpiOverdueCard','calKpiProgressCard','calKpiDoneCard','calKpiUndatedCard'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  const activeCardId={overdue:'calKpiOverdueCard',in_progress:'calKpiProgressCard',done:'calKpiDoneCard',no_date:'calKpiUndatedCard'}[calStatusFilter];
+  if(activeCardId) document.getElementById(activeCardId).classList.add('active');
+  const noteEl=document.getElementById('calFilterNote');
+  if(calStatusFilter){ noteEl.style.display=''; document.getElementById('calFilterNoteText').textContent=`Showing: ${CAL_FILTER_LABELS[calStatusFilter]}`; }
+  else noteEl.style.display='none';
 
-  // Month grid, weeks starting Monday
-  const first=new Date(y,m,1);
-  const startOffset=(first.getDay()+6)%7;             // Mon=0
-  const daysInMonth=new Date(y,m+1,0).getDate();
-  const cells=[];
-  for(let i=0;i<startOffset;i++) cells.push(null);
-  for(let d=1;d<=daysInMonth;d++) cells.push(new Date(y,m,d));
-  while(cells.length%7!==0) cells.push(null);
+  const matchFilter=a=>{
+    if(!calStatusFilter) return true;
+    if(calStatusFilter==='overdue') return !a.done && a.end<today;
+    if(calStatusFilter==='in_progress') return a.status==='in_progress';
+    if(calStatusFilter==='done') return a.status==='done';
+    return true;
+  };
+  const visibleDated = (calStatusFilter==='no_date'?[]:dated).filter(matchFilter);
+  const visibleUndated = (calStatusFilter && calStatusFilter!=='no_date') ? [] : undated;
 
+  // Group by every date each item spans, so a multi-day entry renders on every day in range
+  const byDate={};
+  visibleDated.forEach(a=>{
+    const idx=all.indexOf(a);
+    let cur=new Date(a.start+'T00:00:00'); const end=new Date(a.end+'T00:00:00');
+    let guard=0;
+    while(cur<=end && guard<366){ const k=ymd(cur); (byDate[k]=byDate[k]||[]).push({...a, idx}); cur=addDays(cur,1); guard++; }
+  });
+
+  let cells=[];
+  if(calView==='week'){
+    const rangeStart=startOfWeek(calMonth), rangeEnd=addDays(rangeStart,6);
+    for(let i=0;i<7;i++) cells.push(addDays(rangeStart,i));
+    document.getElementById('calMonthLabel').textContent=
+      `${rangeStart.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${rangeEnd.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+  } else {
+    const y=calMonth.getFullYear(), m=calMonth.getMonth();
+    document.getElementById('calMonthLabel').textContent=calMonth.toLocaleString('en-US',{month:'long',year:'numeric'});
+    const first=new Date(y,m,1);
+    const startOffset=(first.getDay()+6)%7;             // Mon=0
+    const daysInMonth=new Date(y,m+1,0).getDate();
+    for(let i=0;i<startOffset;i++) cells.push(null);
+    for(let d=1;d<=daysInMonth;d++) cells.push(new Date(y,m,d));
+    while(cells.length%7!==0) cells.push(null);
+  }
+
+  document.getElementById('calDowRow').innerHTML=['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+    .map(x=>`<div class="text-[11px] font-medium text-center py-1" style="color:var(--text-muted)">${x}</div>`).join('');
+
+  const cellMinH = calView==='week' ? 190 : 96;
+  const itemsPerCell = calView==='week' ? 10 : 3;
   document.getElementById('calGrid').innerHTML=cells.map(dt=>{
-    if(!dt) return `<div class="rounded-lg" style="min-height:96px;background:var(--surface-2);opacity:.35"></div>`;
+    if(!dt) return `<div class="rounded-lg" style="min-height:${cellMinH}px;background:var(--surface-2);opacity:.35"></div>`;
     const key=ymd(dt), list=byDate[key]||[], isToday=key===today;
-    const items=list.slice(0,3).map(a=>{
-      const overdue=!a.done&&key<today;
-      const bg=a.done?'var(--success)':overdue?'var(--danger)':'var(--primary)';
-      return `<div class="cal-item clickable truncate" data-deal="${a.dealId}" title="${escapeHtml(a.action)} — ${escapeHtml(a.dealName)}"
-        style="font-size:10px;padding:2px 5px;border-radius:4px;margin-bottom:2px;background:${bg};color:#fff;opacity:${a.done?.55:1}">
-        ${a.done?'✓ ':''}${escapeHtml(a.action)}</div>`;
+    const items=list.slice(0,itemsPerCell).map(a=>{
+      const overdue=!a.done&&a.end<today;
+      const em=ENTRY_STATUS_META[a.status]||ENTRY_STATUS_META.not_started;
+      const bg=overdue?'var(--danger)':(em.bg==='var(--surface-3)'?'var(--text-faint)':em.bg);
+      const multi=a.start!==a.end;
+      const span=multi?(key===a.start?' ▶':key===a.end?' ◀':' ·'):'';
+      return `<div class="cal-item clickable truncate" data-idx="${a.idx}" title="${escapeHtml(a.action)} — ${escapeHtml(a.dealName)}${multi?` (${a.start} → ${a.end})`:''}"
+        style="font-size:10px;padding:2px 5px;border-radius:4px;margin-bottom:2px;background:${bg};color:#fff;opacity:${a.done?.6:1}">
+        ${escapeHtml(a.action)}${span}</div>`;
     }).join('');
-    const more=list.length>3?`<div style="font-size:10px;color:var(--text-faint)">+${list.length-3} more</div>`:'';
-    return `<div class="rounded-lg p-1.5" style="min-height:96px;background:var(--surface);border:1px solid ${isToday?'var(--primary)':'var(--border)'}">
+    const more=list.length>itemsPerCell?`<div style="font-size:10px;color:var(--text-faint)">+${list.length-itemsPerCell} more</div>`:'';
+    return `<div class="rounded-lg p-1.5" style="min-height:${cellMinH}px;background:var(--surface);border:1px solid ${isToday?'var(--primary)':'var(--border)'}">
       <div class="text-[11px] mb-1" style="color:${isToday?'var(--primary)':'var(--text-muted)'};font-weight:${isToday?'700':'400'}">${dt.getDate()}</div>
       ${items}${more}</div>`;
   }).join('');
 
-  // Overdue + upcoming list
-  const upcoming=dated.filter(a=>!a.done).sort((a,b)=>a.due.localeCompare(b.due)).slice(0,25);
+  // List below the grid: dated items (or undated ones, if that's the active filter)
   const el=document.getElementById('calList');
-  el.innerHTML=upcoming.map(a=>{
-    const overdue=a.due<today;
-    return `<div class="cal-item clickable flex items-center gap-3 rounded-lg px-3 py-2" data-deal="${a.dealId}" style="background:var(--surface-2)">
-      <span class="chip" style="color:${overdue?'var(--danger)':'var(--text-muted)'};border-color:${overdue?'var(--danger)':'var(--border)'};min-width:104px;text-align:center">${overdue?'⚠ ':''}${a.due}</span>
-      <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(a.action)}</span>
-      <span class="text-xs" style="color:var(--text-muted)">${escapeHtml(a.dealName)}</span>
-      <span class="chip" style="color:var(--text-muted)">${escapeHtml((a.am||'').split(' ')[0])}</span>
-    </div>`;
-  }).join('')||`<p class="text-xs" style="color:var(--text-faint)">No dated actions. Add a target date to a next action from the Tracker (edit an opportunity).</p>`;
+  if(calStatusFilter==='no_date'){
+    el.innerHTML = visibleUndated.map(a=>{
+      const idx=all.indexOf(a);
+      return `<div class="cal-item clickable flex items-center gap-3 rounded-lg px-3 py-2" data-idx="${idx}" style="background:var(--surface-2)">
+        <span class="chip" style="color:var(--text-muted);min-width:104px;text-align:center">No date</span>
+        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(a.action)}</span>
+        <span class="text-xs" style="color:var(--text-muted)">${escapeHtml(a.dealName)}</span>
+        <span class="chip" style="color:var(--text-muted)">${escapeHtml((a.am||'').split(' ')[0])}</span>
+      </div>`;
+    }).join('')||`<p class="text-xs" style="color:var(--text-faint)">Nothing without a date.</p>`;
+  } else {
+    const sorted=visibleDated.slice().sort((a,b)=>a.start.localeCompare(b.start)).slice(0,40);
+    el.innerHTML=sorted.map(a=>{
+      const idx=all.indexOf(a);
+      const overdue=!a.done&&a.end<today;
+      const em=ENTRY_STATUS_META[a.status]||ENTRY_STATUS_META.not_started;
+      const range=a.start!==a.end?`${a.start} → ${a.end}`:a.start;
+      return `<div class="cal-item clickable flex items-center gap-3 rounded-lg px-3 py-2" data-idx="${idx}" style="background:var(--surface-2)">
+        <span class="chip" style="color:${overdue?'var(--danger)':'var(--text-muted)'};border-color:${overdue?'var(--danger)':'var(--border)'};min-width:170px;text-align:center">${overdue?'⚠ ':''}${range}</span>
+        <span class="chip" style="color:${em.color};background:${em.bg}">${em.label}</span>
+        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(a.action)}</span>
+        <span class="text-xs" style="color:var(--text-muted)">${escapeHtml(a.dealName)}</span>
+        <span class="chip" style="color:var(--text-muted)">${escapeHtml((a.am||'').split(' ')[0])}</span>
+      </div>`;
+    }).join('')||`<p class="text-xs" style="color:var(--text-faint)">Nothing to show for this filter.</p>`;
+  }
 
-  document.querySelectorAll('.cal-item').forEach(n=>n.addEventListener('click',()=>openDetail(parseInt(n.dataset.deal))));
+  document.querySelectorAll('.cal-item').forEach(n=>n.addEventListener('click',()=>openCalItem(parseInt(n.dataset.idx))));
+}
+
+/* Clicking a calendar item shows just that item's detail, with an explicit
+   button to open the full opportunity — not the opportunity itself by default. */
+function openCalItem(idx){
+  const a=calRenderedItems[idx]; if(!a) return;
+  document.getElementById('calItemKind').textContent = a.kind==='proof' ? a.proofName : 'Next action';
+  document.getElementById('calItemText').textContent = a.action;
+  const em=ENTRY_STATUS_META[a.status]||ENTRY_STATUS_META.not_started;
+  const statusEl=document.getElementById('calItemStatus');
+  statusEl.textContent=em.label;
+  statusEl.style.color=em.bg==='var(--surface-3)'?'var(--text-faint)':em.bg;
+  document.getElementById('calItemDate').textContent = a.start ? (a.start!==a.end?`${a.start} → ${a.end}`:a.start) : 'No date set';
+  document.getElementById('calItemDeal').textContent = a.dealName;
+  document.getElementById('calItemMeta').textContent = `${a.customer||'—'} · ${a.am||'—'}`;
+  document.getElementById('calItemViewOppty').onclick=()=>{ closeModal('calItemModal'); openDetail(a.dealId); };
+  openModal('calItemModal');
 }
 
 /* ================= ANALYTICS ================= */

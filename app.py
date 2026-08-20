@@ -75,10 +75,12 @@ ENTRY_STATUS_LABELS = {
 def normalize_proofs(raw):
     """Always return the full 8-proof structure, preserving whatever was stored.
 
-    Each proof holds a list of evidence `entries` ({text, date, status}). A legacy
-    single `notes` string is migrated into the first entry so nothing is ever lost.
-    Entries without their own status fall back to the parent proof's status
-    (an "na" proof falls back to "not_started") so older data keeps working.
+    Each proof holds a list of evidence `entries` ({text, date, end, status}).
+    `date` is the start date; `end` is optional — a blank end means a single-day
+    activity. A legacy single `notes` string is migrated into the first entry so
+    nothing is ever lost. Entries without their own status fall back to the
+    parent proof's status (an "na" proof falls back to "not_started") so older
+    data keeps working.
     """
     incoming = raw if isinstance(raw, dict) else {}
     out = {}
@@ -96,18 +98,21 @@ def normalize_proofs(raw):
             if isinstance(e, dict):
                 text = str(e.get("text", "") or "").strip()
                 date = str(e.get("date", "") or "").strip()[:10]
+                end = str(e.get("end", "") or "").strip()[:10]
+                if end and date and end < date:
+                    end = ""  # guard against an inverted range
                 estatus = str(e.get("status", "") or "").strip().lower().replace(" ", "_")
                 if estatus not in ENTRY_STATUSES:
                     estatus = fallback_entry_status
             else:
-                text, date, estatus = str(e or "").strip(), "", fallback_entry_status
+                text, date, end, estatus = str(e or "").strip(), "", "", fallback_entry_status
             if text:
-                entries.append({"text": text, "date": date, "status": estatus})
+                entries.append({"text": text, "date": date, "end": end, "status": estatus})
 
         # Migrate a legacy notes string into the evidence list.
         legacy = str(item.get("notes", "") or "").strip()
         if legacy and not any(e["text"] == legacy for e in entries):
-            entries.insert(0, {"text": legacy, "date": "", "status": fallback_entry_status})
+            entries.insert(0, {"text": legacy, "date": "", "end": "", "status": fallback_entry_status})
 
         out[key] = {
             "status": status,

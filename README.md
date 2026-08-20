@@ -71,9 +71,16 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   (Target − Achieved − Recurring − 2026 Pipeline).
 - **Thousand separators** — all large IDR inputs (target, achievement, recurring, per-AM targets, TCV,
   Rev 2026) format as you type: `163000000000` → `163.000.000.000`, so you never miscount a zero.
-- **Calendar** — every next action can carry a target date; the Calendar tab shows them in a month
-  grid (overdue red, upcoming blue, done green) plus an overdue/upcoming list. Admin and management
-  see everyone with an AM filter; an **Account Manager only ever sees their own** action plan.
+- **Calendar** — shows every scheduled item: every evidence entry logged against any of the 8
+  Enterprise Proofs (whatever stage it's in — planned, in progress or done) plus every ad-hoc next
+  action. Toggles between **Week** (default) and **Month** view. Multi-day entries (see Execution
+  Framework below) render on every day they span. Item labels show only the AM's own wording — no
+  "Proof of X" prefix. The KPI tiles (Scheduled / Overdue / In Progress / Done / No date) are
+  **clickable filters** — click one to narrow the grid and list to that category, click again to
+  clear it. Clicking an item opens a small detail popup for just that item (text, status, dates,
+  which opportunity it belongs to) with a **View opportunity** button, rather than jumping straight
+  into the full opportunity. Admin and management see everyone with an AM filter; an **Account
+  Manager only ever sees their own** action plan.
 - **Configuration tab** (admin) — manage the **Deal Stages**, Strategic Pillars and Squads lists.
   Stages are fully configurable: add/rename/delete, and every dropdown, filter and chart follows.
   Deleting a value that is still in use asks for confirmation and never rewrites existing deals.
@@ -86,17 +93,24 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 - **Backup & restore (XLSX)** — admin-only, in Settings → Data Backup. Export everything
   (opportunities, strategies, next actions with dates, the 8-proof framework, config, users) to one
   Excel workbook; the same file is the import template for restoring or migrating to another host.
-- **Execution Framework — the 8 Enterprise Proofs.** Every opportunity has an *Execution Framework*
-  tab in its edit modal implementing the PODS 2 standard: **1 Qualification, 2 Engagement, 3 Concept,
-  4 Value, 5 Contract, 6 Delivery, 7 Operation, 8 CLM**. Each proof carries an overall status
-  (Not started / In progress / Done / N/A), a target date, and **an unlimited list of evidence
-  entries** — each with its own date **and its own status** (Not started / Planned / In progress /
-  Done), clickable directly on every entry — so an AM records everything they have done to fulfil
-  that proof, tracks each piece of evidence through to completion, and builds a real audit trail
-  rather than a single note. Existing entries without their own status inherit the parent proof's
-  status automatically, so nothing already recorded needs to be re-entered. Proof target dates flow
-  into the **Calendar**; N/A proofs are excluded from completion maths. Any pre-existing next actions
-  are preserved under "Other next actions".
+- **Execution Framework — the 8 Enterprise Proofs.** Every opportunity has a wider *Execution
+  Framework* tab in its edit modal implementing the PODS 2 standard: **1 Qualification, 2 Engagement,
+  3 Concept, 4 Value, 5 Contract, 6 Delivery, 7 Operation, 8 CLM**. Each proof carries an overall
+  status (Not started / In progress / Done / N/A), a target date, and **an unlimited list of evidence
+  entries** — each with its own **status** (Not started / Planned / In progress / Done, clickable
+  directly on the entry) and its own **start date and optional end date**. Leaving the end date blank
+  means a single-day activity; setting it schedules a multi-day activity that shows on every day it
+  spans on the Calendar. This is how an AM records everything they have done — or plan to do — to
+  fulfil that proof, building a real audit trail rather than a single note. Existing entries without
+  their own status/dates inherit sensible defaults automatically, so nothing already recorded needs
+  to be re-entered. N/A proofs are excluded from completion maths.
+- **Action Plan tab** — a third tab in the opportunity edit modal, alongside Opportunity Details and
+  Execution Framework. It auto-collects every evidence entry across the 8 Enterprise Proofs that's
+  currently marked **Planned** — the team's to-do list for that opportunity — with its own status
+  selector so you can bump a step to In progress/Done right there (it disappears from this list the
+  moment it's no longer Planned). Below it, **Next actions** (ad-hoc items that don't belong to a
+  specific proof) now lives in its own tab too, instead of being tucked away in a collapsible on the
+  Execution Framework tab.
 - **Stage automation** — an opportunity's Stage is derived from how far its framework has
   progressed: the furthest proof reached (done or in progress) sets the stage, and a blocked deal
   always shows the blocked stage. The proof → stage mapping and an on/off switch live under
@@ -110,8 +124,14 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   opportunities (clearly flagged, and they can widen it to the whole team at any time).
 - **Management View** (admin + management only) — a simple executive briefing that management lands
   on by default. A **"Needs your attention"** headline states whether anything is wrong, then three
-  **collapsed widgets** (Blockers, Action points, Strategy & execution) each show a one-line summary
-  — expand only what you want to dig into. Click or double-click anything to open the full detail.
+  widgets: **Blockers** and **Action points** (collapsed, one-line summary until expanded), and
+  **Account Manager performance** (open by default) — a per-AM card showing Target vs Covered
+  (Achieved + Recurring + 2026 Pipeline, the same formula as the Analytics Gap section), an
+  attainment bar, and a warning badge (On target / Behind target / Significantly behind) so you can
+  see at a glance who isn't covering their number. Beneath it, an **Insight** panel explains *why*:
+  for every AM short of target it checks whether they have blocked deals and calls that out as a
+  likely contributor, or — if there are no blockers on file — says the gap more likely needs pipeline
+  generation than escalation. Click or double-click anything to open the full opportunity detail.
 - **Performance tab** — upload the monthly **PODS 2 - ACH** workbook from the performance team
   (admin only) and the dashboard reads the `PODS (2)` and `byAccount (BP)` sheets to show:
   team scorecard (Target FY, Actual YTD, MRC, PO on Hand, Forecast, Gap, attainment);
