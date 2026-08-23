@@ -67,7 +67,9 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   preference on first load).
 - **AWS-inspired design** — a fixed dark-navy top app bar (stays dark in both light and dark theme,
   like aws.amazon.com), left nav rail, card-based layout, an AWS Cloudscape-style blue accent
-  (no orange), and Inter/Amazon Ember-style typography.
+  (no orange), and Inter/Amazon Ember-style typography. The sign-in page matches: it's built from the
+  same theme tokens as the rest of the app (so it follows your light/dark preference too) with a
+  fixed dark-navy brand panel on the right, the same as the app's header.
 - **Feature search (Ctrl/Cmd+K)** — click the search bar in the top app bar (or press **Ctrl+K** /
   **Cmd+K**) to open a command palette that searches every section of the dashboard (Tracker,
   Calendar, Pipeline Analytics, Performance, Login Logs, Settings, etc.) plus a few quick actions
@@ -153,6 +155,7 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   run the weekly cross-team sync and see what's most urgent to resolve. Unlike My Team Tasks, Weekly
   Meeting is visible to **every role** (Sales and admin/management included, not just Solution/
   Project/Product) so everyone can see the same picture ahead of the meeting; it's read-only there.
+  Like My Team Tasks, it hides the FY target/gap/coverage strip too — both are focused worklists.
 - **Action Plan timeline** — in the same Action Plan tab, Sales can set two **milestones** per
   opportunity: the **expected PO date** and the **expected revenue booking date**. A vertical timeline
   right below plots those milestones together with every dated Planned execution step, sorted

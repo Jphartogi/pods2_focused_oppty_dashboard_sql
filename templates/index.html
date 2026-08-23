@@ -146,43 +146,43 @@
 <body>
 
 <!-- ===================== LOGIN ===================== -->
-<div id="loginScreen" class="min-h-screen flex items-center justify-center p-4 sm:p-8" style="background:radial-gradient(120% 120% at 15% 10%, #eef6ff 0%, #dfeeff 35%, #cfe3ff 65%, #bfd9ff 100%)">
-  <div class="w-full max-w-4xl grid md:grid-cols-2 rounded-3xl overflow-hidden" style="box-shadow:0 24px 70px -12px rgba(9,114,211,.32), 0 8px 24px rgba(9,114,211,.14)">
+<div id="loginScreen" class="min-h-screen flex items-center justify-center p-4 sm:p-8" style="background:var(--bg)">
+  <div class="w-full max-w-4xl grid md:grid-cols-2 rounded-2xl overflow-hidden card elev">
 
-    <!-- Left: translucent glass sign-in card -->
-    <div class="relative p-8 sm:p-11 flex flex-col justify-center" style="background:rgba(255,255,255,.68); backdrop-filter:blur(22px) saturate(160%); -webkit-backdrop-filter:blur(22px) saturate(160%); border-right:1px solid rgba(255,255,255,.4)">
+    <!-- Left: sign-in card, themed like the rest of the app -->
+    <div class="relative p-8 sm:p-11 flex flex-col justify-center" style="background:var(--surface)">
       <div class="mb-7">
-        <div class="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style="background:linear-gradient(135deg,#0972d3,#06315c); box-shadow:0 8px 20px -6px rgba(9,114,211,.55)">
-          <i class="fa-solid fa-satellite-dish text-xl text-white"></i>
+        <div class="w-12 h-12 rounded-xl btn-primary flex items-center justify-center mb-4">
+          <i class="fa-solid fa-satellite-dish text-xl"></i>
         </div>
-        <h1 class="text-2xl font-semibold" style="color:#0d1b34">Sign in</h1>
-        <p class="text-xs mt-1.5" style="color:#5c6c8a">PODS-2 Dashboard Tracker &mdash; deal execution &amp; strategy</p>
+        <h1 class="text-2xl font-semibold" style="color:var(--text)">Sign in</h1>
+        <p class="text-xs mt-1.5" style="color:var(--text-muted)">PODS-2 Dashboard Tracker &mdash; deal execution &amp; strategy</p>
       </div>
       <form id="loginForm" class="space-y-4">
         <div>
-          <label class="block text-xs font-medium mb-1.5" style="color:#3c4a63">Username</label>
+          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">Username</label>
           <div class="relative">
-            <i class="fa-regular fa-user absolute left-3 top-1/2 -translate-y-1/2 text-xs" style="color:#9aa8c2"></i>
-            <input id="loginUsername" type="text" required autocomplete="username" class="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl" style="background:rgba(255,255,255,.85); border:1px solid rgba(15,40,90,.12); color:#0d1b34" placeholder="Your username">
+            <i class="fa-regular fa-user absolute left-3 top-1/2 -translate-y-1/2 text-xs" style="color:var(--text-faint)"></i>
+            <input id="loginUsername" type="text" required autocomplete="username" class="field w-full pl-9 pr-3 py-2.5 text-sm rounded-lg" placeholder="Your username">
           </div>
         </div>
         <div>
-          <label class="block text-xs font-medium mb-1.5" style="color:#3c4a63">Password</label>
+          <label class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">Password</label>
           <div class="relative">
-            <i class="fa-solid fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-xs" style="color:#9aa8c2"></i>
-            <input id="loginPassword" type="password" required autocomplete="current-password" class="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl" style="background:rgba(255,255,255,.85); border:1px solid rgba(15,40,90,.12); color:#0d1b34" placeholder="••••••••">
+            <i class="fa-solid fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-xs" style="color:var(--text-faint)"></i>
+            <input id="loginPassword" type="password" required autocomplete="current-password" class="field w-full pl-9 pr-3 py-2.5 text-sm rounded-lg" placeholder="••••••••">
           </div>
         </div>
-        <p id="loginError" class="text-xs hidden" style="color:#d93025"></p>
-        <button type="submit" class="w-full text-sm font-medium py-2.5 rounded-xl text-white" style="background:linear-gradient(135deg,#0972d3,#06315c); box-shadow:0 10px 24px -8px rgba(9,114,211,.55)">Sign in</button>
+        <p id="loginError" class="text-xs hidden" style="color:var(--danger)"></p>
+        <button type="submit" class="btn-primary w-full text-sm font-medium py-2.5 rounded-lg">Sign in</button>
       </form>
-      <p class="text-[11px] mt-7" style="color:#8895ac">Access is managed by your administrator. Contact them if you need an account or a password reset.</p>
+      <p class="text-[11px] mt-7" style="color:var(--text-faint)">Access is managed by your administrator. Contact them if you need an account or a password reset.</p>
     </div>
 
-    <!-- Right: illustration panel -->
-    <div class="hidden md:flex relative flex-col items-center justify-center px-8 py-10 overflow-hidden" style="background:linear-gradient(160deg,#0972d3 0%,#0a3d70 60%,#0a2044 100%)">
-      <div class="absolute rounded-full" style="width:280px;height:280px;top:-60px;right:-70px;background:rgba(255,255,255,.08);filter:blur(6px)"></div>
-      <div class="absolute rounded-full" style="width:220px;height:220px;bottom:-70px;left:-60px;background:rgba(79,195,247,.18);filter:blur(10px)"></div>
+    <!-- Right: dark-navy brand panel, matching the app's fixed AWS-style header -->
+    <div class="hidden md:flex relative flex-col items-center justify-center px-8 py-10 overflow-hidden" style="background:#16222c">
+      <div class="absolute rounded-full" style="width:280px;height:280px;top:-60px;right:-70px;background:rgba(124,185,240,.10);filter:blur(6px)"></div>
+      <div class="absolute rounded-full" style="width:220px;height:220px;bottom:-70px;left:-60px;background:rgba(124,185,240,.14);filter:blur(10px)"></div>
 
       <div class="relative z-10 text-center mb-2">
         <h2 class="text-white text-xl font-semibold leading-snug">Welcome to the<br>PODS-2 Dashboard Tracker</h2>
@@ -1361,8 +1361,8 @@ function switchTab(tab){
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
-  // My Team Tasks is a focused worklist - the FY target / gap / coverage strip is noise there.
-  document.getElementById('metricStripWrap').style.display = tab==='myteamtasks' ? 'none' : '';
+  // My Team Tasks and Weekly Meeting are focused worklists - the FY target / gap / coverage strip is noise there.
+  document.getElementById('metricStripWrap').style.display = (tab==='myteamtasks'||tab==='weeklymeeting') ? 'none' : '';
   refreshNavGroups(tab);
   if(tab==='analytics'){ switchAnalyticsTab('gap'); renderAnalytics(); }
   if(tab==='settings') renderSettings();
