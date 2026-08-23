@@ -334,6 +334,10 @@ def migrate_db(db):
         db.execute("ALTER TABLE deals ADD COLUMN strategy TEXT DEFAULT ''")
     if "proofs" not in deal_cols:
         db.execute("ALTER TABLE deals ADD COLUMN proofs TEXT DEFAULT '{}'")
+    if "expected_po_date" not in deal_cols:
+        db.execute("ALTER TABLE deals ADD COLUMN expected_po_date TEXT DEFAULT ''")
+    if "expected_revenue_date" not in deal_cols:
+        db.execute("ALTER TABLE deals ADD COLUMN expected_revenue_date TEXT DEFAULT ''")
 
     config_cols = columns("config")
     if "am_targets" not in config_cols:
@@ -387,6 +391,8 @@ def init_db():
             next_actions TEXT,
             strategy TEXT DEFAULT '',
             proofs TEXT DEFAULT '{}',
+            expected_po_date TEXT DEFAULT '',
+            expected_revenue_date TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -564,6 +570,8 @@ def deal_to_dict(row):
         "proofs": normalize_proofs(
             json.loads((row["proofs"] if "proofs" in row.keys() else "") or "{}")
         ),
+        "expected_po_date": (row["expected_po_date"] if "expected_po_date" in row.keys() else "") or "",
+        "expected_revenue_date": (row["expected_revenue_date"] if "expected_revenue_date" in row.keys() else "") or "",
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -782,8 +790,8 @@ def create_deal():
         """INSERT INTO deals
            (deal_name, customer, assigned_am, squad, strategic_pillar, estimated_value,
             revenue_2026, target_quarter, stage, progress, is_blocked, blocker_description,
-            next_actions, strategy, proofs, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+            next_actions, strategy, proofs, expected_po_date, expected_revenue_date, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
         (
             data.get("deal_name", "Untitled Opportunity"),
             data.get("customer", ""),
@@ -800,6 +808,8 @@ def create_deal():
             json.dumps(data.get("next_actions", [])),
             data.get("strategy", ""),
             json.dumps(new_proofs),
+            str(data.get("expected_po_date", "") or "").strip()[:10],
+            str(data.get("expected_revenue_date", "") or "").strip()[:10],
         ),
     )
     db.commit()
@@ -833,11 +843,14 @@ def update_deal(deal_id):
     upd_blocked = bool(data.get("is_blocked", row["is_blocked"]))
     upd_stage = resolve_stage(db, data, upd_proofs, upd_blocked,
                               data.get("stage", row["stage"]), row["stage"])
+    existing_po = row["expected_po_date"] if "expected_po_date" in row.keys() else ""
+    existing_rev = row["expected_revenue_date"] if "expected_revenue_date" in row.keys() else ""
     db.execute(
         """UPDATE deals SET
              deal_name = ?, customer = ?, assigned_am = ?, squad = ?, strategic_pillar = ?,
              estimated_value = ?, revenue_2026 = ?, target_quarter = ?, stage = ?, progress = ?,
              is_blocked = ?, blocker_description = ?, next_actions = ?, strategy = ?, proofs = ?,
+             expected_po_date = ?, expected_revenue_date = ?,
              updated_at = CURRENT_TIMESTAMP
            WHERE id = ?""",
         (
@@ -856,6 +869,8 @@ def update_deal(deal_id):
             json.dumps(data.get("next_actions", json.loads(row["next_actions"] or "[]"))),
             data.get("strategy", existing_strategy),
             json.dumps(upd_proofs),
+            str(data.get("expected_po_date", existing_po) or "").strip()[:10],
+            str(data.get("expected_revenue_date", existing_rev) or "").strip()[:10],
             deal_id,
         ),
     )
@@ -1087,17 +1102,22 @@ def delete_task(task_id):
 
 
 @app.route("/api/tasks", methods=["GET"])
-@login_required(roles=("admin", "management", "solution", "project", "product"))
+@login_required()
 def list_tasks():
-    """Cross-opportunity task list. Cross-functional roles only ever see their own
-    team's tasks (their follow-up inbox); admin/management see every task, optionally
-    filtered by ?team= and ?status=, for the weekly cross-team sync."""
+    """Cross-opportunity task list.
+
+    Default behaviour: cross-functional roles only ever see their own team's tasks
+    (their personal follow-up inbox, "My Team Tasks"). Passing ?scope=all opts any
+    authenticated role - including cross-functional ones - into seeing every task,
+    optionally filtered by ?team= and ?status=; this powers the shared "Weekly
+    Meeting" board that everyone (sales included) can see ahead of the sync."""
     db = get_db()
     user = g.current_user
+    scope_all = request.args.get("scope") == "all"
     query = """SELECT t.*, d.deal_name, d.customer, d.assigned_am
                FROM deal_tasks t JOIN deals d ON d.id = t.deal_id WHERE 1=1"""
     params = []
-    if user["role"] in CROSS_FUNCTIONAL_ROLES:
+    if user["role"] in CROSS_FUNCTIONAL_ROLES and not scope_all:
         query += " AND t.team = ?"
         params.append(user["role"])
     else:

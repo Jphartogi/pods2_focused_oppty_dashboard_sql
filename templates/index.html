@@ -71,6 +71,14 @@
   .calview-btn.active { color: #fff; background: var(--primary); font-weight:500; }
   #calKpiAllCard.active, #calKpiOverdueCard.active, #calKpiProgressCard.active, #calKpiDoneCard.active, #calKpiUndatedCard.active,
   .kpi-card.active { outline:2px solid var(--primary); outline-offset:-1px; }
+  /* --- vertical timeline (Action Plan tab) --- */
+  .timeline-track { position:relative; padding-left:26px; }
+  .timeline-track::before { content:''; position:absolute; left:9px; top:2px; bottom:2px; width:2px; background:var(--border); }
+  .timeline-row { position:relative; padding-bottom:14px; }
+  .timeline-row:last-child { padding-bottom:0; }
+  .timeline-dot { position:absolute; left:-26px; top:0; width:20px; height:20px; border-radius:9999px; display:flex; align-items:center; justify-content:center; font-size:9px; color:#fff; box-shadow:0 0 0 3px var(--surface); }
+  .timeline-today-row { position:relative; margin:2px 0 14px; padding-left:0; display:flex; align-items:center; gap:8px; }
+  .timeline-today-row::before { content:''; flex-shrink:0; width:20px; height:20px; margin-left:-26px; border-radius:9999px; background:var(--surface); border:2px solid var(--primary); box-shadow:0 0 0 3px var(--surface); }
   .proof-row { border:1px solid var(--border); border-radius:8px; transition: border-color .15s ease; }
   .proof-row:hover { border-color: var(--primary); }
   .proof-num { width:22px; height:22px; border-radius:9999px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; }
@@ -252,7 +260,7 @@
           </button>
           <div class="nav-group-items space-y-1">
             <button data-tab="management" id="mgmtNavBtn" title="Management View" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-briefcase w-4"></i> <span class="rail-label">Management View</span></button>
-            <button data-tab="weeklyfollowups" id="weeklyFollowupsNavBtn" title="Weekly Follow-ups" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-people-arrows w-4"></i> <span class="rail-label">Weekly Follow-ups</span></button>
+            <button data-tab="weeklymeeting" id="weeklyMeetingNavBtn" title="Weekly Meeting" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-people-arrows w-4"></i> <span class="rail-label">Weekly Meeting</span></button>
             <button data-tab="myteamtasks" id="myTeamTasksNavBtn" title="My Team Tasks" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-list-check w-4"></i> <span class="rail-label">My Team Tasks</span></button>
           </div>
         </div>
@@ -405,10 +413,10 @@
       </section>
 
       <!-- ============ WEEKLY FOLLOW-UPS (admin + management) ============ -->
-      <section id="tab-weeklyfollowups" class="tab-panel px-6 py-5">
+      <section id="tab-weeklymeeting" class="tab-panel px-6 py-5">
         <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
-          <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-people-arrows mr-1" style="color:var(--primary)"></i>Cross-team follow-ups</span>
-          <select id="wfTeamFilter" class="field text-sm px-3 py-1.5">
+          <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-people-arrows mr-1" style="color:var(--primary)"></i>Weekly Meeting prep</span>
+          <select id="wmTeamFilter" class="field text-sm px-3 py-1.5">
             <option value="">All teams</option>
             <option value="solution">Solution</option>
             <option value="project">Project</option>
@@ -417,14 +425,14 @@
         </div>
         <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Everything Solution, Project and Product have flagged on opportunities — use this to run the weekly sync. Click a KPI to filter.</p>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <div id="wfKpiBlockedCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-ban mr-1"></i>Blocked</p><p id="wfKpiBlocked" class="text-xl font-medium mt-1" style="color:var(--danger)">0</p></div>
-          <div id="wfKpiDiscussCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-comments mr-1"></i>Needs discussion</p><p id="wfKpiDiscuss" class="text-xl font-medium mt-1" style="color:var(--warning)">0</p></div>
-          <div id="wfKpiProgressCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">In progress</p><p id="wfKpiProgress" class="text-xl font-medium mt-1" style="color:var(--primary)">0</p></div>
-          <div id="wfKpiDoneCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">Done</p><p id="wfKpiDone" class="text-xl font-medium mt-1" style="color:var(--success)">0</p></div>
+          <div id="wmKpiBlockedCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-ban mr-1"></i>Blocked</p><p id="wmKpiBlocked" class="text-xl font-medium mt-1" style="color:var(--danger)">0</p></div>
+          <div id="wmKpiDiscussCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-comments mr-1"></i>Needs discussion</p><p id="wmKpiDiscuss" class="text-xl font-medium mt-1" style="color:var(--warning)">0</p></div>
+          <div id="wmKpiProgressCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">In progress</p><p id="wmKpiProgress" class="text-xl font-medium mt-1" style="color:var(--primary)">0</p></div>
+          <div id="wmKpiDoneCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">Done</p><p id="wmKpiDone" class="text-xl font-medium mt-1" style="color:var(--success)">0</p></div>
         </div>
-        <p id="wfFilterNote" class="text-[11px] mb-3" style="color:var(--primary);display:none"><i class="fa-solid fa-filter mr-1"></i><span id="wfFilterNoteText"></span> — <button id="wfFilterClear" type="button" class="underline">clear</button></p>
+        <p id="wmFilterNote" class="text-[11px] mb-3" style="color:var(--primary);display:none"><i class="fa-solid fa-filter mr-1"></i><span id="wmFilterNoteText"></span> — <button id="wmFilterClear" type="button" class="underline">clear</button></p>
         <div class="card elev p-5">
-          <div id="wfList" class="space-y-2"></div>
+          <div id="wmList" class="space-y-2"></div>
         </div>
       </section>
 
@@ -1007,6 +1015,27 @@
 
       <div id="mtab-actionplan" class="modal-tab-pane space-y-4" style="display:none">
         <div class="rounded-lg p-3" style="border:1px solid var(--border)">
+          <p class="text-xs font-medium mb-2" style="color:var(--text-muted)"><i class="fa-solid fa-flag-checkered mr-1" style="color:var(--primary)"></i>Milestones</p>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[10px] mb-1" style="color:var(--text-faint)">Expected PO date</label>
+              <input id="dealExpectedPO" type="date" class="field w-full px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="block text-[10px] mb-1" style="color:var(--text-faint)">Expected revenue booking date</label>
+              <input id="dealExpectedRevenue" type="date" class="field w-full px-3 py-2 text-sm">
+            </div>
+          </div>
+          <p class="text-[10px] mt-1.5" style="color:var(--text-faint)">Shown as milestones on the timeline below.</p>
+        </div>
+
+        <div class="rounded-lg p-3" style="border:1px solid var(--border)">
+          <p class="text-xs font-medium mb-2" style="color:var(--text-muted)"><i class="fa-solid fa-timeline mr-1" style="color:var(--primary)"></i>Timeline</p>
+          <p class="text-[10px] mb-3" style="color:var(--text-faint)">Planned execution steps plus the milestones above, from today through to the end of the project.</p>
+          <div id="actionTimeline"></div>
+        </div>
+
+        <div class="rounded-lg p-3" style="border:1px solid var(--border)">
           <div class="flex items-center justify-between mb-1">
             <p class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-map mr-1" style="color:var(--primary)"></i>Planned execution steps</p>
             <span id="plannedStepsCount" class="text-[11px]" style="color:var(--text-faint)">0 planned</span>
@@ -1113,6 +1142,7 @@ let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[]
 let nextActionsDraft = [], confirmCallback = null, analyticsFilters = {};
 let currentPage = 1, calMonth = new Date();
 let proofsDraft = {}, fwDrillKey = null;
+let lastPlannedRows = [];
 // The 8 Enterprise Proofs (fetched from the server; this is the fallback order/labels)
 let PROOF_FRAMEWORK = [
   {key:'qualification',name:'Proof of Qualification',description:'Ensure target customers (B500) have the need, budget, and alignment with our solution'},
@@ -1287,7 +1317,7 @@ async function enterApp(){
   document.getElementById('configNavBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('loginLogsNavBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('mgmtNavBtn').style.display = (ROLE==='admin'||ROLE==='management') ? '' : 'none';
-  document.getElementById('weeklyFollowupsNavBtn').style.display = (ROLE==='admin'||ROLE==='management') ? '' : 'none';
+  document.getElementById('weeklyMeetingNavBtn').style.display = ''; // visible to every role
   document.getElementById('quickSettingsBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('quickConfigBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('perfUploadWrap').style.display = ROLE==='admin' ? '' : 'none';
@@ -1326,7 +1356,6 @@ document.querySelectorAll('.nav-link').forEach(b=>b.addEventListener('click',()=
 function switchTab(tab){
   if((tab==='settings'||tab==='configuration'||tab==='loginlogs') && ROLE!=='admin') return;
   if(tab==='management' && !(ROLE==='admin'||ROLE==='management')) return;
-  if(tab==='weeklyfollowups' && !(ROLE==='admin'||ROLE==='management')) return;
   if(tab==='myteamtasks' && !CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
   if(['calendar','analytics','performance'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
@@ -1342,7 +1371,7 @@ function switchTab(tab){
   if(tab==='calendar') renderCalendar();
   if(tab==='management') renderManagement();
   if(tab==='performance') renderPerformance();
-  if(tab==='weeklyfollowups') renderWeeklyFollowups();
+  if(tab==='weeklymeeting') renderWeeklyMeeting();
   if(tab==='myteamtasks') renderMyTeamTasks();
 }
 
@@ -1635,6 +1664,8 @@ function openDealModal(id){
   document.getElementById('dealIsBlocked').checked=d?!!d.is_blocked:false;
   document.getElementById('dealBlockerDesc').value=d?(d.blocker_description||''):'';
   document.getElementById('dealStrategy').value=d?(d.strategy||''):'';
+  document.getElementById('dealExpectedPO').value=d?(d.expected_po_date||''):'';
+  document.getElementById('dealExpectedRevenue').value=d?(d.expected_revenue_date||''):'';
   nextActionsDraft=d?JSON.parse(JSON.stringify(d.next_actions)):[];
   proofsDraft=normalizeProofs(d?d.proofs:{});
   renderNextActionsDraft();
@@ -1741,12 +1772,65 @@ function renderPlannedSteps(){
     proofsDraft[e.target.dataset.key].entries[e.target.dataset.ei].status=e.target.value; renderProofsDraft();
   }));
   updateActionPlanBadge();
+  lastPlannedRows=rows;
+  renderTimeline(rows);
 }
 function updateActionPlanBadge(){
   const planned=Object.values(proofsDraft).reduce((s,it)=>s+(it.entries||[]).filter(e=>e.status==='planned').length,0);
   const openActions=nextActionsDraft.filter(a=>!a.done).length;
   document.getElementById('mtabApBadge').textContent=String(planned+openActions);
 }
+
+const TIMELINE_TYPE_META = {
+  step:{icon:'fa-list-check', color:'var(--primary)'},
+  po:{icon:'fa-file-signature', color:'#8b3fd6'},
+  revenue:{icon:'fa-sack-dollar', color:'var(--success)'},
+};
+/* Planned execution steps + the PO / revenue-booking milestones, sorted chronologically
+   from today through to the end of the project. `plannedRows` is the same list already
+   computed by renderPlannedSteps() ({p,i,ei,e}), reused so both stay in sync. */
+function renderTimeline(plannedRows){
+  const el=document.getElementById('actionTimeline'); if(!el) return;
+  const items=(plannedRows||[]).filter(r=>r.e.date).map(({p,i,e})=>({
+    date:e.date, endDate:e.end||e.date, type:'step',
+    label:e.text, sub:`${i+1}. ${p.name.replace('Proof of ','')}`,
+  }));
+  const poDate=document.getElementById('dealExpectedPO').value;
+  const revDate=document.getElementById('dealExpectedRevenue').value;
+  if(poDate) items.push({date:poDate, endDate:poDate, type:'po', label:'Expected PO received', sub:'Milestone'});
+  if(revDate) items.push({date:revDate, endDate:revDate, type:'revenue', label:'Revenue booking', sub:'Milestone'});
+
+  if(!items.length){
+    el.innerHTML=`<p class="text-xs" style="color:var(--text-faint)">No planned dates yet — add a planned execution step with a date, or set a milestone above, to see the timeline.</p>`;
+    return;
+  }
+  items.sort((a,b)=>a.date.localeCompare(b.date));
+  const today=todayStr();
+
+  const rowsHtml=items.map(it=>{
+    const meta=TIMELINE_TYPE_META[it.type];
+    const overdue=it.type==='step' && it.date<today;
+    const range=it.endDate!==it.date?`${it.date} → ${it.endDate}`:it.date;
+    return `<div class="timeline-row">
+      <div class="timeline-dot" style="background:${meta.color}"><i class="fa-solid ${meta.icon}"></i></div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="chip" style="color:${overdue?'var(--danger)':'var(--text-muted)'};border-color:${overdue?'var(--danger)':'var(--border)'}">${overdue?'⚠ ':''}${range}</span>
+        <span class="text-[10px]" style="color:var(--text-faint)">${escapeHtml(it.sub)}</span>
+      </div>
+      <p class="text-sm mt-0.5" style="color:var(--text)">${escapeHtml(it.label)}</p>
+    </div>`;
+  });
+
+  // Insert a "Today" marker at the point in the sorted list where dates cross into the future.
+  let insertAt=items.findIndex(it=>it.date>=today);
+  if(insertAt===-1) insertAt=items.length;
+  const todayHtml=`<div class="timeline-today-row"><span class="text-[11px] font-medium" style="color:var(--primary)">Today — ${today}</span></div>`;
+  rowsHtml.splice(insertAt, 0, todayHtml);
+
+  el.innerHTML=`<div class="timeline-track">${rowsHtml.join('')}</div>`;
+}
+document.getElementById('dealExpectedPO').addEventListener('change',()=>renderTimeline(lastPlannedRows));
+document.getElementById('dealExpectedRevenue').addEventListener('change',()=>renderTimeline(lastPlannedRows));
 
 /* ================= TEAM TASKS (bridge to Solution / Project / Product) ================= */
 const TASK_TEAM_META = {
@@ -1828,26 +1912,26 @@ document.getElementById('addTaskBtn').addEventListener('click',async()=>{
 });
 document.getElementById('newTaskText').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('addTaskBtn').click(); } });
 
-/* ---------- Weekly Follow-ups (admin + management): cross-team sync view ---------- */
-let wfStatusFilter=null;
-async function renderWeeklyFollowups(){
-  const team=document.getElementById('wfTeamFilter').value;
-  const params=new URLSearchParams(); if(team) params.set('team',team);
+/* ---------- Weekly Meeting (admin + management): cross-team sync view ---------- */
+let wmStatusFilter=null;
+async function renderWeeklyMeeting(){
+  const team=document.getElementById('wmTeamFilter').value;
+  const params=new URLSearchParams({scope:'all'}); if(team) params.set('team',team);
   let tasks=[];
   try{ tasks=await api('/api/tasks?'+params.toString()); }catch(err){ showToast(err.message,true); }
-  document.getElementById('wfKpiBlocked').textContent=tasks.filter(t=>t.status==='blocked').length;
-  document.getElementById('wfKpiDiscuss').textContent=tasks.filter(t=>t.status==='needs_discussion').length;
-  document.getElementById('wfKpiProgress').textContent=tasks.filter(t=>t.status==='in_progress').length;
-  document.getElementById('wfKpiDone').textContent=tasks.filter(t=>t.status==='done').length;
-  ['wfKpiBlockedCard','wfKpiDiscussCard','wfKpiProgressCard','wfKpiDoneCard'].forEach(id=>document.getElementById(id).classList.remove('active'));
-  const activeMap={blocked:'wfKpiBlockedCard',needs_discussion:'wfKpiDiscussCard',in_progress:'wfKpiProgressCard',done:'wfKpiDoneCard'};
-  if(wfStatusFilter) document.getElementById(activeMap[wfStatusFilter]).classList.add('active');
+  document.getElementById('wmKpiBlocked').textContent=tasks.filter(t=>t.status==='blocked').length;
+  document.getElementById('wmKpiDiscuss').textContent=tasks.filter(t=>t.status==='needs_discussion').length;
+  document.getElementById('wmKpiProgress').textContent=tasks.filter(t=>t.status==='in_progress').length;
+  document.getElementById('wmKpiDone').textContent=tasks.filter(t=>t.status==='done').length;
+  ['wmKpiBlockedCard','wmKpiDiscussCard','wmKpiProgressCard','wmKpiDoneCard'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  const activeMap={blocked:'wmKpiBlockedCard',needs_discussion:'wmKpiDiscussCard',in_progress:'wmKpiProgressCard',done:'wmKpiDoneCard'};
+  if(wmStatusFilter) document.getElementById(activeMap[wmStatusFilter]).classList.add('active');
   const labelMap={blocked:'Blocked only',needs_discussion:'Needs discussion only',in_progress:'In progress only',done:'Done only'};
-  const noteEl=document.getElementById('wfFilterNote');
-  if(wfStatusFilter){ noteEl.style.display=''; document.getElementById('wfFilterNoteText').textContent=`Showing: ${labelMap[wfStatusFilter]}`; }
+  const noteEl=document.getElementById('wmFilterNote');
+  if(wmStatusFilter){ noteEl.style.display=''; document.getElementById('wmFilterNoteText').textContent=`Showing: ${labelMap[wmStatusFilter]}`; }
   else noteEl.style.display='none';
 
-  const visible = wfStatusFilter ? tasks.filter(t=>t.status===wfStatusFilter) : tasks;
+  const visible = wmStatusFilter ? tasks.filter(t=>t.status===wmStatusFilter) : tasks;
   const rank=s=>({blocked:0,needs_discussion:1,in_progress:2,not_started:3,done:4}[s]??5);
   // Closest deadline first (done tasks sink to the bottom regardless of date) so the
   // meeting can work top-down on what needs to be solved soonest; status breaks ties.
@@ -1857,7 +1941,7 @@ async function renderWeeklyFollowups(){
     || rank(a.status)-rank(b.status)
     || (a.deal_name||'').localeCompare(b.deal_name||''));
   const today=todayStr();
-  document.getElementById('wfList').innerHTML = sorted.map(t=>{
+  document.getElementById('wmList').innerHTML = sorted.map(t=>{
     const tm=TASK_TEAM_META[t.team], sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
     const overdue=t.due && t.status!=='done' && t.due<today;
     return `<div class="rounded-lg p-3" style="background:var(--surface-2)">
@@ -1876,10 +1960,10 @@ async function renderWeeklyFollowups(){
     </div>`;
   }).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing to show${team?` for ${escapeHtml(TASK_TEAM_META[team]?.label||team)}`:''}.</p>`;
 }
-document.getElementById('wfTeamFilter').addEventListener('change',renderWeeklyFollowups);
-document.getElementById('wfFilterClear').addEventListener('click',()=>{ wfStatusFilter=null; renderWeeklyFollowups(); });
-[['wfKpiBlockedCard','blocked'],['wfKpiDiscussCard','needs_discussion'],['wfKpiProgressCard','in_progress'],['wfKpiDoneCard','done']].forEach(([id,key])=>{
-  document.getElementById(id).addEventListener('click',()=>{ wfStatusFilter = wfStatusFilter===key?null:key; renderWeeklyFollowups(); });
+document.getElementById('wmTeamFilter').addEventListener('change',renderWeeklyMeeting);
+document.getElementById('wmFilterClear').addEventListener('click',()=>{ wmStatusFilter=null; renderWeeklyMeeting(); });
+[['wmKpiBlockedCard','blocked'],['wmKpiDiscussCard','needs_discussion'],['wmKpiProgressCard','in_progress'],['wmKpiDoneCard','done']].forEach(([id,key])=>{
+  document.getElementById(id).addEventListener('click',()=>{ wmStatusFilter = wmStatusFilter===key?null:key; renderWeeklyMeeting(); });
 });
 
 /* ---------- My Team Tasks (solution / project / product): personal follow-up inbox ---------- */
@@ -1992,6 +2076,8 @@ document.getElementById('dealForm').addEventListener('submit',async e=>{
     strategy:document.getElementById('dealStrategy').value.trim(),
     next_actions:nextActionsDraft,
     proofs:proofsDraft,
+    expected_po_date:document.getElementById('dealExpectedPO').value,
+    expected_revenue_date:document.getElementById('dealExpectedRevenue').value,
   };
   try {
     if(id){ await api(`/api/deals/${id}`,{method:'PUT',body:JSON.stringify(payload)}); showToast('Opportunity updated'); }

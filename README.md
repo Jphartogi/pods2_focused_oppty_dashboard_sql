@@ -148,9 +148,16 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   target/gap/coverage noise — listing every task assigned to them across *all* opportunities, sorted
   by **closest target date first** (done tasks sink to the bottom); tick a task done, change its
   status, edit the note, or adjust the date, right there. Admin and management get a separate
-  **Weekly Follow-ups** view with the same closest-date-first sorting — every Blocked/Needs-discussion
+  **Weekly Meeting** board with the same closest-date-first sorting — every Blocked/Needs-discussion
   item across the whole portfolio in one place, filterable by team and status, built specifically to
-  run the weekly cross-team sync and see what's most urgent to resolve.
+  run the weekly cross-team sync and see what's most urgent to resolve. Unlike My Team Tasks, Weekly
+  Meeting is visible to **every role** (Sales and admin/management included, not just Solution/
+  Project/Product) so everyone can see the same picture ahead of the meeting; it's read-only there.
+- **Action Plan timeline** — in the same Action Plan tab, Sales can set two **milestones** per
+  opportunity: the **expected PO date** and the **expected revenue booking date**. A vertical timeline
+  right below plots those milestones together with every dated Planned execution step, sorted
+  chronologically from **today** through to the end of the project, so you can see at a glance what's
+  coming up and in what order. It updates live as you edit either milestone date or a step's date.
 - **Framework analytics** — Analytics shows a proof-by-proof funnel (done / in progress / not
   started across the filtered deals), completion by Account Manager, and a click-to-drill list of the
   deals stuck at any given proof. The PDF report includes the same breakdown.
@@ -222,12 +229,14 @@ AM choosing any team, or a cross-functional role creating only under its own tea
 is ignored and forced server-side for them; both may set the starting `status` and an optional `due`
 date at creation time), `PUT/DELETE /api/tasks/<id>` (cross-functional roles may edit/delete only
 their own team's tasks, and can change `text`/`status`/`note`/`due` but never `team`; admin/owning AM
-can edit or delete any field on any task on their deals), `GET /api/tasks?team=&status=`
-(cross-opportunity list — cross-functional roles are always scoped to their own team; admin/
-management can filter by team and see everything).
+can edit or delete any field on any task on their deals), `GET /api/tasks?team=&status=&scope=`
+(cross-opportunity list, any authenticated role — by default a cross-functional role only ever sees
+its own team's tasks; pass `scope=all` to see every team's tasks instead, which is what the shared
+Weekly Meeting board uses so every role sees the same picture).
 **Config** — `GET /api/config` (all), `PUT /api/config` (admin). Config includes `target_amount`,
 `strategic_pillars`, `squads`, and `am_targets` (a map of AM full-name → 2026 revenue target).
-Deals carry `estimated_value` (TCV) and `revenue_2026`.
+Deals carry `estimated_value` (TCV), `revenue_2026`, and the two Action Plan milestones
+`expected_po_date` / `expected_revenue_date`.
 **Reports** — `GET /api/export/pdf`, `GET /api/performance/export_pdf?am=`
 **Login Logs** (admin) — `GET /api/login_logs`, `GET /api/login_logs/export_xlsx`. Config's
 `max_login_logs` (default 100, range 10–2000) controls how many of the most recent logs are kept.
