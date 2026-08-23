@@ -49,11 +49,15 @@ Management → Add User when you're ready to bring those teams on.
   and the server independently rejects cross-AM edits with `403`. New opportunities an AM creates
   are automatically assigned to them (they cannot assign to someone else).
 - **management** — read-only; no Settings tab, no edit controls.
-- **solution / project / product** — cross-functional roles that bridge Sales with delivery.
-  They see only a **My Team Tasks** inbox (every Team Task assigned to their team, across every
-  opportunity) and can update a task's **status** and **note** — nothing else. They have no access
-  to Tracker, Calendar, Analytics, Performance, or any opportunity field (TCV, stage, the execution
-  framework, etc.); both the nav and the API independently enforce this.
+- **solution / project / product** — cross-functional roles that bridge Sales with delivery. They
+  can browse the **Tracker** read-only (same full pipeline data everyone else sees — every
+  opportunity, customer, AM, TCV, stage) for context, plus their own **My Team Tasks** inbox (every
+  task assigned to their team, across every opportunity). From either place they can open an
+  opportunity's **Team Tasks** panel to file a new follow-up under their own team, and update the
+  **status** and **note** on their own team's tasks — nothing else. They can't edit any opportunity
+  field (TCV, stage, the execution framework, etc.), reassign a task to a different team, or touch
+  another team's tasks, and have no access to Calendar, Analytics, or Performance; both the nav and
+  the API independently enforce this.
 
 Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 
@@ -130,14 +134,19 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   (Earlier builds could auto-derive it from execution-framework progress; that automation has been
   removed so the team controls Stage explicitly.)
 - **Team Tasks — the Sales ↔ Solution/Project/Product bridge.** A fourth tab in the opportunity edit
-  modal where Sales (AM/admin) creates follow-up tasks and assigns each one to **Solution**, **Project**
-  or **Product**. Every change saves immediately (not tied to the modal's Save button), so it stays in
-  sync in real time. Each cross-functional team gets its own **My Team Tasks** inbox (its own nav item,
-  hidden from everyone else) listing every task assigned to them across *all* opportunities — they can
-  tick a task done or change its status (Not started / In progress / **Blocked** / **Needs discussion**
-  / Done) and add a note, and nothing else. Admin and management get a separate **Weekly Follow-ups**
-  view — every Blocked/Needs-discussion item across the whole portfolio in one place, filterable by
-  team and status, built specifically to run the weekly cross-team sync.
+  modal where anyone who can touch it — Sales (AM/admin), or Solution/Project/Product themselves —
+  files a follow-up task. Sales sees the full opportunity and can assign a task to any of the three
+  teams, reassign or delete any task, and edit anything else on the deal as usual. A cross-functional
+  user instead gets a stripped-down version of the same modal (title "Team Tasks", no other tabs, no
+  Save button — just a read-only summary of the opportunity for context): they can only file tasks
+  under their *own* team and can only edit/delete their own team's tasks; every other team's tasks on
+  that opportunity show up locked (status and note disabled, no delete). Every change saves
+  immediately (not tied to a Save button), so it stays in sync in real time. Each cross-functional
+  team also gets its own **My Team Tasks** inbox listing every task assigned to them across *all*
+  opportunities — tick a task done, change its status (Not started / In progress / **Blocked** /
+  **Needs discussion** / Done), or edit the note, right there. Admin and management get a separate
+  **Weekly Follow-ups** view — every Blocked/Needs-discussion item across the whole portfolio in one
+  place, filterable by team and status, built specifically to run the weekly cross-team sync.
 - **Framework analytics** — Analytics shows a proof-by-proof funnel (done / in progress / not
   started across the filtered deals), completion by Account Manager, and a click-to-drill list of the
   deals stuck at any given proof. The PDF report includes the same breakdown.
@@ -204,9 +213,11 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 `PUT /api/deals/<id>/blocker` (mutations require admin or the owning AM)
 **Users** (admin) — `GET/POST /api/users`, `PUT/DELETE /api/users/<id>`. Roles: `admin`,
 `account_manager`, `management`, `solution`, `project`, `product`.
-**Team Tasks** — `GET/POST /api/deals/<id>/tasks` (create/list, admin or owning AM to create),
-`PUT/DELETE /api/tasks/<id>` (cross-functional roles may only PUT `status`/`note` on tasks assigned
-to their own team; admin/owning AM can edit or delete any field), `GET /api/tasks?team=&status=`
+**Team Tasks** — `GET/POST /api/deals/<id>/tasks` (list: any authenticated role; create: admin/owning
+AM choosing any team, or a cross-functional role creating only under its own team — the `team` field
+is ignored and forced server-side for them), `PUT/DELETE /api/tasks/<id>` (cross-functional roles may
+edit/delete only their own team's tasks, and can change `text`/`status`/`note` but never `team`;
+admin/owning AM can edit or delete any field on any task on their deals), `GET /api/tasks?team=&status=`
 (cross-opportunity list — cross-functional roles are always scoped to their own team; admin/
 management can filter by team and see everything).
 **Config** — `GET /api/config` (all), `PUT /api/config` (admin). Config includes `target_amount`,

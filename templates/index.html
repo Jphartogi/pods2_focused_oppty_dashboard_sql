@@ -946,12 +946,12 @@
       <h2 id="dealModalTitle" class="text-base font-medium">Add Opportunity</h2>
       <button data-close-modal="dealModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button>
     </div>
-    <div class="px-6 pt-3 flex gap-1" style="border-bottom:1px solid var(--border)">
-      <button type="button" class="modal-tab-btn active text-sm px-4 py-2" data-mtab="details">Opportunity Details</button>
-      <button type="button" class="modal-tab-btn text-sm px-4 py-2" data-mtab="framework">
+    <div id="dealModalTabBar" class="px-6 pt-3 flex gap-1" style="border-bottom:1px solid var(--border)">
+      <button type="button" id="mtabBtnDetails" class="modal-tab-btn active text-sm px-4 py-2" data-mtab="details">Opportunity Details</button>
+      <button type="button" id="mtabBtnFramework" class="modal-tab-btn text-sm px-4 py-2" data-mtab="framework">
         Execution Framework <span id="mtabFwBadge" class="chip ml-1" style="color:var(--text-muted)">0/8</span>
       </button>
-      <button type="button" class="modal-tab-btn text-sm px-4 py-2" data-mtab="actionplan">
+      <button type="button" id="mtabBtnActionplan" class="modal-tab-btn text-sm px-4 py-2" data-mtab="actionplan">
         Action Plan <span id="mtabApBadge" class="chip ml-1" style="color:var(--text-muted)">0</span>
       </button>
       <button type="button" class="modal-tab-btn text-sm px-4 py-2" data-mtab="teamtasks">
@@ -1032,7 +1032,8 @@
       </div><!-- /actionplan pane -->
 
       <div id="mtab-teamtasks" class="modal-tab-pane space-y-4" style="display:none">
-        <p class="text-[10px]" style="color:var(--text-faint)">Assign follow-ups to Solution, Project or Product so everyone knows what's pending and who owns it. They can only update the status and note on their own team's tasks here — nothing else on this opportunity.</p>
+        <div id="teamTasksDealContext" class="rounded-lg p-3" style="border:1px solid var(--border);display:none"></div>
+        <p class="text-[10px]" style="color:var(--text-faint)">Assign follow-ups to Solution, Project or Product so everyone knows what's pending and who owns it. They can only update the status, note and their own new tasks here — nothing else on this opportunity.</p>
         <div id="teamTasksNewDealNote" class="rounded-lg p-3 text-xs" style="border:1px solid var(--border);color:var(--text-faint);display:none">Save this opportunity first, then add team tasks.</div>
         <div id="teamTasksBody">
           <div id="teamTasksList" class="space-y-2 mb-3"></div>
@@ -1049,8 +1050,9 @@
       </div><!-- /teamtasks pane -->
 
       <div class="flex justify-end gap-2 pt-2">
-        <button type="button" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button>
-        <button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button>
+        <button type="button" id="dealModalCloseBtn" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted);display:none">Close</button>
+        <button type="button" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)" id="dealModalCancelBtn">Cancel</button>
+        <button type="submit" id="dealModalSaveBtn" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button>
       </div>
     </form>
   </div>
@@ -1280,10 +1282,11 @@ async function enterApp(){
   document.getElementById('quickConfigBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('perfUploadWrap').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('addDealBtn').style.display = (ROLE==='admin'||ROLE==='account_manager') ? '' : 'none';
-  // Solution / Project / Product only ever see their own task inbox - not sales' pipeline views.
+  // Solution / Project / Product can see every opportunity (read-only, for context) and
+  // their own task inbox, but not Calendar / Analytics / Performance / any edit control.
   const isCrossFunctional = CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
   document.getElementById('myTeamTasksNavBtn').style.display = isCrossFunctional ? '' : 'none';
-  ['trackerNavBtn','calendarNavBtn','analyticsNavBtn','perfNavBtn'].forEach(id=>{
+  ['calendarNavBtn','analyticsNavBtn','perfNavBtn'].forEach(id=>{
     document.getElementById(id).style.display = isCrossFunctional ? 'none' : '';
   });
   try { PROOF_FRAMEWORK = await api('/api/proof_framework'); } catch(e) { /* keep fallback */ }
@@ -1315,7 +1318,7 @@ function switchTab(tab){
   if(tab==='management' && !(ROLE==='admin'||ROLE==='management')) return;
   if(tab==='weeklyfollowups' && !(ROLE==='admin'||ROLE==='management')) return;
   if(tab==='myteamtasks' && !CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
-  if(['tracker','calendar','analytics','performance'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
+  if(['calendar','analytics','performance'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
@@ -1474,6 +1477,8 @@ function renderDealsTable(){
         ${editable
           ? `<button class="edit-btn" data-id="${deal.id}" style="color:var(--primary)" onclick="event.stopPropagation()"><i class="fa-solid fa-pen text-xs"></i></button>
              <button class="del-btn ml-3" data-id="${deal.id}" style="color:var(--danger)" onclick="event.stopPropagation()"><i class="fa-solid fa-trash text-xs"></i></button>`
+          : CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)
+          ? `<button class="tasks-btn" data-id="${deal.id}" style="color:var(--primary)" onclick="event.stopPropagation()" title="Team Tasks"><i class="fa-solid fa-list-check text-xs"></i></button>`
           : `<span class="text-xs" style="color:var(--text-faint)"><i class="fa-solid fa-lock"></i></span>`}
       </td>`;
     tr.addEventListener('dblclick',()=>openDetail(deal.id));
@@ -1489,6 +1494,7 @@ function renderDealsTable(){
   ['prevPage','firstPage','nextPage','lastPage'].forEach(id=>{ const b=document.getElementById(id); b.style.opacity=b.disabled?'0.4':'1'; b.style.cursor=b.disabled?'default':'pointer'; });
   tbody.querySelectorAll('.edit-btn').forEach(b=>b.addEventListener('click',()=>openDealModal(parseInt(b.dataset.id))));
   tbody.querySelectorAll('.del-btn').forEach(b=>b.addEventListener('click',()=>confirmDeleteDeal(parseInt(b.dataset.id))));
+  tbody.querySelectorAll('.tasks-btn').forEach(b=>b.addEventListener('click',()=>openDealModal(parseInt(b.dataset.id))));
   tbody.querySelectorAll('.progress-slider').forEach(sl=>{
     sl.addEventListener('input',e=>{ e.target.nextElementSibling.textContent=e.target.value+'%'; });
     sl.addEventListener('change',async e=>{
@@ -1563,7 +1569,9 @@ function openDetail(id){
       <div class="flex justify-between text-xs mb-2" style="color:var(--text-muted)"><span>Next Actions (action plan)</span><span>${done}/${total} done (${pct}%)</span></div>
       <div class="space-y-1.5">${d.next_actions.map(a=>`<div class="flex items-center gap-2 text-sm" style="color:var(--text)"><i class="fa-${a.done?'solid fa-circle-check':'regular fa-circle'}" style="color:${a.done?'var(--success)':'var(--text-faint)'}"></i><span class="flex-1 ${a.done?'line-through':''}" style="${a.done?'color:var(--text-faint)':''}">${escapeHtml(a.action)}</span>${a.due?`<span class="chip" style="color:${(!a.done&&a.due<todayStr())?'var(--danger)':'var(--text-muted)'}">${a.due}</span>`:''}</div>`).join('')||'<p class="text-xs" style="color:var(--text-faint)">No next actions.</p>'}</div>
     </div>
-    ${editable?`<button onclick="closeDetail();openDealModal(${d.id})" class="btn-primary w-full text-sm py-2.5 rounded-lg"><i class="fa-solid fa-pen mr-1.5"></i>Edit Opportunity</button>`:`<p class="text-xs text-center" style="color:var(--text-faint)"><i class="fa-solid fa-lock mr-1"></i>${ROLE==='management'?'View-only role':'Assigned to another AM'}</p>`}
+    ${editable?`<button onclick="closeDetail();openDealModal(${d.id})" class="btn-primary w-full text-sm py-2.5 rounded-lg"><i class="fa-solid fa-pen mr-1.5"></i>Edit Opportunity</button>`
+      :CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)?`<button onclick="closeDetail();openDealModal(${d.id})" class="btn-primary w-full text-sm py-2.5 rounded-lg"><i class="fa-solid fa-list-check mr-1.5"></i>Team Tasks</button>`
+      :`<p class="text-xs text-center" style="color:var(--text-faint)"><i class="fa-solid fa-lock mr-1"></i>${ROLE==='management'?'View-only role':'Assigned to another AM'}</p>`}
   `;
   document.getElementById('detailBackdrop').classList.remove('hidden');
   document.getElementById('detailDrawer').style.transform='translateX(0)';
@@ -1576,7 +1584,28 @@ document.getElementById('detailBackdrop').addEventListener('click',closeDetail);
 document.getElementById('addDealBtn').addEventListener('click',()=>openDealModal(null));
 function openDealModal(id){
   const d=id?DEALS.find(x=>x.id===id):null;
-  document.getElementById('dealModalTitle').textContent=d?'Edit Opportunity':'Add Opportunity';
+  const restricted = CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
+  if(restricted && !d) return; // cross-functional roles can only add tasks to an existing opportunity
+
+  document.getElementById('dealModalTabBar').style.display = restricted ? 'none' : '';
+  document.getElementById('dealModalSaveBtn').style.display = restricted ? 'none' : '';
+  document.getElementById('dealModalCancelBtn').style.display = restricted ? 'none' : '';
+  document.getElementById('dealModalCloseBtn').style.display = restricted ? '' : 'none';
+  const ctx=document.getElementById('teamTasksDealContext');
+  if(restricted && d){
+    ctx.style.display='';
+    ctx.innerHTML=`<p class="text-sm font-medium mb-1" style="color:var(--text)">${escapeHtml(d.deal_name)}</p>
+      <div class="flex flex-wrap gap-3 text-xs" style="color:var(--text-muted)">
+        <span>${escapeHtml(d.customer||'—')}</span>
+        <span class="chip" style="color:var(--text-muted)">${escapeHtml(d.assigned_am||'—')}</span>
+        <span><span class="stage-dot" style="background:${stageColor(d.stage)}"></span> ${escapeHtml(d.stage)}</span>
+        <span>${fmtIDR(d.estimated_value)}</span>
+      </div>`;
+  } else { ctx.style.display='none'; ctx.innerHTML=''; }
+  document.getElementById('newTaskTeam').disabled = restricted;
+  if(restricted) document.getElementById('newTaskTeam').value = ROLE;
+
+  document.getElementById('dealModalTitle').textContent = restricted ? 'Team Tasks' : (d?'Edit Opportunity':'Add Opportunity');
   document.getElementById('dealId').value=d?d.id:'';
   document.getElementById('dealName').value=d?d.deal_name:'';
   document.getElementById('dealCustomer').value=d?d.customer:'';
@@ -1599,7 +1628,7 @@ function openDealModal(id){
   renderNextActionsDraft();
   renderProofsDraft();
   loadTeamTasks(d?d.id:null);
-  switchModalTab('details');
+  switchModalTab(restricted?'teamtasks':'details');
   openModal('dealModal');
 }
 document.getElementById('dealProgress').addEventListener('input',e=>document.getElementById('dealProgressLabel').textContent=e.target.value);
@@ -1735,18 +1764,20 @@ function renderTeamTasksBadge(){
 }
 function renderTeamTasks(){
   const list=document.getElementById('teamTasksList');
+  const isCrossFunctional=CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
   list.innerHTML = dealTasksDraft.map(t=>{
     const tm=TASK_TEAM_META[t.team], sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
+    const rowEditable = !isCrossFunctional || t.team===ROLE;
     return `<div class="rounded-lg p-2.5" style="border:1px solid var(--border)">
       <div class="flex items-center gap-2 mb-1.5">
         <span class="chip" style="background:${tm.bg};color:${tm.color};border-color:transparent">${tm.label}</span>
         <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
-        <select class="tt-status field text-xs px-2 py-1" data-id="${t.id}" style="width:150px;background:${sm.bg};color:${sm.color};border-color:transparent">
+        <select class="tt-status field text-xs px-2 py-1" data-id="${t.id}" ${rowEditable?'':'disabled'} style="width:150px;background:${sm.bg};color:${sm.color};border-color:transparent">
           ${Object.entries(TASK_STATUS_META).map(([v,m])=>`<option value="${v}" ${t.status===v?'selected':''}>${m.label}</option>`).join('')}
         </select>
-        <button type="button" class="tt-del" data-id="${t.id}" style="color:var(--text-faint)" title="Remove"><i class="fa-solid fa-xmark"></i></button>
+        ${rowEditable?`<button type="button" class="tt-del" data-id="${t.id}" style="color:var(--text-faint)" title="Remove"><i class="fa-solid fa-xmark"></i></button>`:`<span style="width:16px"></span>`}
       </div>
-      <input type="text" class="tt-note field w-full px-2 py-1 text-xs" data-id="${t.id}" placeholder="Note — what's the status, or what needs to be discussed..." value="${escapeHtml(t.note||'')}">
+      <input type="text" class="tt-note field w-full px-2 py-1 text-xs" data-id="${t.id}" ${rowEditable?'':'disabled'} placeholder="Note — what's the status, or what needs to be discussed..." value="${escapeHtml(t.note||'')}">
     </div>`;
   }).join('') || `<p class="text-xs" style="color:var(--text-faint)">No team tasks yet — add what Solution, Project or Product need to follow up on below.</p>`;
   list.querySelectorAll('.tt-status').forEach(s=>s.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{status:e.target.value})));

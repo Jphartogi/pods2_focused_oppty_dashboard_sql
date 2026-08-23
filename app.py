@@ -952,22 +952,31 @@ def get_deal_tasks(deal_id):
 
 
 @app.route("/api/deals/<int:deal_id>/tasks", methods=["POST"])
-@login_required(roles=("admin", "account_manager"))
+@login_required(roles=("admin", "account_manager") + CROSS_FUNCTIONAL_ROLES)
 def create_deal_task(deal_id):
     data = request.get_json(force=True) or {}
+    user = g.current_user
     db = get_db()
     deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
     if not deal_row:
         return jsonify({"error": "Deal not found"}), 404
-    if not can_edit_deal(g.current_user, deal_row):
-        return jsonify({"error": "You can only add tasks to opportunities assigned to you"}), 403
+
+    if user["role"] in CROSS_FUNCTIONAL_ROLES:
+        # Solution/Project/Product can flag a follow-up on any opportunity, but only
+        # ever under their own team - they can't file work on another team's behalf.
+        team = user["role"]
+    else:
+        if not can_edit_deal(user, deal_row):
+            return jsonify({"error": "You can only add tasks to opportunities assigned to you"}), 403
+        team = str(data.get("team", "") or "").strip()
+        if team not in CROSS_FUNCTIONAL_ROLES:
+            return jsonify({"error": "A valid team (solution/project/product) is required"}), 400
 
     text = str(data.get("text", "") or "").strip()
-    team = str(data.get("team", "") or "").strip()
-    if not text or team not in CROSS_FUNCTIONAL_ROLES:
-        return jsonify({"error": "text and a valid team (solution/project/product) are required"}), 400
+    if not text:
+        return jsonify({"error": "text is required"}), 400
 
-    creator = g.current_user.get("full_name") or g.current_user.get("username", "")
+    creator = user.get("full_name") or user.get("username", "")
     cur = db.execute(
         """INSERT INTO deal_tasks (deal_id, text, team, status, created_by)
            VALUES (?, ?, ?, 'not_started', ?)""",
@@ -991,8 +1000,12 @@ def update_task(task_id):
     text, team, status, note = row["text"], row["team"], row["status"], row["note"]
 
     if user["role"] in CROSS_FUNCTIONAL_ROLES:
+        # Own team's tasks only; text/status/note are theirs to keep current, but the
+        # team assignment itself is fixed - they can't move a task to another team.
         if row["team"] != user["role"]:
             return jsonify({"error": "You can only update your own team's tasks"}), 403
+        if str(data.get("text", "")).strip():
+            text = str(data["text"]).strip()
         if "status" in data:
             new_status = str(data["status"] or "")
             if new_status not in TASK_STATUSES:
@@ -1032,15 +1045,22 @@ def update_task(task_id):
 
 
 @app.route("/api/tasks/<int:task_id>", methods=["DELETE"])
-@login_required(roles=("admin", "account_manager"))
+@login_required()
 def delete_task(task_id):
     db = get_db()
     row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()
     if not row:
         return jsonify({"error": "Task not found"}), 404
-    deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (row["deal_id"],)).fetchone()
-    if not deal_row or not can_edit_deal(g.current_user, deal_row):
-        return jsonify({"error": "You can only delete tasks on opportunities assigned to you"}), 403
+    user = g.current_user
+    if user["role"] in CROSS_FUNCTIONAL_ROLES:
+        if row["team"] != user["role"]:
+            return jsonify({"error": "You can only delete your own team's tasks"}), 403
+    elif user["role"] in ("admin", "account_manager"):
+        deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (row["deal_id"],)).fetchone()
+        if not deal_row or not can_edit_deal(user, deal_row):
+            return jsonify({"error": "You can only delete tasks on opportunities assigned to you"}), 403
+    else:
+        return jsonify({"error": "Forbidden"}), 403
     db.execute("DELETE FROM deal_tasks WHERE id = ?", (task_id,))
     db.commit()
     return jsonify({"ok": True})
