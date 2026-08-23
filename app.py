@@ -26,7 +26,11 @@ app = Flask(__name__)
 # In-memory token store: token -> {user_id, username, role, full_name}
 TOKENS = {}
 
-VALID_ROLES = ("admin", "account_manager", "management")
+VALID_ROLES = ("admin", "account_manager", "management", "solution", "project", "product")
+# Cross-functional roles that can only edit the Team Tasks section of an opportunity
+# (never TCV, the execution framework, or any other sales-owned field).
+CROSS_FUNCTIONAL_ROLES = ("solution", "project", "product")
+TASK_STATUSES = ("not_started", "in_progress", "blocked", "needs_discussion", "done")
 VALID_STAGES = ("Prospecting", "Negotiation", "Closed", "Blocked")
 
 DEFAULT_PILLARS = [
@@ -286,10 +290,41 @@ def _seed_deals():
     return rows
 
 
+def _widen_user_roles(db):
+    """Older databases have CHECK(role IN ('admin','account_manager','management')) on
+    users. SQLite can't ALTER a CHECK constraint in place, so when the constraint is too
+    narrow for the new cross-functional roles we rebuild the table - copying every row
+    across unchanged - rather than touching any data."""
+    row = db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
+    ).fetchone()
+    if not row or not row["sql"] or "'solution'" in row["sql"]:
+        return  # table doesn't exist yet, or already migrated
+    db.executescript(
+        """
+        ALTER TABLE users RENAME TO users_pre_roles_widen;
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN
+                ('admin', 'account_manager', 'management', 'solution', 'project', 'product')),
+            full_name TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO users (id, username, password, role, full_name, created_at)
+            SELECT id, username, password, role, full_name, created_at FROM users_pre_roles_widen;
+        DROP TABLE users_pre_roles_widen;
+        """
+    )
+
+
 def migrate_db(db):
     """Add columns introduced after the first release, without touching data."""
     def columns(table):
         return {r[1] for r in db.execute(f"PRAGMA table_info({table})")}
+
+    _widen_user_roles(db)
 
     deal_cols = columns("deals")
     if "revenue_2026" not in deal_cols:
@@ -355,9 +390,23 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN ('admin', 'account_manager', 'management')),
+            role TEXT NOT NULL CHECK(role IN
+                ('admin', 'account_manager', 'management', 'solution', 'project', 'product')),
             full_name TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS deal_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+            text TEXT NOT NULL,
+            team TEXT NOT NULL CHECK(team IN ('solution', 'project', 'product')),
+            status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN
+                ('not_started', 'in_progress', 'blocked', 'needs_discussion', 'done')),
+            note TEXT DEFAULT '',
+            created_by TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS login_logs (
@@ -864,6 +913,165 @@ def update_blocker(deal_id):
     db.commit()
     row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
     return jsonify(deal_to_dict(row))
+
+
+# --------------------------------------------------------------------------
+# Team Tasks API - the bridge between Sales and Solution / Project / Product.
+# Sales (admin/account_manager) create and fully manage tasks on their own deals.
+# Cross-functional roles (solution/project/product) may only flip the status and
+# edit the note on tasks assigned to their own team - never the task text, the
+# team assignment, or any other opportunity field.
+# --------------------------------------------------------------------------
+def task_to_dict(row):
+    d = {
+        "id": row["id"],
+        "deal_id": row["deal_id"],
+        "text": row["text"],
+        "team": row["team"],
+        "status": row["status"],
+        "note": row["note"] or "",
+        "created_by": row["created_by"] or "",
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+    if "deal_name" in row.keys():
+        d["deal_name"] = row["deal_name"]
+        d["customer"] = row["customer"] or ""
+        d["assigned_am"] = row["assigned_am"] or ""
+    return d
+
+
+@app.route("/api/deals/<int:deal_id>/tasks", methods=["GET"])
+@login_required()
+def get_deal_tasks(deal_id):
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM deal_tasks WHERE deal_id = ? ORDER BY created_at", (deal_id,)
+    ).fetchall()
+    return jsonify([task_to_dict(r) for r in rows])
+
+
+@app.route("/api/deals/<int:deal_id>/tasks", methods=["POST"])
+@login_required(roles=("admin", "account_manager"))
+def create_deal_task(deal_id):
+    data = request.get_json(force=True) or {}
+    db = get_db()
+    deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    if not deal_row:
+        return jsonify({"error": "Deal not found"}), 404
+    if not can_edit_deal(g.current_user, deal_row):
+        return jsonify({"error": "You can only add tasks to opportunities assigned to you"}), 403
+
+    text = str(data.get("text", "") or "").strip()
+    team = str(data.get("team", "") or "").strip()
+    if not text or team not in CROSS_FUNCTIONAL_ROLES:
+        return jsonify({"error": "text and a valid team (solution/project/product) are required"}), 400
+
+    creator = g.current_user.get("full_name") or g.current_user.get("username", "")
+    cur = db.execute(
+        """INSERT INTO deal_tasks (deal_id, text, team, status, created_by)
+           VALUES (?, ?, ?, 'not_started', ?)""",
+        (deal_id, text, team, creator),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return jsonify(task_to_dict(row)), 201
+
+
+@app.route("/api/tasks/<int:task_id>", methods=["PUT"])
+@login_required()
+def update_task(task_id):
+    data = request.get_json(force=True) or {}
+    db = get_db()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Task not found"}), 404
+
+    user = g.current_user
+    text, team, status, note = row["text"], row["team"], row["status"], row["note"]
+
+    if user["role"] in CROSS_FUNCTIONAL_ROLES:
+        if row["team"] != user["role"]:
+            return jsonify({"error": "You can only update your own team's tasks"}), 403
+        if "status" in data:
+            new_status = str(data["status"] or "")
+            if new_status not in TASK_STATUSES:
+                return jsonify({"error": "Invalid status"}), 400
+            status = new_status
+        if "note" in data:
+            note = str(data["note"] or "")
+    elif user["role"] in ("admin", "account_manager"):
+        deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (row["deal_id"],)).fetchone()
+        if not deal_row or not can_edit_deal(user, deal_row):
+            return jsonify({"error": "You can only edit tasks on opportunities assigned to you"}), 403
+        if str(data.get("text", "")).strip():
+            text = str(data["text"]).strip()
+        if "team" in data:
+            new_team = str(data["team"] or "")
+            if new_team not in CROSS_FUNCTIONAL_ROLES:
+                return jsonify({"error": "Invalid team"}), 400
+            team = new_team
+        if "status" in data:
+            new_status = str(data["status"] or "")
+            if new_status not in TASK_STATUSES:
+                return jsonify({"error": "Invalid status"}), 400
+            status = new_status
+        if "note" in data:
+            note = str(data["note"] or "")
+    else:
+        return jsonify({"error": "Forbidden"}), 403
+
+    db.execute(
+        """UPDATE deal_tasks SET text = ?, team = ?, status = ?, note = ?,
+           updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+        (text, team, status, note, task_id),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()
+    return jsonify(task_to_dict(row))
+
+
+@app.route("/api/tasks/<int:task_id>", methods=["DELETE"])
+@login_required(roles=("admin", "account_manager"))
+def delete_task(task_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Task not found"}), 404
+    deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (row["deal_id"],)).fetchone()
+    if not deal_row or not can_edit_deal(g.current_user, deal_row):
+        return jsonify({"error": "You can only delete tasks on opportunities assigned to you"}), 403
+    db.execute("DELETE FROM deal_tasks WHERE id = ?", (task_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/tasks", methods=["GET"])
+@login_required(roles=("admin", "management", "solution", "project", "product"))
+def list_tasks():
+    """Cross-opportunity task list. Cross-functional roles only ever see their own
+    team's tasks (their follow-up inbox); admin/management see every task, optionally
+    filtered by ?team= and ?status=, for the weekly cross-team sync."""
+    db = get_db()
+    user = g.current_user
+    query = """SELECT t.*, d.deal_name, d.customer, d.assigned_am
+               FROM deal_tasks t JOIN deals d ON d.id = t.deal_id WHERE 1=1"""
+    params = []
+    if user["role"] in CROSS_FUNCTIONAL_ROLES:
+        query += " AND t.team = ?"
+        params.append(user["role"])
+    else:
+        team = request.args.get("team")
+        if team in CROSS_FUNCTIONAL_ROLES:
+            query += " AND t.team = ?"
+            params.append(team)
+    status = request.args.get("status")
+    if status in TASK_STATUSES:
+        query += " AND t.status = ?"
+        params.append(status)
+    query += " ORDER BY t.updated_at DESC"
+    rows = db.execute(query, params).fetchall()
+    return jsonify([task_to_dict(r) for r in rows])
 
 
 # --------------------------------------------------------------------------

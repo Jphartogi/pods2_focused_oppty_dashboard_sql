@@ -38,6 +38,9 @@ first run (users, config, and the 31 opportunities). Set `PORT` to change the po
 
 > Change these passwords in any non-demo deployment via Settings → User Management.
 
+No `solution` / `project` / `product` accounts are seeded — create them from Settings → User
+Management → Add User when you're ready to bring those teams on.
+
 ## 4. Role-Based & Row-Level Access Control
 
 - **admin** — full CRUD on all opportunities, users, and settings.
@@ -46,6 +49,11 @@ first run (users, config, and the 31 opportunities). Set `PORT` to change the po
   and the server independently rejects cross-AM edits with `403`. New opportunities an AM creates
   are automatically assigned to them (they cannot assign to someone else).
 - **management** — read-only; no Settings tab, no edit controls.
+- **solution / project / product** — cross-functional roles that bridge Sales with delivery.
+  They see only a **My Team Tasks** inbox (every Team Task assigned to their team, across every
+  opportunity) and can update a task's **status** and **note** — nothing else. They have no access
+  to Tracker, Calendar, Analytics, Performance, or any opportunity field (TCV, stage, the execution
+  framework, etc.); both the nav and the API independently enforce this.
 
 Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 
@@ -121,6 +129,15 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 - **Stage — manual** — an opportunity's Stage is set directly by the AM/admin in its edit form.
   (Earlier builds could auto-derive it from execution-framework progress; that automation has been
   removed so the team controls Stage explicitly.)
+- **Team Tasks — the Sales ↔ Solution/Project/Product bridge.** A fourth tab in the opportunity edit
+  modal where Sales (AM/admin) creates follow-up tasks and assigns each one to **Solution**, **Project**
+  or **Product**. Every change saves immediately (not tied to the modal's Save button), so it stays in
+  sync in real time. Each cross-functional team gets its own **My Team Tasks** inbox (its own nav item,
+  hidden from everyone else) listing every task assigned to them across *all* opportunities — they can
+  tick a task done or change its status (Not started / In progress / **Blocked** / **Needs discussion**
+  / Done) and add a note, and nothing else. Admin and management get a separate **Weekly Follow-ups**
+  view — every Blocked/Needs-discussion item across the whole portfolio in one place, filterable by
+  team and status, built specifically to run the weekly cross-team sync.
 - **Framework analytics** — Analytics shows a proof-by-proof funnel (done / in progress / not
   started across the filtered deals), completion by Account Manager, and a click-to-drill list of the
   deals stuck at any given proof. The PDF report includes the same breakdown.
@@ -185,7 +202,13 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 **Deals** — `GET /api/deals?am=&squad=&pillar=&stage=&quarter=`, `POST /api/deals`,
 `PUT /api/deals/<id>`, `DELETE /api/deals/<id>`, `PUT /api/deals/<id>/progress`,
 `PUT /api/deals/<id>/blocker` (mutations require admin or the owning AM)
-**Users** (admin) — `GET/POST /api/users`, `PUT/DELETE /api/users/<id>`
+**Users** (admin) — `GET/POST /api/users`, `PUT/DELETE /api/users/<id>`. Roles: `admin`,
+`account_manager`, `management`, `solution`, `project`, `product`.
+**Team Tasks** — `GET/POST /api/deals/<id>/tasks` (create/list, admin or owning AM to create),
+`PUT/DELETE /api/tasks/<id>` (cross-functional roles may only PUT `status`/`note` on tasks assigned
+to their own team; admin/owning AM can edit or delete any field), `GET /api/tasks?team=&status=`
+(cross-opportunity list — cross-functional roles are always scoped to their own team; admin/
+management can filter by team and see everything).
 **Config** — `GET /api/config` (all), `PUT /api/config` (admin). Config includes `target_amount`,
 `strategic_pillars`, `squads`, and `am_targets` (a map of AM full-name → 2026 revenue target).
 Deals carry `estimated_value` (TCV) and `revenue_2026`.
@@ -264,7 +287,10 @@ live PythonAnywhere instance:
    `config.recurring_revenue`, `config.stages`, `config.am_achievements`, `config.am_recurring`) and
    preserves every existing deal, user, password and setting. A proof's older single note is folded
    into its evidence list automatically. (`config.auto_stage`/`config.stage_rules` may still exist
-   from older releases but are no longer read — Stage is manual only.)
+   from older releases but are no longer read — Stage is manual only.) It also adds the new
+   `deal_tasks` table, and — only if your `users` table predates the `solution`/`project`/`product`
+   roles — rebuilds `users` to widen its role constraint, copying every existing user row across
+   unchanged (usernames, password hashes, everything) rather than touching any data.
 4. Recommended right after reloading: **Settings → Data Backup → Export all data** so you have a
    restore point, then fill in the per-AM Target / YTD / Recurring figures.
 

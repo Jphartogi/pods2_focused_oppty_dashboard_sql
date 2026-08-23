@@ -69,7 +69,8 @@
   .calview-btn { color: var(--text-muted); font-size:12px; padding:5px 12px; border-radius:6px; transition: background .15s ease, color .15s ease; }
   .calview-btn:hover { color: var(--text); background: var(--surface-2); }
   .calview-btn.active { color: #fff; background: var(--primary); font-weight:500; }
-  #calKpiAllCard.active, #calKpiOverdueCard.active, #calKpiProgressCard.active, #calKpiDoneCard.active, #calKpiUndatedCard.active { outline:2px solid var(--primary); outline-offset:-1px; }
+  #calKpiAllCard.active, #calKpiOverdueCard.active, #calKpiProgressCard.active, #calKpiDoneCard.active, #calKpiUndatedCard.active,
+  .kpi-card.active { outline:2px solid var(--primary); outline-offset:-1px; }
   .proof-row { border:1px solid var(--border); border-radius:8px; transition: border-color .15s ease; }
   .proof-row:hover { border-color: var(--primary); }
   .proof-num { width:22px; height:22px; border-radius:9999px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; }
@@ -251,6 +252,8 @@
           </button>
           <div class="nav-group-items space-y-1">
             <button data-tab="management" id="mgmtNavBtn" title="Management View" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-briefcase w-4"></i> <span class="rail-label">Management View</span></button>
+            <button data-tab="weeklyfollowups" id="weeklyFollowupsNavBtn" title="Weekly Follow-ups" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-people-arrows w-4"></i> <span class="rail-label">Weekly Follow-ups</span></button>
+            <button data-tab="myteamtasks" id="myTeamTasksNavBtn" title="My Team Tasks" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-list-check w-4"></i> <span class="rail-label">My Team Tasks</span></button>
           </div>
         </div>
         <!-- Tracker & updates -->
@@ -259,8 +262,8 @@
             <i class="fa-solid fa-chevron-down chev"></i><span>Tracker &amp; Updates</span>
           </button>
           <div class="nav-group-items space-y-1">
-            <button data-tab="tracker" title="Tracker" class="nav-link active w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-table-cells-large w-4"></i> <span class="rail-label">Tracker</span></button>
-            <button data-tab="calendar" title="Calendar" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-calendar-days w-4"></i> <span class="rail-label">Calendar</span></button>
+            <button data-tab="tracker" id="trackerNavBtn" title="Tracker" class="nav-link active w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-table-cells-large w-4"></i> <span class="rail-label">Tracker</span></button>
+            <button data-tab="calendar" id="calendarNavBtn" title="Calendar" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-calendar-days w-4"></i> <span class="rail-label">Calendar</span></button>
           </div>
         </div>
         <!-- Analytics -->
@@ -269,7 +272,7 @@
             <i class="fa-solid fa-chevron-down chev"></i><span>Analytics</span>
           </button>
           <div class="nav-group-items space-y-1">
-            <button data-tab="analytics" title="Pipeline Analytics" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-chart-line w-4"></i> <span class="rail-label">Pipeline Analytics</span></button>
+            <button data-tab="analytics" id="analyticsNavBtn" title="Pipeline Analytics" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-chart-line w-4"></i> <span class="rail-label">Pipeline Analytics</span></button>
             <button data-tab="performance" id="perfNavBtn" title="Performance" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-gauge-high w-4"></i> <span class="rail-label">Performance</span></button>
           </div>
         </div>
@@ -399,6 +402,48 @@
             </div>
           </div>
         </details>
+      </section>
+
+      <!-- ============ WEEKLY FOLLOW-UPS (admin + management) ============ -->
+      <section id="tab-weeklyfollowups" class="tab-panel px-6 py-5">
+        <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
+          <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-people-arrows mr-1" style="color:var(--primary)"></i>Cross-team follow-ups</span>
+          <select id="wfTeamFilter" class="field text-sm px-3 py-1.5">
+            <option value="">All teams</option>
+            <option value="solution">Solution</option>
+            <option value="project">Project</option>
+            <option value="product">Product</option>
+          </select>
+        </div>
+        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Everything Solution, Project and Product have flagged on opportunities — use this to run the weekly sync. Click a KPI to filter.</p>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div id="wfKpiBlockedCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-ban mr-1"></i>Blocked</p><p id="wfKpiBlocked" class="text-xl font-medium mt-1" style="color:var(--danger)">0</p></div>
+          <div id="wfKpiDiscussCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-comments mr-1"></i>Needs discussion</p><p id="wfKpiDiscuss" class="text-xl font-medium mt-1" style="color:var(--warning)">0</p></div>
+          <div id="wfKpiProgressCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">In progress</p><p id="wfKpiProgress" class="text-xl font-medium mt-1" style="color:var(--primary)">0</p></div>
+          <div id="wfKpiDoneCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">Done</p><p id="wfKpiDone" class="text-xl font-medium mt-1" style="color:var(--success)">0</p></div>
+        </div>
+        <p id="wfFilterNote" class="text-[11px] mb-3" style="color:var(--primary);display:none"><i class="fa-solid fa-filter mr-1"></i><span id="wfFilterNoteText"></span> — <button id="wfFilterClear" type="button" class="underline">clear</button></p>
+        <div class="card elev p-5">
+          <div id="wfList" class="space-y-2"></div>
+        </div>
+      </section>
+
+      <!-- ============ MY TEAM TASKS (solution / project / product) ============ -->
+      <section id="tab-myteamtasks" class="tab-panel px-6 py-5">
+        <div class="card elev px-4 py-3 mb-4">
+          <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-list-check mr-1" style="color:var(--primary)"></i>Your team's follow-ups across every opportunity</span>
+        </div>
+        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Update the status and note as you work — sales sees this instantly. You can't edit anything else on these opportunities. Click a KPI to filter.</p>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div id="mtKpiPendingCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">Pending</p><p id="mtKpiPending" class="text-xl font-medium mt-1" style="color:var(--primary)">0</p></div>
+          <div id="mtKpiBlockedCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-ban mr-1"></i>Blocked</p><p id="mtKpiBlocked" class="text-xl font-medium mt-1" style="color:var(--danger)">0</p></div>
+          <div id="mtKpiDiscussCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-comments mr-1"></i>Needs discussion</p><p id="mtKpiDiscuss" class="text-xl font-medium mt-1" style="color:var(--warning)">0</p></div>
+          <div id="mtKpiDoneCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">Done</p><p id="mtKpiDone" class="text-xl font-medium mt-1" style="color:var(--success)">0</p></div>
+        </div>
+        <p id="mtFilterNote" class="text-[11px] mb-3" style="color:var(--primary);display:none"><i class="fa-solid fa-filter mr-1"></i><span id="mtFilterNoteText"></span> — <button id="mtFilterClear" type="button" class="underline">clear</button></p>
+        <div class="card elev p-5">
+          <div id="mtList" class="space-y-2"></div>
+        </div>
       </section>
 
       <!-- ============ TRACKER ============ -->
@@ -909,6 +954,9 @@
       <button type="button" class="modal-tab-btn text-sm px-4 py-2" data-mtab="actionplan">
         Action Plan <span id="mtabApBadge" class="chip ml-1" style="color:var(--text-muted)">0</span>
       </button>
+      <button type="button" class="modal-tab-btn text-sm px-4 py-2" data-mtab="teamtasks">
+        Team Tasks <span id="mtabTtBadge" class="chip ml-1" style="color:var(--text-muted)">0</span>
+      </button>
     </div>
     <form id="dealForm" class="px-6 py-5 space-y-4">
       <input type="hidden" id="dealId">
@@ -983,6 +1031,23 @@
         </div>
       </div><!-- /actionplan pane -->
 
+      <div id="mtab-teamtasks" class="modal-tab-pane space-y-4" style="display:none">
+        <p class="text-[10px]" style="color:var(--text-faint)">Assign follow-ups to Solution, Project or Product so everyone knows what's pending and who owns it. They can only update the status and note on their own team's tasks here — nothing else on this opportunity.</p>
+        <div id="teamTasksNewDealNote" class="rounded-lg p-3 text-xs" style="border:1px solid var(--border);color:var(--text-faint);display:none">Save this opportunity first, then add team tasks.</div>
+        <div id="teamTasksBody">
+          <div id="teamTasksList" class="space-y-2 mb-3"></div>
+          <div class="flex gap-2">
+            <input id="newTaskText" type="text" placeholder="What does the team need to do..." class="field flex-1 px-3 py-2 text-sm">
+            <select id="newTaskTeam" class="field px-3 py-2 text-sm" style="width:130px">
+              <option value="solution">Solution</option>
+              <option value="project">Project</option>
+              <option value="product">Product</option>
+            </select>
+            <button type="button" id="addTaskBtn" class="text-sm px-3 py-2 rounded-lg" style="background:var(--surface-2);color:var(--text)">Add</button>
+          </div>
+        </div>
+      </div><!-- /teamtasks pane -->
+
       <div class="flex justify-end gap-2 pt-2">
         <button type="button" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button>
         <button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button>
@@ -1000,7 +1065,7 @@
       <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Username</label><input id="userUsername" required type="text" class="field w-full px-3 py-2 text-sm"></div>
       <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Full name (AM display name)</label><input id="userFullName" type="text" class="field w-full px-3 py-2 text-sm"></div>
       <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Password <span id="userPasswordHint" style="color:var(--text-faint)"></span></label><input id="userPassword" type="password" class="field w-full px-3 py-2 text-sm"></div>
-      <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Role</label><select id="userRole" class="field w-full px-3 py-2 text-sm"><option value="admin">Admin</option><option value="account_manager">Account Manager</option><option value="management">Management</option></select></div>
+      <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Role</label><select id="userRole" class="field w-full px-3 py-2 text-sm"><option value="admin">Admin</option><option value="account_manager">Account Manager</option><option value="management">Management</option><option value="solution">Solution Team</option><option value="project">Project Team</option><option value="product">Product Team</option></select><p class="text-[10px] mt-1" style="color:var(--text-faint)">Solution / Project / Product can only update the status &amp; note on their own team's tasks in the Team Tasks tab &mdash; nothing else on an opportunity.</p></div>
       <div class="flex justify-end gap-2 pt-2"><button type="button" data-close-modal="userModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button></div>
     </form>
   </div>
@@ -1027,6 +1092,7 @@
 
 <script>
 /* ================= STATE ================= */
+const CROSS_FUNCTIONAL_ROLES_JS = ['solution','project','product'];
 let TOKEN = localStorage.getItem('dt_token');
 let ROLE = localStorage.getItem('dt_role');
 let USERNAME = localStorage.getItem('dt_username');
@@ -1209,10 +1275,17 @@ async function enterApp(){
   document.getElementById('configNavBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('loginLogsNavBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('mgmtNavBtn').style.display = (ROLE==='admin'||ROLE==='management') ? '' : 'none';
+  document.getElementById('weeklyFollowupsNavBtn').style.display = (ROLE==='admin'||ROLE==='management') ? '' : 'none';
   document.getElementById('quickSettingsBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('quickConfigBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('perfUploadWrap').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('addDealBtn').style.display = (ROLE==='admin'||ROLE==='account_manager') ? '' : 'none';
+  // Solution / Project / Product only ever see their own task inbox - not sales' pipeline views.
+  const isCrossFunctional = CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
+  document.getElementById('myTeamTasksNavBtn').style.display = isCrossFunctional ? '' : 'none';
+  ['trackerNavBtn','calendarNavBtn','analyticsNavBtn','perfNavBtn'].forEach(id=>{
+    document.getElementById(id).style.display = isCrossFunctional ? 'none' : '';
+  });
   try { PROOF_FRAMEWORK = await api('/api/proof_framework'); } catch(e) { /* keep fallback */ }
   // An AM only ever sees their own action plan on the calendar
   const calAM=document.getElementById('calFilterAM');
@@ -1232,7 +1305,7 @@ async function enterApp(){
   await loadPerformance();
   if(ROLE==='admin') await loadUsers();
   // Management lands on the executive briefing; everyone else on the tracker
-  switchTab(ROLE==='management' ? 'management' : 'tracker');
+  switchTab(ROLE==='management' ? 'management' : CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE) ? 'myteamtasks' : 'tracker');
 }
 
 /* ================= TABS ================= */
@@ -1240,6 +1313,9 @@ document.querySelectorAll('.nav-link').forEach(b=>b.addEventListener('click',()=
 function switchTab(tab){
   if((tab==='settings'||tab==='configuration'||tab==='loginlogs') && ROLE!=='admin') return;
   if(tab==='management' && !(ROLE==='admin'||ROLE==='management')) return;
+  if(tab==='weeklyfollowups' && !(ROLE==='admin'||ROLE==='management')) return;
+  if(tab==='myteamtasks' && !CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
+  if(['tracker','calendar','analytics','performance'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
@@ -1251,6 +1327,8 @@ function switchTab(tab){
   if(tab==='calendar') renderCalendar();
   if(tab==='management') renderManagement();
   if(tab==='performance') renderPerformance();
+  if(tab==='weeklyfollowups') renderWeeklyFollowups();
+  if(tab==='myteamtasks') renderMyTeamTasks();
 }
 
 /* ================= CONFIG / AMS ================= */
@@ -1520,6 +1598,7 @@ function openDealModal(id){
   proofsDraft=normalizeProofs(d?d.proofs:{});
   renderNextActionsDraft();
   renderProofsDraft();
+  loadTeamTasks(d?d.id:null);
   switchModalTab('details');
   openModal('dealModal');
 }
@@ -1627,6 +1706,179 @@ function updateActionPlanBadge(){
   const openActions=nextActionsDraft.filter(a=>!a.done).length;
   document.getElementById('mtabApBadge').textContent=String(planned+openActions);
 }
+
+/* ================= TEAM TASKS (bridge to Solution / Project / Product) ================= */
+const TASK_TEAM_META = {
+  solution:{label:'Solution', color:'#fff', bg:'#8b3fd6'},
+  project:{label:'Project', color:'#fff', bg:'#0972d3'},
+  product:{label:'Product', color:'#fff', bg:'#037f51'},
+};
+const TASK_STATUS_META = {
+  not_started:{label:'Not started', color:'var(--text-faint)', bg:'var(--surface-3)'},
+  in_progress:{label:'In progress', color:'#fff', bg:'var(--primary)'},
+  blocked:{label:'Blocked', color:'#fff', bg:'var(--danger)'},
+  needs_discussion:{label:'Needs discussion', color:'#fff', bg:'var(--warning)'},
+  done:{label:'Done', color:'#fff', bg:'var(--success)'},
+};
+let dealTasksDraft=[], currentTaskDealId=null;
+
+async function loadTeamTasks(dealId){
+  currentTaskDealId=dealId;
+  const note=document.getElementById('teamTasksNewDealNote'), body=document.getElementById('teamTasksBody');
+  if(!dealId){ dealTasksDraft=[]; note.style.display=''; body.style.display='none'; renderTeamTasksBadge(); return; }
+  note.style.display='none'; body.style.display='';
+  try{ dealTasksDraft=await api(`/api/deals/${dealId}/tasks`); }catch(e){ dealTasksDraft=[]; }
+  renderTeamTasks();
+}
+function renderTeamTasksBadge(){
+  document.getElementById('mtabTtBadge').textContent=String(dealTasksDraft.filter(t=>t.status!=='done').length);
+}
+function renderTeamTasks(){
+  const list=document.getElementById('teamTasksList');
+  list.innerHTML = dealTasksDraft.map(t=>{
+    const tm=TASK_TEAM_META[t.team], sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
+    return `<div class="rounded-lg p-2.5" style="border:1px solid var(--border)">
+      <div class="flex items-center gap-2 mb-1.5">
+        <span class="chip" style="background:${tm.bg};color:${tm.color};border-color:transparent">${tm.label}</span>
+        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
+        <select class="tt-status field text-xs px-2 py-1" data-id="${t.id}" style="width:150px;background:${sm.bg};color:${sm.color};border-color:transparent">
+          ${Object.entries(TASK_STATUS_META).map(([v,m])=>`<option value="${v}" ${t.status===v?'selected':''}>${m.label}</option>`).join('')}
+        </select>
+        <button type="button" class="tt-del" data-id="${t.id}" style="color:var(--text-faint)" title="Remove"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <input type="text" class="tt-note field w-full px-2 py-1 text-xs" data-id="${t.id}" placeholder="Note — what's the status, or what needs to be discussed..." value="${escapeHtml(t.note||'')}">
+    </div>`;
+  }).join('') || `<p class="text-xs" style="color:var(--text-faint)">No team tasks yet — add what Solution, Project or Product need to follow up on below.</p>`;
+  list.querySelectorAll('.tt-status').forEach(s=>s.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{status:e.target.value})));
+  list.querySelectorAll('.tt-note').forEach(inp=>inp.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{note:e.target.value})));
+  list.querySelectorAll('.tt-del').forEach(b=>b.addEventListener('click',()=>deleteTask(parseInt(b.dataset.id))));
+  renderTeamTasksBadge();
+}
+async function saveTaskField(taskId,patch){
+  try{
+    const updated=await api(`/api/tasks/${taskId}`,{method:'PUT',body:JSON.stringify(patch)});
+    const idx=dealTasksDraft.findIndex(t=>t.id===taskId); if(idx>-1) dealTasksDraft[idx]=updated;
+    renderTeamTasks();
+  }catch(err){ showToast(err.message,true); }
+}
+async function deleteTask(taskId){
+  try{
+    await api(`/api/tasks/${taskId}`,{method:'DELETE'});
+    dealTasksDraft=dealTasksDraft.filter(t=>t.id!==taskId);
+    renderTeamTasks();
+  }catch(err){ showToast(err.message,true); }
+}
+document.getElementById('addTaskBtn').addEventListener('click',async()=>{
+  if(!currentTaskDealId) return;
+  const txt=document.getElementById('newTaskText'), team=document.getElementById('newTaskTeam');
+  const v=txt.value.trim(); if(!v) return;
+  try{
+    const created=await api(`/api/deals/${currentTaskDealId}/tasks`,{method:'POST',body:JSON.stringify({text:v,team:team.value})});
+    dealTasksDraft.push(created); txt.value=''; renderTeamTasks();
+  }catch(err){ showToast(err.message,true); }
+});
+document.getElementById('newTaskText').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('addTaskBtn').click(); } });
+
+/* ---------- Weekly Follow-ups (admin + management): cross-team sync view ---------- */
+let wfStatusFilter=null;
+async function renderWeeklyFollowups(){
+  const team=document.getElementById('wfTeamFilter').value;
+  const params=new URLSearchParams(); if(team) params.set('team',team);
+  let tasks=[];
+  try{ tasks=await api('/api/tasks?'+params.toString()); }catch(err){ showToast(err.message,true); }
+  document.getElementById('wfKpiBlocked').textContent=tasks.filter(t=>t.status==='blocked').length;
+  document.getElementById('wfKpiDiscuss').textContent=tasks.filter(t=>t.status==='needs_discussion').length;
+  document.getElementById('wfKpiProgress').textContent=tasks.filter(t=>t.status==='in_progress').length;
+  document.getElementById('wfKpiDone').textContent=tasks.filter(t=>t.status==='done').length;
+  ['wfKpiBlockedCard','wfKpiDiscussCard','wfKpiProgressCard','wfKpiDoneCard'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  const activeMap={blocked:'wfKpiBlockedCard',needs_discussion:'wfKpiDiscussCard',in_progress:'wfKpiProgressCard',done:'wfKpiDoneCard'};
+  if(wfStatusFilter) document.getElementById(activeMap[wfStatusFilter]).classList.add('active');
+  const labelMap={blocked:'Blocked only',needs_discussion:'Needs discussion only',in_progress:'In progress only',done:'Done only'};
+  const noteEl=document.getElementById('wfFilterNote');
+  if(wfStatusFilter){ noteEl.style.display=''; document.getElementById('wfFilterNoteText').textContent=`Showing: ${labelMap[wfStatusFilter]}`; }
+  else noteEl.style.display='none';
+
+  const visible = wfStatusFilter ? tasks.filter(t=>t.status===wfStatusFilter) : tasks;
+  const rank=s=>({blocked:0,needs_discussion:1,in_progress:2,not_started:3,done:4}[s]??5);
+  const sorted=[...visible].sort((a,b)=>rank(a.status)-rank(b.status) || (a.deal_name||'').localeCompare(b.deal_name||''));
+  document.getElementById('wfList').innerHTML = sorted.map(t=>{
+    const tm=TASK_TEAM_META[t.team], sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
+    return `<div class="rounded-lg p-3" style="background:var(--surface-2)">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="chip" style="background:${tm.bg};color:${tm.color};border-color:transparent">${tm.label}</span>
+        <span class="chip" style="background:${sm.bg};color:${sm.color};border-color:transparent">${sm.label}</span>
+        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
+      </div>
+      <div class="flex items-center gap-2 text-xs" style="color:var(--text-muted)">
+        <span class="font-medium" style="color:var(--text)">${escapeHtml(t.deal_name)}</span>
+        <span>${escapeHtml(t.customer||'')}</span>
+        <span class="chip" style="color:var(--text-muted)">${escapeHtml((t.assigned_am||'').split(' ')[0])}</span>
+      </div>
+      ${t.note?`<p class="text-xs mt-1.5" style="color:var(--text-muted);white-space:pre-wrap"><i class="fa-solid fa-message mr-1" style="color:var(--text-faint)"></i>${escapeHtml(t.note)}</p>`:''}
+    </div>`;
+  }).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing to show${team?` for ${escapeHtml(TASK_TEAM_META[team]?.label||team)}`:''}.</p>`;
+}
+document.getElementById('wfTeamFilter').addEventListener('change',renderWeeklyFollowups);
+document.getElementById('wfFilterClear').addEventListener('click',()=>{ wfStatusFilter=null; renderWeeklyFollowups(); });
+[['wfKpiBlockedCard','blocked'],['wfKpiDiscussCard','needs_discussion'],['wfKpiProgressCard','in_progress'],['wfKpiDoneCard','done']].forEach(([id,key])=>{
+  document.getElementById(id).addEventListener('click',()=>{ wfStatusFilter = wfStatusFilter===key?null:key; renderWeeklyFollowups(); });
+});
+
+/* ---------- My Team Tasks (solution / project / product): personal follow-up inbox ---------- */
+let mtStatusFilter=null;
+async function renderMyTeamTasks(){
+  let tasks=[];
+  try{ tasks=await api('/api/tasks'); }catch(err){ showToast(err.message,true); }
+  document.getElementById('mtKpiPending').textContent=tasks.filter(t=>t.status==='not_started'||t.status==='in_progress').length;
+  document.getElementById('mtKpiBlocked').textContent=tasks.filter(t=>t.status==='blocked').length;
+  document.getElementById('mtKpiDiscuss').textContent=tasks.filter(t=>t.status==='needs_discussion').length;
+  document.getElementById('mtKpiDone').textContent=tasks.filter(t=>t.status==='done').length;
+  ['mtKpiPendingCard','mtKpiBlockedCard','mtKpiDiscussCard','mtKpiDoneCard'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  const activeMap={pending:'mtKpiPendingCard',blocked:'mtKpiBlockedCard',needs_discussion:'mtKpiDiscussCard',done:'mtKpiDoneCard'};
+  if(mtStatusFilter) document.getElementById(activeMap[mtStatusFilter]).classList.add('active');
+  const labelMap={pending:'Pending only',blocked:'Blocked only',needs_discussion:'Needs discussion only',done:'Done only'};
+  const noteEl=document.getElementById('mtFilterNote');
+  if(mtStatusFilter){ noteEl.style.display=''; document.getElementById('mtFilterNoteText').textContent=`Showing: ${labelMap[mtStatusFilter]}`; }
+  else noteEl.style.display='none';
+
+  const matchFilter=t=>{
+    if(!mtStatusFilter) return true;
+    if(mtStatusFilter==='pending') return t.status==='not_started'||t.status==='in_progress';
+    return t.status===mtStatusFilter;
+  };
+  const rank=s=>({blocked:0,needs_discussion:1,in_progress:2,not_started:3,done:4}[s]??5);
+  const sorted=tasks.filter(matchFilter).sort((a,b)=>rank(a.status)-rank(b.status) || (a.deal_name||'').localeCompare(b.deal_name||''));
+  document.getElementById('mtList').innerHTML = sorted.map(t=>{
+    const sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
+    return `<div class="rounded-lg p-3" style="background:var(--surface-2)">
+      <div class="flex items-center gap-2 mb-1.5">
+        <input type="checkbox" class="mt-done" data-id="${t.id}" ${t.status==='done'?'checked':''} title="Mark done">
+        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
+        <select class="mt-status field text-xs px-2 py-1" data-id="${t.id}" style="width:150px;background:${sm.bg};color:${sm.color};border-color:transparent">
+          ${Object.entries(TASK_STATUS_META).map(([v,m])=>`<option value="${v}" ${t.status===v?'selected':''}>${m.label}</option>`).join('')}
+        </select>
+      </div>
+      <div class="flex items-center gap-2 text-xs mb-1.5" style="color:var(--text-muted)">
+        <span class="font-medium" style="color:var(--text)">${escapeHtml(t.deal_name)}</span>
+        <span>${escapeHtml(t.customer||'')}</span>
+        <span class="chip" style="color:var(--text-muted)">${escapeHtml((t.assigned_am||'').split(' ')[0])}</span>
+      </div>
+      <input type="text" class="mt-note field w-full px-2 py-1 text-xs" data-id="${t.id}" placeholder="Note — status detail, or what needs discussing..." value="${escapeHtml(t.note||'')}">
+    </div>`;
+  }).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing here — you're all caught up.</p>`;
+
+  document.querySelectorAll('.mt-status').forEach(s=>s.addEventListener('change',e=>saveMyTask(parseInt(e.target.dataset.id),{status:e.target.value})));
+  document.querySelectorAll('.mt-note').forEach(inp=>inp.addEventListener('change',e=>saveMyTask(parseInt(e.target.dataset.id),{note:e.target.value})));
+  document.querySelectorAll('.mt-done').forEach(cb=>cb.addEventListener('change',e=>saveMyTask(parseInt(e.target.dataset.id),{status:e.target.checked?'done':'in_progress'})));
+}
+async function saveMyTask(taskId,patch){
+  try{ await api(`/api/tasks/${taskId}`,{method:'PUT',body:JSON.stringify(patch)}); showToast('Saved'); await renderMyTeamTasks(); }
+  catch(err){ showToast(err.message,true); }
+}
+document.getElementById('mtFilterClear').addEventListener('click',()=>{ mtStatusFilter=null; renderMyTeamTasks(); });
+[['mtKpiPendingCard','pending'],['mtKpiBlockedCard','blocked'],['mtKpiDiscussCard','needs_discussion'],['mtKpiDoneCard','done']].forEach(([id,key])=>{
+  document.getElementById(id).addEventListener('click',()=>{ mtStatusFilter = mtStatusFilter===key?null:key; renderMyTeamTasks(); });
+});
 
 document.getElementById('addActionBtn').addEventListener('click',()=>{
   const i=document.getElementById('newActionInput'), dd=document.getElementById('newActionDue');
