@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PODS-2 Dashboard Tracker</title>
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='img/favicon-16.png') }}">
+<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -152,9 +155,7 @@
     <!-- Left: sign-in card, themed like the rest of the app -->
     <div class="relative p-8 sm:p-11 flex flex-col justify-center" style="background:var(--surface)">
       <div class="mb-7">
-        <div class="w-12 h-12 rounded-xl btn-primary flex items-center justify-center mb-4">
-          <i class="fa-solid fa-satellite-dish text-xl"></i>
-        </div>
+        <img src="{{ url_for('static', filename='img/pods2-logo-256.png') }}" alt="PODS-2" class="w-12 h-12 rounded-xl mb-4" style="object-fit:cover">
         <h1 class="text-2xl font-semibold" style="color:var(--text)">Sign in</h1>
         <p class="text-xs mt-1.5" style="color:var(--text-muted)">PODS-2 Dashboard Tracker &mdash; deal execution &amp; strategy</p>
       </div>
@@ -225,7 +226,7 @@
   <!-- Top app bar — dark navy chrome, AWS-style, regardless of light/dark theme -->
   <header class="app-topbar flex items-center gap-3 px-4 h-14 flex-shrink-0">
     <button id="railToggle" class="icon-btn" title="Collapse / expand menu"><i class="fa-solid fa-bars"></i></button>
-    <div class="w-9 h-9 rounded-lg btn-primary flex items-center justify-center"><i class="fa-solid fa-satellite-dish"></i></div>
+    <img src="{{ url_for('static', filename='img/pods2-logo-256.png') }}" alt="PODS-2" class="w-9 h-9 rounded-lg flex-shrink-0" style="object-fit:cover">
     <div>
       <p class="text-sm font-semibold leading-tight" style="color:var(--text);letter-spacing:-0.01em">PODS-2 Dashboard Tracker</p>
       <p class="text-[11px] leading-tight" style="color:var(--text-muted)">H2 2026 Strategic Playbook</p>

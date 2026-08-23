@@ -327,6 +327,10 @@ live PythonAnywhere instance:
 - Session tokens are held in-memory (`TOKENS` in `app.py`); a server restart requires users to log
   in again. Passwords are hashed with PBKDF2 (`werkzeug.security`).
 - Charts are lightweight inline SVG — no chart-library dependency beyond the Tailwind/FontAwesome CDNs.
+- Branding lives in `static/img/`: `pods2-logo.png` is the master file; `pods2-logo-256.png` is what
+  the header and sign-in page actually load, and `favicon-16/32.png` + `apple-touch-icon.png` are the
+  browser-tab/bookmark icons. Regenerate the smaller sizes from the master with Pillow if you ever
+  swap the logo — see the resize snippet used when these were first generated (any 1:1 PNG works).
 # pods2_focused_oppty_dashboard
 # pods2_focused_oppty_dashboard_sql
 # pods2_focused_oppty_dashboard_sql
