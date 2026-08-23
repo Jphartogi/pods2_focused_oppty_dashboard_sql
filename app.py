@@ -359,6 +359,11 @@ def migrate_db(db):
     if "max_login_logs" not in config_cols:
         db.execute("ALTER TABLE config ADD COLUMN max_login_logs INTEGER DEFAULT 100")
 
+    if "deal_tasks" in {r[0] for r in db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )} and "due" not in columns("deal_tasks"):
+        db.execute("ALTER TABLE deal_tasks ADD COLUMN due TEXT DEFAULT ''")
+
 
 def init_db():
     db = sqlite3.connect(DB_PATH)
@@ -404,6 +409,7 @@ def init_db():
             status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN
                 ('not_started', 'in_progress', 'blocked', 'needs_discussion', 'done')),
             note TEXT DEFAULT '',
+            due TEXT DEFAULT '',
             created_by TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -923,6 +929,7 @@ def update_blocker(deal_id):
 # team assignment, or any other opportunity field.
 # --------------------------------------------------------------------------
 def task_to_dict(row):
+    keys = row.keys()
     d = {
         "id": row["id"],
         "deal_id": row["deal_id"],
@@ -930,6 +937,7 @@ def task_to_dict(row):
         "team": row["team"],
         "status": row["status"],
         "note": row["note"] or "",
+        "due": (row["due"] or "") if "due" in keys else "",
         "created_by": row["created_by"] or "",
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
@@ -976,11 +984,18 @@ def create_deal_task(deal_id):
     if not text:
         return jsonify({"error": "text is required"}), 400
 
+    # The creator decides the starting status and an optional target date right away,
+    # rather than always starting at "not_started" and having to change it afterward.
+    status = str(data.get("status", "") or "").strip()
+    if status not in TASK_STATUSES:
+        status = "not_started"
+    due = str(data.get("due", "") or "").strip()[:10]
+
     creator = user.get("full_name") or user.get("username", "")
     cur = db.execute(
-        """INSERT INTO deal_tasks (deal_id, text, team, status, created_by)
-           VALUES (?, ?, ?, 'not_started', ?)""",
-        (deal_id, text, team, creator),
+        """INSERT INTO deal_tasks (deal_id, text, team, status, due, created_by)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (deal_id, text, team, status, due, creator),
     )
     db.commit()
     row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (cur.lastrowid,)).fetchone()
@@ -998,10 +1013,11 @@ def update_task(task_id):
 
     user = g.current_user
     text, team, status, note = row["text"], row["team"], row["status"], row["note"]
+    due = row["due"] if "due" in row.keys() else ""
 
     if user["role"] in CROSS_FUNCTIONAL_ROLES:
-        # Own team's tasks only; text/status/note are theirs to keep current, but the
-        # team assignment itself is fixed - they can't move a task to another team.
+        # Own team's tasks only; text/status/note/due are theirs to keep current, but
+        # the team assignment itself is fixed - they can't move a task to another team.
         if row["team"] != user["role"]:
             return jsonify({"error": "You can only update your own team's tasks"}), 403
         if str(data.get("text", "")).strip():
@@ -1013,6 +1029,8 @@ def update_task(task_id):
             status = new_status
         if "note" in data:
             note = str(data["note"] or "")
+        if "due" in data:
+            due = str(data["due"] or "").strip()[:10]
     elif user["role"] in ("admin", "account_manager"):
         deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (row["deal_id"],)).fetchone()
         if not deal_row or not can_edit_deal(user, deal_row):
@@ -1031,13 +1049,15 @@ def update_task(task_id):
             status = new_status
         if "note" in data:
             note = str(data["note"] or "")
+        if "due" in data:
+            due = str(data["due"] or "").strip()[:10]
     else:
         return jsonify({"error": "Forbidden"}), 403
 
     db.execute(
-        """UPDATE deal_tasks SET text = ?, team = ?, status = ?, note = ?,
+        """UPDATE deal_tasks SET text = ?, team = ?, status = ?, note = ?, due = ?,
            updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
-        (text, team, status, note, task_id),
+        (text, team, status, note, due, task_id),
     )
     db.commit()
     row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()
