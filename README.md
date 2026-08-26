@@ -107,7 +107,11 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   Deleting a value that is still in use asks for confirmation and never rewrites existing deals.
 - **Pipeline vs Account Manager Gap** — per AM: `Gap = Target − YTD actual − FY26 recurring (no
   churn) − 2026 pipeline`, with a stacked coverage bar so you instantly see who is short. Enter each
-  AM's Target / YTD / Recurring under Settings → Account Manager Targets.
+  AM's Target / YTD / Recurring under Settings → Account Manager Targets, or use the **Import
+  Target/Actual/Recurring** button (admin only) right on this Gap & Targets sub-tab to bulk-update
+  them from the same monthly "PODS (2)" performance workbook already used for Performance import —
+  only account managers matched by name in the file are changed, everyone else's figures are left
+  untouched, and any unmatched names are reported back so nothing is silently skipped.
 - **Strategy Coverage** — replaces the old wall-of-text playbook: per-AM coverage bars, a call-out
   listing opportunities that still have no strategy, and one collapsed line per documented deal that
   expands to read the full strategy.
@@ -157,10 +161,12 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   Project/Product) so everyone can see the same picture ahead of the meeting; it's read-only there.
   Like My Team Tasks, it hides the FY target/gap/coverage strip too — both are focused worklists.
 - **Action Plan timeline** — in the same Action Plan tab, Sales can set two **milestones** per
-  opportunity: the **expected PO date** and the **expected revenue booking date**. A vertical timeline
-  right below plots those milestones together with every dated Planned execution step, sorted
-  chronologically from **today** through to the end of the project, so you can see at a glance what's
-  coming up and in what order. It updates live as you edit either milestone date or a step's date.
+  opportunity: the **expected PO date** and the **expected revenue booking date**. A **horizontal**
+  timeline right below plots those milestones together with every dated Planned execution step along
+  one dated axis, from **today** (marked with a red reference line) through to the end of the
+  project — regular steps as small dots, the PO/Revenue milestones as larger rings, overdue steps in
+  red, with a small legend underneath. It updates live as you edit either milestone date or a step's
+  date.
 - **Framework analytics** — Analytics shows a proof-by-proof funnel (done / in progress / not
   started across the filtered deals), completion by Account Manager, and a click-to-drill list of the
   deals stuck at any given proof. The PDF report includes the same breakdown.

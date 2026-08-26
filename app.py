@@ -1801,6 +1801,64 @@ def get_performance():
     })
 
 
+@app.route("/api/config/am_targets/import", methods=["POST"])
+@login_required(roles=("admin",))
+def import_am_targets():
+    """Bulk-update AM Target/YTD Actual/Recurring FY26 from the same monthly
+    'PODS (2)' performance workbook already used for Performance import, instead
+    of retyping each figure by hand in Settings -> Account Manager Targets."""
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return jsonify({"error": "openpyxl is not installed on the server. "
+                                 "Run: pip install --user openpyxl, then reload."}), 500
+
+    upload = request.files.get("file")
+    if not upload:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    try:
+        wb = load_workbook(upload, data_only=True)
+    except Exception as exc:
+        return jsonify({"error": f"Could not read this file as .xlsx ({exc})"}), 400
+
+    am_rows, _accounts = parse_performance_workbook(wb)
+    if not am_rows:
+        return jsonify({"error": "No recognisable per-AM figures found. Expected the same "
+                                 "workbook used for Performance import, with a sheet named "
+                                 "like 'PODS (2)'."}), 400
+
+    db = get_db()
+    row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    cfg = config_to_dict(row)
+    am_targets = dict(cfg["am_targets"])
+    am_achievements = dict(cfg["am_achievements"])
+    am_recurring = dict(cfg["am_recurring"])
+
+    known_ams = [u["full_name"] for u in db.execute(
+        "SELECT full_name FROM users WHERE role = 'account_manager'").fetchall()]
+
+    updated, unmatched = [], []
+    for r in am_rows:
+        dash_am = next((am for am in known_ams if am_matches(r["am"], am)), None)
+        if not dash_am:
+            unmatched.append(r["am"])
+            continue
+        am_targets[dash_am] = int(r["target_fy"] or 0)
+        am_achievements[dash_am] = int(r["actual_ytd"] or 0)
+        am_recurring[dash_am] = int(r["mrc_rest"] or 0)
+        updated.append(dash_am)
+
+    db.execute(
+        """UPDATE config SET am_targets = ?, am_achievements = ?, am_recurring = ?,
+           updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+        (json.dumps(am_targets), json.dumps(am_achievements), json.dumps(am_recurring), row["id"]),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM config WHERE id = ?", (row["id"],)).fetchone()
+    return jsonify({"ok": True, "updated": updated, "unmatched": unmatched, "config": config_to_dict(row)})
+
+
 @app.route("/api/performance/import", methods=["POST"])
 @login_required(roles=("admin",))
 def import_performance():
