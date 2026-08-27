@@ -796,7 +796,7 @@ def create_deal():
             data.get("deal_name", "Untitled Opportunity"),
             data.get("customer", ""),
             assigned_am,
-            data.get("squad"),
+            data.get("squad", "") or "",
             data.get("strategic_pillar"),
             est_value,
             rev_2026,

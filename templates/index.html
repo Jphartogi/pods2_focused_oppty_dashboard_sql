@@ -457,7 +457,6 @@
             <input id="searchInput" type="text" placeholder="Search opportunity or customer..." class="field pl-8 pr-3 py-2 text-sm w-64">
           </div>
           <select id="filterAM" class="field text-sm px-3 py-2"><option value="">All Account Managers</option></select>
-          <select id="filterSquad" class="field text-sm px-3 py-2"><option value="">All Squads</option></select>
           <select id="filterPillar" class="field text-sm px-3 py-2"><option value="">All Pillars</option></select>
           <select id="filterStage" class="field text-sm px-3 py-2"><option value="">All Stages</option></select>
           <button id="clearFilters" class="text-sm px-3 py-2 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
@@ -582,7 +581,6 @@
           <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-filter mr-1" style="color:var(--primary)"></i>Filter analytics</span>
           <select id="aFilterAM" class="field text-sm px-3 py-1.5"><option value="">All AMs</option></select>
           <select id="aFilterPillar" class="field text-sm px-3 py-1.5"><option value="">All Pillars</option></select>
-          <select id="aFilterSquad" class="field text-sm px-3 py-1.5"><option value="">All Squads</option></select>
           <select id="aFilterStage" class="field text-sm px-3 py-1.5"><option value="">All Stages</option></select>
           <select id="aFilterQuarter" class="field text-sm px-3 py-1.5"><option value="">All Quarters</option></select>
           <button id="aFilterClear" class="text-sm px-3 py-1.5 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
@@ -650,7 +648,6 @@
             <div class="card elev p-5"><div class="flex items-center justify-between mb-3"><p class="text-sm font-medium">Pipeline by Strategic Pillar</p><span class="text-[11px]" style="color:var(--text-faint)">click a bar to drill down</span></div><div id="chartPillar"></div></div>
             <div class="card elev p-5"><p class="text-sm font-medium mb-3">Stage Distribution</p><div id="chartStage"></div></div>
             <div class="card elev p-5"><p class="text-sm font-medium mb-3">Pipeline by Target Quarter</p><div id="chartQuarter"></div></div>
-            <div class="card elev p-5"><p class="text-sm font-medium mb-3">Pipeline by Squad</p><div id="chartSquad"></div></div>
             <div class="card elev p-5"><p class="text-sm font-medium mb-3">Top 8 Opportunities by TCV</p><div id="chartTop"></div></div>
           </div>
         </div>
@@ -930,12 +927,6 @@
             <div id="pillarsList" class="space-y-2 mb-3"></div>
             <div class="flex gap-2"><input id="newPillarInput" type="text" placeholder="New pillar" class="field flex-1 px-3 py-2 text-sm"><button id="addPillarBtn" class="text-sm px-4 py-2 rounded-lg" style="background:var(--surface-2);color:var(--text)">Add</button></div>
           </div>
-          <div class="card elev p-5">
-            <p class="text-sm font-medium mb-1">Squads</p>
-            <p class="text-[11px] mb-3" style="color:var(--text-faint)">Execution teams.</p>
-            <div id="squadsList" class="space-y-2 mb-3"></div>
-            <div class="flex gap-2"><input id="newSquadInput" type="text" placeholder="New squad" class="field flex-1 px-3 py-2 text-sm"><button id="addSquadBtn" class="text-sm px-4 py-2 rounded-lg" style="background:var(--surface-2);color:var(--text)">Add</button></div>
-          </div>
         </div>
       </section>
     </main>
@@ -974,12 +965,9 @@
         <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Opportunity Name</label><input id="dealName" required type="text" class="field w-full px-3 py-2 text-sm"></div>
         <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Customer</label><input id="dealCustomer" type="text" class="field w-full px-3 py-2 text-sm"></div>
       </div>
-      <div class="grid grid-cols-2 gap-4">
+      <div class="grid grid-cols-3 gap-4">
         <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Account Manager</label><select id="dealAM" class="field w-full px-3 py-2 text-sm"></select></div>
         <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Target Quarter</label><select id="dealQuarter" class="field w-full px-3 py-2 text-sm"><option>Q3 2026</option><option>Q4 2026</option><option>Q3-Q4 2026</option><option>H2 2026</option></select></div>
-      </div>
-      <div class="grid grid-cols-2 gap-4">
-        <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Squad</label><select id="dealSquad" class="field w-full px-3 py-2 text-sm"></select></div>
         <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Strategic Pillar</label><select id="dealPillar" class="field w-full px-3 py-2 text-sm"></select></div>
       </div>
       <div class="grid grid-cols-3 gap-4">
@@ -1089,10 +1077,13 @@
         </div>
       </div><!-- /teamtasks pane -->
 
-      <div class="flex justify-end gap-2 pt-2">
-        <button type="button" id="dealModalCloseBtn" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted);display:none">Close</button>
-        <button type="button" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)" id="dealModalCancelBtn">Cancel</button>
-        <button type="submit" id="dealModalSaveBtn" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button>
+      <div class="flex items-center justify-between gap-2 pt-2">
+        <span id="dealSaveStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
+        <div class="flex gap-2">
+          <button type="button" id="dealModalCloseBtn" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted);display:none">Close</button>
+          <button type="button" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)" id="dealModalCancelBtn">Cancel</button>
+          <button type="submit" id="dealModalSaveBtn" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button>
+        </div>
       </div>
     </form>
   </div>
@@ -1141,6 +1132,7 @@ let USERNAME = localStorage.getItem('dt_username');
 let FULLNAME = localStorage.getItem('dt_fullname');
 let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[], squads:[], stages:[], am_targets:{}, am_achievements:{}, am_recurring:{}, current_achievement:0, recurring_revenue:0, max_login_logs:100 }, USERS = [], AMS = [];
 let nextActionsDraft = [], confirmCallback = null, analyticsFilters = {};
+let dealModalDirty = false, dealModalRestricted = false, dealAutosaveTimer = null, dealAutosaveInFlight = false;
 let currentPage = 1, calMonth = new Date();
 let proofsDraft = {}, fwDrillKey = null;
 let lastPlannedRows = [];
@@ -1208,7 +1200,7 @@ function stageColor(stage){
 }
 function stageList(){ return (CONFIG.stages&&CONFIG.stages.length)?CONFIG.stages:['Prospecting','Negotiation','Closed','Blocked']; }
 const QUARTERS = ['Q3 2026','Q4 2026','Q3-Q4 2026','H2 2026'];
-const AF_MAP = { aFilterAM:'assigned_am', aFilterPillar:'strategic_pillar', aFilterSquad:'squad', aFilterStage:'stage', aFilterQuarter:'target_quarter' };
+const AF_MAP = { aFilterAM:'assigned_am', aFilterPillar:'strategic_pillar', aFilterStage:'stage', aFilterQuarter:'target_quarter' };
 
 /* ================= THEME ================= */
 function applyTheme(theme) {
@@ -1382,11 +1374,9 @@ async function loadConfig(){ CONFIG = await api('/api/config'); populateSelector
 async function loadAMs(){ try { AMS = await api('/api/account_managers'); } catch(e){ AMS=[]; } populateSelectors(); }
 
 function populateSelectors(){
-  const sq=CONFIG.squads||[], pl=CONFIG.strategic_pillars||[];
-  document.getElementById('filterSquad').innerHTML='<option value="">All Squads</option>'+sq.map(s=>`<option>${escapeHtml(s)}</option>`).join('');
+  const pl=CONFIG.strategic_pillars||[];
   document.getElementById('filterPillar').innerHTML='<option value="">All Pillars</option>'+pl.map(p=>`<option>${escapeHtml(p)}</option>`).join('');
   document.getElementById('filterAM').innerHTML='<option value="">All Account Managers</option>'+AMS.map(a=>`<option>${escapeHtml(a)}</option>`).join('');
-  document.getElementById('dealSquad').innerHTML=sq.map(s=>`<option>${escapeHtml(s)}</option>`).join('');
   document.getElementById('dealPillar').innerHTML=pl.map(p=>`<option>${escapeHtml(p)}</option>`).join('');
   document.getElementById('dealAM').innerHTML=AMS.map(a=>`<option>${escapeHtml(a)}</option>`).join('');
   // Stage-driven selects (stages are configurable)
@@ -1398,7 +1388,6 @@ function populateSelectors(){
   // Analytics filter selects
   document.getElementById('aFilterAM').innerHTML='<option value="">All AMs</option>'+AMS.map(a=>`<option>${escapeHtml(a)}</option>`).join('');
   document.getElementById('aFilterPillar').innerHTML='<option value="">All Pillars</option>'+pl.map(p=>`<option>${escapeHtml(p)}</option>`).join('');
-  document.getElementById('aFilterSquad').innerHTML='<option value="">All Squads</option>'+sq.map(s=>`<option>${escapeHtml(s)}</option>`).join('');
   document.getElementById('aFilterStage').innerHTML='<option value="">All Stages</option>'+st.map(x=>`<option>${escapeHtml(x)}</option>`).join('');
   document.getElementById('aFilterQuarter').innerHTML='<option value="">All Quarters</option>'+QUARTERS.map(q=>`<option>${escapeHtml(q)}</option>`).join('');
   const mgAM=document.getElementById('mgmtFilterAM');
@@ -1441,7 +1430,7 @@ function updateMetrics(){
 }
 
 /* ================= DEALS ================= */
-['filterAM','filterSquad','filterPillar','filterStage'].forEach(id=>document.getElementById(id).addEventListener('change',loadDeals));
+['filterAM','filterPillar','filterStage'].forEach(id=>document.getElementById(id).addEventListener('change',loadDeals));
 document.getElementById('searchInput').addEventListener('input',()=>{ currentPage=1; renderDealsTable(); });
 document.getElementById('sortSelect').addEventListener('change',()=>{ currentPage=1; renderDealsTable(); });
 document.getElementById('pageSizeSelect').addEventListener('change',()=>{ currentPage=1; renderDealsTable(); });
@@ -1450,14 +1439,13 @@ document.getElementById('prevPage').addEventListener('click',()=>{ currentPage--
 document.getElementById('nextPage').addEventListener('click',()=>{ currentPage++; renderDealsTable(); });
 document.getElementById('lastPage').addEventListener('click',()=>{ currentPage=1e9; renderDealsTable(); });
 document.getElementById('clearFilters').addEventListener('click',()=>{
-  ['filterAM','filterSquad','filterPillar','filterStage'].forEach(id=>document.getElementById(id).value='');
+  ['filterAM','filterPillar','filterStage'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('searchInput').value=''; loadDeals();
 });
 
 async function loadDeals(){
   const p=new URLSearchParams();
   const am=document.getElementById('filterAM').value; if(am)p.set('am',am);
-  const sq=document.getElementById('filterSquad').value; if(sq)p.set('squad',sq);
   const pl=document.getElementById('filterPillar').value; if(pl)p.set('pillar',pl);
   const st=document.getElementById('filterStage').value; if(st)p.set('stage',st);
   DEALS = await api('/api/deals?'+p.toString());
@@ -1575,7 +1563,6 @@ function openDetail(id){
       ${detailStat('Stage', `<span class="stage-dot" style="background:${stageColor(d.stage)}"></span> ${d.stage}`)}
       ${detailStat('Target', escapeHtml(d.target_quarter)||'–')}
       ${detailStat('Pillar', escapeHtml(d.strategic_pillar))}
-      ${detailStat('Squad', escapeHtml(d.squad))}
     </div>
     <div class="mb-4">
       <div class="flex justify-between text-xs mb-1" style="color:var(--text-muted)"><span>Progress</span><span>${d.progress}%</span></div>
@@ -1630,6 +1617,11 @@ function openDealModal(id){
   const restricted = CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
   if(restricted && !d) return; // cross-functional roles can only add tasks to an existing opportunity
 
+  dealModalRestricted = restricted;
+  dealModalDirty = false;
+  clearTimeout(dealAutosaveTimer);
+  updateDealSaveStatus('');
+
   document.getElementById('dealModalTabBar').style.display = restricted ? 'none' : '';
   document.getElementById('dealModalSaveBtn').style.display = restricted ? 'none' : '';
   document.getElementById('dealModalCancelBtn').style.display = restricted ? 'none' : '';
@@ -1656,7 +1648,6 @@ function openDealModal(id){
   if(ROLE==='account_manager'){ amSel.innerHTML=`<option>${escapeHtml(FULLNAME)}</option>`; amSel.disabled=true; }
   else { amSel.innerHTML=AMS.map(a=>`<option>${escapeHtml(a)}</option>`).join(''); amSel.disabled=false; amSel.value=d?d.assigned_am:(AMS[0]||''); }
   document.getElementById('dealQuarter').value=d?d.target_quarter:'Q3 2026';
-  document.getElementById('dealSquad').value=d?d.squad:(CONFIG.squads[0]||'');
   document.getElementById('dealPillar').value=d?d.strategic_pillar:(CONFIG.strategic_pillars[0]||'');
   document.getElementById('dealValue').value=d?fmtThousands(d.estimated_value):'';
   document.getElementById('dealRev2026').value=d?fmtThousands(d.revenue_2026):'';
@@ -2087,15 +2078,12 @@ function renderNextActionsDraft(){
   document.getElementById('nextActionsBar').style.width=(total?done/total*100:0)+'%';
   updateActionPlanBadge();
 }
-document.getElementById('dealForm').addEventListener('submit',async e=>{
-  e.preventDefault();
-  const id=document.getElementById('dealId').value;
-  const payload={
+function buildDealPayload(){
+  return {
     deal_name:document.getElementById('dealName').value.trim(),
     customer:document.getElementById('dealCustomer').value.trim(),
     assigned_am:document.getElementById('dealAM').value,
     target_quarter:document.getElementById('dealQuarter').value,
-    squad:document.getElementById('dealSquad').value,
     strategic_pillar:document.getElementById('dealPillar').value,
     estimated_value:parseThousands(document.getElementById('dealValue').value),
     revenue_2026:parseThousands(document.getElementById('dealRev2026').value),
@@ -2109,17 +2097,81 @@ document.getElementById('dealForm').addEventListener('submit',async e=>{
     expected_po_date:document.getElementById('dealExpectedPO').value,
     expected_revenue_date:document.getElementById('dealExpectedRevenue').value,
   };
+}
+document.getElementById('dealForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const id=document.getElementById('dealId').value;
+  clearTimeout(dealAutosaveTimer);
+  const payload=buildDealPayload();
   try {
     if(id){ await api(`/api/deals/${id}`,{method:'PUT',body:JSON.stringify(payload)}); showToast('Opportunity updated'); }
     else { await api('/api/deals',{method:'POST',body:JSON.stringify(payload)}); showToast('Opportunity created'); }
+    dealModalDirty=false;
     closeModal('dealModal'); await loadDeals();
   } catch(err){ showToast(err.message,true); }
 });
 
+/* ---------- Autosave + unsaved-changes guard for the opportunity modal ---------- */
+function updateDealSaveStatus(state){
+  const el=document.getElementById('dealSaveStatus'); if(!el) return;
+  const map={
+    saved:{text:'All changes saved', color:'var(--success)'},
+    saving:{text:'Saving…', color:'var(--text-muted)'},
+    unsaved:{text:'Unsaved changes', color:'var(--warning)'},
+    error:{text:'Could not save — check your connection', color:'var(--danger)'},
+  };
+  const m=map[state]||{text:'',color:'var(--text-muted)'};
+  el.textContent=m.text; el.style.color=m.color;
+}
+function markDealDirty(){
+  if(dealModalRestricted) return; // Team Tasks pane saves independently per-task
+  dealModalDirty=true;
+  updateDealSaveStatus('unsaved');
+  const id=document.getElementById('dealId').value;
+  if(!id) return; // a brand-new opportunity has nothing to autosave to yet — must use Save
+  clearTimeout(dealAutosaveTimer);
+  dealAutosaveTimer=setTimeout(autosaveDeal, 1500);
+}
+async function autosaveDeal(){
+  const id=document.getElementById('dealId').value;
+  if(!id || !dealModalDirty || dealAutosaveInFlight) return;
+  dealAutosaveInFlight=true;
+  updateDealSaveStatus('saving');
+  try{
+    await api(`/api/deals/${id}`,{method:'PUT',body:JSON.stringify(buildDealPayload())});
+    dealModalDirty=false;
+    updateDealSaveStatus('saved');
+    await loadDeals();
+  }catch(err){
+    updateDealSaveStatus('error');
+  }finally{
+    dealAutosaveInFlight=false;
+  }
+}
+['input','change'].forEach(evt=>document.getElementById('dealForm').addEventListener(evt,e=>{
+  if(e.target.closest('#mtab-teamtasks')) return;
+  markDealDirty();
+}));
+document.getElementById('dealForm').addEventListener('click',e=>{
+  if(e.target.closest('#mtab-teamtasks')) return;
+  if(e.target.closest('.rm-a, .pe-del, .pe-add, #addActionBtn')) markDealDirty();
+});
+function attemptCloseDealModal(){
+  if(!dealModalDirty){ closeModal('dealModal'); return; }
+  openConfirm('You have unsaved changes on this opportunity. Closing now will lose anything not yet saved — close anyway?', ()=>{
+    clearTimeout(dealAutosaveTimer);
+    dealModalDirty=false;
+    closeModal('dealModal');
+  });
+}
+
 /* ================= MODAL HELPERS ================= */
 function openModal(id){ document.getElementById(id).classList.remove('hidden'); }
 function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
-document.querySelectorAll('[data-close-modal]').forEach(b=>b.addEventListener('click',()=>closeModal(b.dataset.closeModal)));
+document.querySelectorAll('[data-close-modal]').forEach(b=>b.addEventListener('click',()=>{
+  if(b.dataset.closeModal==='dealModal'){ attemptCloseDealModal(); return; }
+  closeModal(b.dataset.closeModal);
+}));
 function openConfirm(msg,cb){ document.getElementById('confirmMessage').textContent=msg; confirmCallback=cb; openModal('confirmModal'); }
 document.getElementById('confirmCancelBtn').addEventListener('click',()=>closeModal('confirmModal'));
 document.getElementById('confirmOkBtn').addEventListener('click',async()=>{ if(confirmCallback) await confirmCallback(); closeModal('confirmModal'); });
@@ -2774,12 +2826,11 @@ function renderAnalytics(){
   document.getElementById('kpiBlocked').textContent=blocked;
 
   const byAM=groupSum(ds,'assigned_am'), byPillar=groupSum(ds,'strategic_pillar');
-  const bySquad=groupSum(ds,'squad'), byQuarter=groupSum(ds,'target_quarter');
+  const byQuarter=groupSum(ds,'target_quarter');
   const stageCounts={}; ds.forEach(d=>stageCounts[d.stage]=(stageCounts[d.stage]||0)+1);
 
   document.getElementById('chartAM').innerHTML=barChart(byAM,'assigned_am','Account Manager');
   document.getElementById('chartPillar').innerHTML=barChart(byPillar,'strategic_pillar','Pillar');
-  document.getElementById('chartSquad').innerHTML=barChart(bySquad,'squad','Squad');
   document.getElementById('chartQuarter').innerHTML=barChart(byQuarter,'target_quarter','Quarter');
   document.getElementById('chartStage').innerHTML=donutChart(stageCounts);
   document.getElementById('chartTop').innerHTML=topChart(ds);
@@ -3029,7 +3080,6 @@ function renderSettings(){
 function renderConfiguration(){
   renderEditableList('stagesList','stages');
   renderEditableList('pillarsList','strategic_pillars');
-  renderEditableList('squadsList','squads');
 }
 function renderAmTargets(){
   const el=document.getElementById('amTargetsList');
@@ -3077,7 +3127,7 @@ function renderEditableList(containerId,key){
   list.querySelectorAll('.ed-inp').forEach(inp=>inp.addEventListener('change',async e=>{ CONFIG[key][e.target.dataset.idx]=e.target.value.trim(); await persistConfig(); renderConfiguration(); }));
   list.querySelectorAll('.rm-btn').forEach(b=>b.addEventListener('click',async e=>{
     const idx=parseInt(e.currentTarget.dataset.idx), val=CONFIG[key][idx];
-    const inUse=(ALL_DEALS||[]).filter(d=>key==='stages'?d.stage===val:key==='squads'?d.squad===val:d.strategic_pillar===val).length;
+    const inUse=(ALL_DEALS||[]).filter(d=>key==='stages'?d.stage===val:d.strategic_pillar===val).length;
     const go=async()=>{ CONFIG[key].splice(idx,1); await persistConfig(); renderConfiguration(); };
     if(inUse) openConfirm(`"${val}" is still used by ${inUse} opportunity(ies). Remove it from the list anyway? Existing opportunities keep the old value until you edit them.`, go);
     else await go();
@@ -3085,7 +3135,6 @@ function renderEditableList(containerId,key){
 }
 document.getElementById('addStageBtn').addEventListener('click',async()=>{ const i=document.getElementById('newStageInput'); if(!i.value.trim())return; (CONFIG.stages=CONFIG.stages||[]).push(i.value.trim()); i.value=''; await persistConfig(); renderConfiguration(); });
 document.getElementById('addPillarBtn').addEventListener('click',async()=>{ const i=document.getElementById('newPillarInput'); if(!i.value.trim())return; CONFIG.strategic_pillars.push(i.value.trim()); i.value=''; await persistConfig(); renderConfiguration(); });
-document.getElementById('addSquadBtn').addEventListener('click',async()=>{ const i=document.getElementById('newSquadInput'); if(!i.value.trim())return; CONFIG.squads.push(i.value.trim()); i.value=''; await persistConfig(); renderConfiguration(); });
 
 /* ================= DATA BACKUP (XLSX export / import) ================= */
 document.getElementById('exportXlsxBtn').addEventListener('click',async()=>{
@@ -3254,7 +3303,7 @@ const CMD_FEATURES = [
   {label:'Calendar', desc:'Week/month view of every scheduled action item', icon:'fa-calendar-days', tab:'calendar'},
   {label:'Pipeline Analytics', desc:'Gap & targets, breakdown, execution framework, strategy, leaderboard', icon:'fa-chart-line', tab:'analytics'},
   {label:'Performance', desc:'Monthly ACH actuals, targets, pipeline cover, churn watch', icon:'fa-gauge-high', tab:'performance'},
-  {label:'Lists & Automation', desc:'Deal stages, pillars, squads, stage automation rules', icon:'fa-list-check', tab:'configuration', roles:['admin']},
+  {label:'Lists & Automation', desc:'Deal stages, pillars, stage automation rules', icon:'fa-list-check', tab:'configuration', roles:['admin']},
   {label:'Login Logs', desc:'Sign-in history, retention limit, export', icon:'fa-user-clock', tab:'loginlogs', roles:['admin']},
   {label:'Settings', desc:'Targets, AM figures, users, data backup & restore', icon:'fa-sliders', tab:'settings', roles:['admin']},
 ];

@@ -9,7 +9,6 @@ row-level access control, and PDF report export.
 
 - **Target:** IDR 163.0B portfolio valuation for H2 2026 (editable by admin in Settings)
 - **Current tracked pipeline:** IDR 54.89B across 31 opportunities
-- **Execution Squads:** Volume Squad, Tender Squad, Strategic Squad
 - **Strategic Pillars:** IoT Connectivity, Device Bundling, CCTV & Vision Analytics, Enterprise Solutions, Digital Reward
 - **Account Managers:** Anisa Rahmy, Arie Prabowo, Ashari, Dimas
 
@@ -79,7 +78,7 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   and Remaining Gap as icon-badged metric cards, plus a stacked **coverage bar** (Achieved /
   Recurring / 2026 Pipeline / Gap) with pill-style legend chips, so you can see how much of the
   full-year target is already covered and what's left to close.
-- **Tracker** — search, filter by AM / Squad / Pillar / Stage, **sort** (defaults to Progress
+- **Tracker** — search, filter by AM / Pillar / Stage, **sort** (defaults to Progress
   High → Low, so opportunities closest to 100% surface first; also TCV, Rev 2026, name), and
   **pagination** (10/25/50 rows per page). Inline progress sliders, blocker flags, and
   next-action checklists. **Double-click any row** to open a full opportunity detail drawer.
@@ -102,9 +101,10 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   which opportunity it belongs to) with a **View opportunity** button, rather than jumping straight
   into the full opportunity. Admin and management see everyone with an AM filter; an **Account
   Manager only ever sees their own** action plan.
-- **Configuration tab** (admin) — manage the **Deal Stages**, Strategic Pillars and Squads lists.
+- **Configuration tab** (admin) — manage the **Deal Stages** and **Strategic Pillars** lists.
   Stages are fully configurable: add/rename/delete, and every dropdown, filter and chart follows.
   Deleting a value that is still in use asks for confirmation and never rewrites existing deals.
+  (The Squad feature is hidden for now — the underlying data isn't deleted, so it can come back later.)
 - **Pipeline vs Account Manager Gap** — per AM: `Gap = Target − YTD actual − FY26 recurring (no
   churn) − 2026 pipeline`, with a stacked coverage bar so you instantly see who is short. Enter each
   AM's Target / YTD / Recurring under Settings → Account Manager Targets, or use the **Import
@@ -129,6 +129,14 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   fulfil that proof, building a real audit trail rather than a single note. Existing entries without
   their own status/dates inherit sensible defaults automatically, so nothing already recorded needs
   to be re-entered. N/A proofs are excluded from completion maths.
+- **Autosave + unsaved-changes warning.** While editing an existing opportunity, any change on the
+  Opportunity Details, Execution Framework, or Action Plan tabs (Team Tasks excepted — those already
+  save immediately per-task) is auto-saved to the server about 1.5 seconds after you stop typing, with
+  a small status label next to the Save button ("Unsaved changes" → "Saving…" → "All changes saved").
+  If you close or cancel the modal in that short window before autosave catches up (or a new,
+  not-yet-created opportunity, which can't autosave until it exists), you get a confirmation prompt
+  first so nothing typed is silently lost. The **Save** button still works as before and closes the
+  modal immediately.
 - **Action Plan tab** — a third tab in the opportunity edit modal, alongside Opportunity Details and
   Execution Framework. It auto-collects every evidence entry across the 8 Enterprise Proofs that's
   currently marked **Planned** — the team's to-do list for that opportunity — with its own status
@@ -213,10 +221,10 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 - **Analytics** — organized into five sub-tabs so each view stays focused: **1. Gap & Targets**
   (the default landing tab — Pipeline vs Account Manager Gap comes first, since that's what
   management needs to see immediately), **2. Pipeline Breakdown** (charts for pipeline by AM,
-  pillar, squad, target quarter, stage distribution and top-8 opportunities), **3. Execution
+  pillar, target quarter, stage distribution and top-8 opportunities), **3. Execution
   Framework** (the 8-proof funnel and completion by AM), **4. Strategy** (Strategy Coverage), and
   **5. Leaderboard & Summary** (AM leaderboard + management summary). 7 KPI cards (incl. 2026 Rev)
-  and the **filter bar** (AM / Pillar / Squad / Stage / Quarter) stay visible across every sub-tab,
+  and the **filter bar** (AM / Pillar / Stage / Quarter) stay visible across every sub-tab,
   and **clicking any chart bar/segment drills down** into the same filters.
 - **AM target vs pipeline** — admins set a per-AM 2026 revenue target in Settings; the Analytics tab
   shows each AM's attainment (2026 revenue ÷ target) with a color-coded progress bar, gap, and TCV
@@ -228,7 +236,7 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 
 **Auth** — `POST /api/login` → `{token, role, username, full_name}`, `POST /api/logout`
 **Account managers** — `GET /api/account_managers` (any authenticated user)
-**Deals** — `GET /api/deals?am=&squad=&pillar=&stage=&quarter=`, `POST /api/deals`,
+**Deals** — `GET /api/deals?am=&pillar=&stage=&quarter=`, `POST /api/deals`,
 `PUT /api/deals/<id>`, `DELETE /api/deals/<id>`, `PUT /api/deals/<id>/progress`,
 `PUT /api/deals/<id>/blocker` (mutations require admin or the owning AM)
 **Users** (admin) — `GET/POST /api/users`, `PUT/DELETE /api/users/<id>`. Roles: `admin`,
@@ -243,7 +251,9 @@ can edit or delete any field on any task on their deals), `GET /api/tasks?team=&
 its own team's tasks; pass `scope=all` to see every team's tasks instead, which is what the shared
 Weekly Meeting board uses so every role sees the same picture).
 **Config** — `GET /api/config` (all), `PUT /api/config` (admin). Config includes `target_amount`,
-`strategic_pillars`, `squads`, and `am_targets` (a map of AM full-name → 2026 revenue target).
+`strategic_pillars`, and `am_targets` (a map of AM full-name → 2026 revenue target). It still
+carries a `squads` field for backward compatibility with existing data — the Squad feature is
+just hidden from the UI for now, not removed from the schema.
 Deals carry `estimated_value` (TCV), `revenue_2026`, and the two Action Plan milestones
 `expected_po_date` / `expected_revenue_date`.
 **Reports** — `GET /api/export/pdf`, `GET /api/performance/export_pdf?am=`
