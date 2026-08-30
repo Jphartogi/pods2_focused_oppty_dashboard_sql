@@ -151,30 +151,45 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   modal where anyone who can touch it — Sales (AM/admin), or Solution/Project/Product themselves —
   files a follow-up task, deciding its **status right away** (Not started / In progress / **Blocked**
   / **Needs discussion** / Done — not stuck defaulting to Not started) and an optional **target date**
-  it needs to be resolved by. Sales sees the full opportunity and can assign a task to any of the
-  three teams, reassign or delete any task, and edit anything else on the deal as usual. A
-  cross-functional user instead gets a stripped-down version of the same modal (title "Team Tasks",
-  no other tabs, no Save button — just a read-only summary of the opportunity for context): they can
-  only file tasks under their *own* team and can only edit/delete their own team's tasks; every other
-  team's tasks on that opportunity show up locked (status, note and date disabled, no delete). Every
-  change saves immediately (not tied to a Save button), so it stays in sync in real time. Each
-  cross-functional team also gets its own **My Team Tasks** inbox — a focused worklist with no FY
-  target/gap/coverage noise — listing every task assigned to them across *all* opportunities, sorted
-  by **closest target date first** (done tasks sink to the bottom); tick a task done, change its
-  status, edit the note, or adjust the date, right there. Admin and management get a separate
-  **Weekly Meeting** board with the same closest-date-first sorting — every Blocked/Needs-discussion
-  item across the whole portfolio in one place, filterable by team and status, built specifically to
-  run the weekly cross-team sync and see what's most urgent to resolve. Unlike My Team Tasks, Weekly
-  Meeting is visible to **every role** (Sales and admin/management included, not just Solution/
-  Project/Product) so everyone can see the same picture ahead of the meeting; it's read-only there.
-  Like My Team Tasks, it hides the FY target/gap/coverage strip too — both are focused worklists.
+  it needs to be resolved by. Every task shows a **From → To** pair of chips (e.g. "Sales → Solution")
+  so it's always clear which team filed it and which team it's assigned to: Sales-filed tasks always
+  show "Sales" as the source; when Solution/Project/Product file their own follow-up, both chips show
+  their own team. Sales sees the full opportunity and can assign a task to any of the three teams,
+  reassign or delete any task, and edit anything else on the deal as usual. A cross-functional user
+  instead gets a stripped-down version of the same modal (title "Team Tasks", no other tabs, no Save
+  button — just a read-only summary of the opportunity for context): they can only file tasks under
+  their *own* team and can only edit/delete their own team's tasks; every other team's tasks on that
+  opportunity show up locked (status, note and date disabled, no delete). Every change saves
+  immediately (not tied to a Save button), so it stays in sync in real time. Each cross-functional
+  team also gets its own **My Team Tasks** inbox — a focused worklist with no FY target/gap/coverage
+  noise — listing every task assigned to them across *all* opportunities, sorted by **closest target
+  date first** (done tasks sink to the bottom); tick a task done, change its status, edit the note, or
+  adjust the date, right there. Admin and management get a separate **Weekly Meeting** board with the
+  same closest-date-first sorting — every Blocked/Needs-discussion item across the whole portfolio in
+  one place, filterable by team and status, built specifically to run the weekly cross-team sync and
+  see what's most urgent to resolve. Unlike My Team Tasks, Weekly Meeting is visible to **every role**
+  (Sales and admin/management included, not just Solution/Project/Product) so everyone can see the
+  same picture ahead of the meeting; it's read-only there. Like My Team Tasks, it hides the FY
+  target/gap/coverage strip too — both are focused worklists.
+- **Get Weekly Summary** — a button on the Weekly Meeting tab that pulls together everything **planned
+  or done in the last 7 days** across the whole portfolio: team tasks (done ones by their last-updated
+  date, not-yet-done ones by their target date), Timeline Items, and dated Execution Framework
+  evidence entries, in one place to walk through in the meeting. Two columns — **Done** and
+  **Planned** — each entry showing its date, source (which team task, Timeline Item, or which of the 8
+  Enterprise Proofs it came from), the text, and which opportunity it's on.
 - **Action Plan timeline** — in the same Action Plan tab, Sales can set two **milestones** per
-  opportunity: the **expected PO date** and the **expected revenue booking date**. A **horizontal**
-  timeline right below plots those milestones together with every dated Planned execution step along
-  one dated axis, from **today** (marked with a red reference line) through to the end of the
-  project — regular steps as small dots, the PO/Revenue milestones as larger rings, overdue steps in
-  red, with a small legend underneath. It updates live as you edit either milestone date or a step's
-  date.
+  opportunity: the **expected PO date** and the **expected revenue booking date**. A **vertical**
+  timeline right below plots those milestones together with every dated **Timeline Item** (see next),
+  sorted chronologically from **today** through to the end of the project, so you can see at a glance
+  what's coming up and in what order. It updates live as you edit either milestone date or a Timeline
+  Item's date.
+- **Timeline Items** — the deal's own independent, directly-edited dated plan: add a line of text, a
+  start date, an optional end date, and a status (Not started / Planned / In progress / Done).
+  Deliberately **not derived from** the Execution Framework's Planned execution steps (which still
+  shows underneath, unchanged, for reference) — Timeline Items exist so you can jot down what you have
+  in mind for this opportunity without tying it to a specific one of the 8 Enterprise Proofs. This
+  replaces the old "Next actions" checklist, which the Timeline (fed directly by these items) and the
+  Planned execution steps list together already covered.
 - **Framework analytics** — Analytics shows a proof-by-proof funnel (done / in progress / not
   started across the filtered deals), completion by Account Manager, and a click-to-drill list of the
   deals stuck at any given proof. The PDF report includes the same breakdown.
@@ -229,6 +244,13 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 - **AM target vs pipeline** — admins set a per-AM 2026 revenue target in Settings; the Analytics tab
   shows each AM's attainment (2026 revenue ÷ target) with a color-coded progress bar, gap, and TCV
   pipeline, plus a combined-team roll-up. Quickly spots which AMs are on/behind target.
+- **Metric strip shows your own numbers if you're an AM** — the Full-Year Target / Achieved (YTD) /
+  2026 Pipeline + Recurring / Remaining Gap strip at the top of the Tracker shows an Account Manager
+  their **own** target, achieved, recurring, and pipeline figures (and is labelled "Your FY 2026
+  Target") whenever they have a target on file in Settings, so they can tell at a glance whether
+  *they personally* are covered — rather than the whole team's number, which would hide whether their
+  own book is on track. Admin, management, and every other role still see the whole-team Full-Year
+  target as before.
 - **PDF export** — professional multi-section report (ReportLab) including 2026 revenue, an AM
   target-attainment table, and per-opportunity detail, downloaded as `deal_tracker_report_<date>.pdf`.
 
@@ -249,13 +271,19 @@ their own team's tasks, and can change `text`/`status`/`note`/`due` but never `t
 can edit or delete any field on any task on their deals), `GET /api/tasks?team=&status=&scope=`
 (cross-opportunity list, any authenticated role — by default a cross-functional role only ever sees
 its own team's tasks; pass `scope=all` to see every team's tasks instead, which is what the shared
-Weekly Meeting board uses so every role sees the same picture).
+Weekly Meeting board uses so every role sees the same picture). Every task also carries a
+`source_team` (`sales`, or one of `solution`/`project`/`product` when that team files its own
+follow-up) alongside `team` (who it's assigned to) — set automatically at creation time from the
+creator's role and never editable afterward.
 **Config** — `GET /api/config` (all), `PUT /api/config` (admin). Config includes `target_amount`,
 `strategic_pillars`, and `am_targets` (a map of AM full-name → 2026 revenue target). It still
 carries a `squads` field for backward compatibility with existing data — the Squad feature is
 just hidden from the UI for now, not removed from the schema.
 Deals carry `estimated_value` (TCV), `revenue_2026`, and the two Action Plan milestones
-`expected_po_date` / `expected_revenue_date`.
+`expected_po_date` / `expected_revenue_date`. The `next_actions` field now holds **Timeline Items**
+(`{text, date, end, status}` — `status` is one of `not_started`/`planned`/`in_progress`/`done`); a
+legacy `{action, done, due}` entry from before this shape existed is migrated transparently on read
+by the frontend (`normalizeTimelineItems()`), so nothing already saved is ever lost.
 **Reports** — `GET /api/export/pdf`, `GET /api/performance/export_pdf?am=`
 **Login Logs** (admin) — `GET /api/login_logs`, `GET /api/login_logs/export_xlsx`. Config's
 `max_login_logs` (default 100, range 10–2000) controls how many of the most recent logs are kept.

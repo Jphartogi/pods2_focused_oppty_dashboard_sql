@@ -365,8 +365,24 @@ def migrate_db(db):
 
     if "deal_tasks" in {r[0] for r in db.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
-    )} and "due" not in columns("deal_tasks"):
-        db.execute("ALTER TABLE deal_tasks ADD COLUMN due TEXT DEFAULT ''")
+    )}:
+        task_cols = columns("deal_tasks")
+        if "due" not in task_cols:
+            db.execute("ALTER TABLE deal_tasks ADD COLUMN due TEXT DEFAULT ''")
+        if "source_team" not in task_cols:
+            db.execute("ALTER TABLE deal_tasks ADD COLUMN source_team TEXT DEFAULT 'sales'")
+            # Best-effort backfill for existing rows: a cross-functional user who filed
+            # a task under their own team is the source; everything else defaults to
+            # 'sales' (admin/account_manager), which is already the column default.
+            db.execute(
+                """UPDATE deal_tasks SET source_team = team
+                   WHERE EXISTS (
+                       SELECT 1 FROM users
+                       WHERE (users.full_name = deal_tasks.created_by OR users.username = deal_tasks.created_by)
+                         AND users.role = deal_tasks.team
+                         AND users.role IN ('solution', 'project', 'product')
+                   )"""
+            )
 
 
 def init_db():
@@ -412,6 +428,8 @@ def init_db():
             deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
             text TEXT NOT NULL,
             team TEXT NOT NULL CHECK(team IN ('solution', 'project', 'product')),
+            source_team TEXT NOT NULL DEFAULT 'sales' CHECK(source_team IN
+                ('sales', 'solution', 'project', 'product')),
             status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN
                 ('not_started', 'in_progress', 'blocked', 'needs_discussion', 'done')),
             note TEXT DEFAULT '',
@@ -950,6 +968,7 @@ def task_to_dict(row):
         "deal_id": row["deal_id"],
         "text": row["text"],
         "team": row["team"],
+        "source_team": (row["source_team"] if "source_team" in keys else "sales") or "sales",
         "status": row["status"],
         "note": row["note"] or "",
         "due": (row["due"] or "") if "due" in keys else "",
@@ -988,12 +1007,14 @@ def create_deal_task(deal_id):
         # Solution/Project/Product can flag a follow-up on any opportunity, but only
         # ever under their own team - they can't file work on another team's behalf.
         team = user["role"]
+        source_team = user["role"]
     else:
         if not can_edit_deal(user, deal_row):
             return jsonify({"error": "You can only add tasks to opportunities assigned to you"}), 403
         team = str(data.get("team", "") or "").strip()
         if team not in CROSS_FUNCTIONAL_ROLES:
             return jsonify({"error": "A valid team (solution/project/product) is required"}), 400
+        source_team = "sales"
 
     text = str(data.get("text", "") or "").strip()
     if not text:
@@ -1008,9 +1029,9 @@ def create_deal_task(deal_id):
 
     creator = user.get("full_name") or user.get("username", "")
     cur = db.execute(
-        """INSERT INTO deal_tasks (deal_id, text, team, status, due, created_by)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (deal_id, text, team, status, due, creator),
+        """INSERT INTO deal_tasks (deal_id, text, team, source_team, status, due, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (deal_id, text, team, source_team, status, due, creator),
     )
     db.commit()
     row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (cur.lastrowid,)).fetchone()
