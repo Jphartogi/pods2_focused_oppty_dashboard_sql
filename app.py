@@ -1087,6 +1087,18 @@ def update_task(task_id):
             note = str(data["note"] or "")
         if "due" in data:
             due = str(data["due"] or "").strip()[:10]
+    elif user["role"] == "management":
+        # Read-only everywhere else, but management runs the weekly review, so they
+        # can mark a task's checklist state (done / needs discussion / etc.) and log
+        # a note there - not the text, team, or due date, which stay owned by sales
+        # or the cross-functional team that filed the task.
+        if "status" in data:
+            new_status = str(data["status"] or "")
+            if new_status not in TASK_STATUSES:
+                return jsonify({"error": "Invalid status"}), 400
+            status = new_status
+        if "note" in data:
+            note = str(data["note"] or "")
     else:
         return jsonify({"error": "Forbidden"}), 403
 

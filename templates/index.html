@@ -431,17 +431,17 @@
 
         <div id="wmSummaryPanel" class="card elev p-5 mb-4" style="display:none">
           <div class="flex items-center justify-between mb-1">
-            <p class="text-sm font-medium"><i class="fa-solid fa-calendar-week mr-1.5" style="color:var(--primary)"></i>Last 7 Days — Planned or Done</p>
+            <p class="text-sm font-medium"><i class="fa-solid fa-calendar-week mr-1.5" style="color:var(--primary)"></i>Weekly Summary</p>
             <button id="wmSummaryCloseBtn" type="button" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button>
           </div>
-          <p class="text-[11px] mb-3" style="color:var(--text-faint)">Team tasks, Timeline Items, and Execution Framework evidence across every opportunity, dated in the last 7 days — ready to walk through in the meeting.</p>
+          <p class="text-[11px] mb-3" style="color:var(--text-faint)">Condensed by opportunity — team tasks, Timeline Items, and Execution Framework evidence, grouped so it's quick to walk through in the meeting.</p>
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div>
-              <p class="text-xs font-medium mb-2" style="color:var(--success)"><i class="fa-solid fa-circle-check mr-1"></i>Done (<span id="wmSummaryDoneCount">0</span>)</p>
+              <p class="text-xs font-medium mb-2" style="color:var(--success)"><i class="fa-solid fa-circle-check mr-1"></i>Done — last 7 days (<span id="wmSummaryDoneCount">0</span>)</p>
               <div id="wmSummaryDoneList" class="space-y-1.5"></div>
             </div>
             <div>
-              <p class="text-xs font-medium mb-2" style="color:var(--primary)"><i class="fa-solid fa-calendar-days mr-1"></i>Planned (<span id="wmSummaryPlannedCount">0</span>)</p>
+              <p class="text-xs font-medium mb-2" style="color:var(--primary)"><i class="fa-solid fa-calendar-days mr-1"></i>Planned — next 7 days (<span id="wmSummaryPlannedCount">0</span>)</p>
               <div id="wmSummaryPlannedList" class="space-y-1.5"></div>
             </div>
           </div>
@@ -718,6 +718,18 @@
             <div class="card elev p-5">
               <p class="text-sm font-medium mb-2"><i class="fa-solid fa-lightbulb mr-1.5" style="color:var(--warning)"></i>Management Summary</p>
               <div id="managementSummary" class="text-sm leading-relaxed space-y-2" style="color:var(--text-muted)"></div>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div class="card elev p-5">
+              <p class="text-sm font-medium mb-1"><i class="fa-solid fa-calendar-check mr-1.5" style="color:var(--primary)"></i>Target PO Closed Date per AM</p>
+              <p class="text-xs mb-2" style="color:var(--text-faint)">Each AM's nearest upcoming target PO close date, across their opportunities.</p>
+              <div id="poRevByAm" class="space-y-0"></div>
+            </div>
+            <div class="card elev p-5">
+              <p class="text-sm font-medium mb-1"><i class="fa-solid fa-triangle-exclamation mr-1.5" style="color:var(--warning)"></i>Missing PO / Revenue Close Dates</p>
+              <p class="text-xs mb-2" style="color:var(--text-faint)">Opportunities without a target PO closed date or target revenue collected date.</p>
+              <div id="poRevMissingList" class="space-y-0 max-h-72 overflow-y-auto"></div>
             </div>
           </div>
         </div>
@@ -1988,32 +2000,67 @@ async function renderWeeklyMeeting(){
 
   const visible = wmStatusFilter ? tasks.filter(t=>t.status===wmStatusFilter) : tasks;
   const rank=s=>({blocked:0,needs_discussion:1,in_progress:2,not_started:3,done:4}[s]??5);
-  // Closest deadline first (done tasks sink to the bottom regardless of date) so the
-  // meeting can work top-down on what needs to be solved soonest; status breaks ties.
-  const sorted=[...visible].sort((a,b)=>
-    (a.status==='done')-(b.status==='done')
-    || (a.due||'9999-99-99').localeCompare(b.due||'9999-99-99')
-    || rank(a.status)-rank(b.status)
-    || (a.deal_name||'').localeCompare(b.deal_name||''));
   const today=todayStr();
-  document.getElementById('wmList').innerHTML = sorted.map(t=>{
-    const sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
-    const overdue=t.due && t.status!=='done' && t.due<today;
-    return `<div class="rounded-lg p-3" style="background:var(--surface-2)">
-      <div class="flex items-center gap-2 mb-1 flex-wrap">
-        ${taskFromToChips(t)}
-        <span class="chip" style="background:${sm.bg};color:${sm.color};border-color:transparent">${sm.label}</span>
-        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
-        ${t.due?`<span class="chip" style="color:${overdue?'var(--danger)':'var(--text-muted)'};border-color:${overdue?'var(--danger)':'var(--border)'}">${overdue?'⚠ ':''}${t.due}</span>`:''}
+
+  // Thread by opportunity: everything Solution/Project/Product/Sales flagged on the
+  // same deal is one discussion thread, so the meeting can work project-by-project
+  // instead of jumping between unrelated rows.
+  const threads={};
+  visible.forEach(t=>{ (threads[t.deal_id]=threads[t.deal_id]||{deal_id:t.deal_id,deal_name:t.deal_name,customer:t.customer,assigned_am:t.assigned_am,tasks:[]}).tasks.push(t); });
+  const threadList=Object.values(threads).map(th=>{
+    th.tasks.sort((a,b)=>(a.status==='done')-(b.status==='done') || (a.due||'9999-99-99').localeCompare(b.due||'9999-99-99') || rank(a.status)-rank(b.status));
+    th.openCount=th.tasks.filter(t=>t.status!=='done').length;
+    th.minRank=Math.min(...th.tasks.map(t=>rank(t.status)));
+    th.minDue=th.tasks.reduce((m,t)=>(t.status!=='done'&&t.due&&(!m||t.due<m))?t.due:m,null);
+    return th;
+  }).sort((a,b)=> a.minRank-b.minRank || (a.minDue||'9999-99-99').localeCompare(b.minDue||'9999-99-99') || (a.deal_name||'').localeCompare(b.deal_name||''));
+
+  const canEditTask=t=>{
+    if(CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return t.team===ROLE;
+    if(ROLE==='admin') return true;
+    if(ROLE==='account_manager') return (t.assigned_am||'')===FULLNAME;
+    if(ROLE==='management') return true;
+    return false;
+  };
+
+  document.getElementById('wmList').innerHTML = threadList.map(th=>`
+    <div class="rounded-lg" style="background:var(--surface-2);border:1px solid var(--border)">
+      <div class="flex items-center gap-2 px-3 py-2 flex-wrap" style="border-bottom:1px solid var(--border)">
+        <i class="fa-solid fa-comments text-xs" style="color:var(--text-faint)"></i>
+        <span class="text-sm font-medium" style="color:var(--text)">${escapeHtml(th.deal_name)}</span>
+        <span class="text-xs" style="color:var(--text-muted)">${escapeHtml(th.customer||'')}</span>
+        <span class="chip" style="color:var(--text-muted)">${escapeHtml((th.assigned_am||'').split(' ')[0])}</span>
+        <span class="flex-1"></span>
+        <span class="chip" style="color:${th.openCount?'var(--warning)':'var(--success)'}">${th.openCount} open</span>
       </div>
-      <div class="flex items-center gap-2 text-xs" style="color:var(--text-muted)">
-        <span class="font-medium" style="color:var(--text)">${escapeHtml(t.deal_name)}</span>
-        <span>${escapeHtml(t.customer||'')}</span>
-        <span class="chip" style="color:var(--text-muted)">${escapeHtml((t.assigned_am||'').split(' ')[0])}</span>
+      <div class="divide-y" style="border-color:var(--border)">
+        ${th.tasks.map(t=>{
+          const sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
+          const overdue=t.due && t.status!=='done' && t.due<today;
+          const editable=canEditTask(t);
+          return `<div class="px-3 py-2.5">
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
+              ${taskFromToChips(t)}
+              <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
+              ${t.due?`<span class="chip" style="color:${overdue?'var(--danger)':'var(--text-muted)'};border-color:${overdue?'var(--danger)':'var(--border)'}">${overdue?'⚠ ':''}${t.due}</span>`:''}
+            </div>
+            <div class="flex items-center gap-2">
+              <select class="wm-status field text-xs px-2 py-1" data-id="${t.id}" ${editable?'':'disabled'} style="width:150px;background:${sm.bg};color:${sm.color};border-color:transparent">
+                ${Object.entries(TASK_STATUS_META).map(([v,m])=>`<option value="${v}" ${t.status===v?'selected':''}>${m.label}</option>`).join('')}
+              </select>
+              <input type="text" class="wm-note field flex-1 px-2 py-1 text-xs" data-id="${t.id}" ${editable?'':'disabled'} placeholder="Note — discussed in weekly review, next step, blocker..." value="${escapeHtml(t.note||'')}">
+            </div>
+          </div>`;
+        }).join('')}
       </div>
-      ${t.note?`<p class="text-xs mt-1.5" style="color:var(--text-muted);white-space:pre-wrap"><i class="fa-solid fa-message mr-1" style="color:var(--text-faint)"></i>${escapeHtml(t.note)}</p>`:''}
-    </div>`;
-  }).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing to show${team?` for ${escapeHtml(TASK_TEAM_META[team]?.label||team)}`:''}.</p>`;
+    </div>`).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing to show${team?` for ${escapeHtml(TASK_TEAM_META[team]?.label||team)}`:''}.</p>`;
+
+  document.getElementById('wmList').querySelectorAll('.wm-status').forEach(s=>s.addEventListener('change',e=>saveWmTaskField(parseInt(e.target.dataset.id),{status:e.target.value})));
+  document.getElementById('wmList').querySelectorAll('.wm-note').forEach(inp=>inp.addEventListener('change',e=>saveWmTaskField(parseInt(e.target.dataset.id),{note:e.target.value})));
+}
+async function saveWmTaskField(taskId,patch){
+  try{ await api(`/api/tasks/${taskId}`,{method:'PUT',body:JSON.stringify(patch)}); renderWeeklyMeeting(); }
+  catch(err){ showToast(err.message,true); }
 }
 document.getElementById('wmTeamFilter').addEventListener('change',renderWeeklyMeeting);
 document.getElementById('wmFilterClear').addEventListener('click',()=>{ wmStatusFilter=null; renderWeeklyMeeting(); });
@@ -2021,14 +2068,18 @@ document.getElementById('wmFilterClear').addEventListener('click',()=>{ wmStatus
   document.getElementById(id).addEventListener('click',()=>{ wmStatusFilter = wmStatusFilter===key?null:key; renderWeeklyMeeting(); });
 });
 
-/* ---------- Weekly summary: everything planned or done in the last 7 days,
-   across every team task, Timeline Item, and Execution Framework entry on
-   every opportunity — regardless of the team filter above. ---------- */
+/* ---------- Weekly summary: what happened in the last 7 days, and what's planned
+   for the next 7 days, across every team task, Timeline Item, and Execution
+   Framework entry on every opportunity — regardless of the team filter above.
+   Grouped by opportunity and condensed to one line per item so it stays short
+   enough to actually walk through in the meeting. ---------- */
 async function buildWeeklySummary(){
   const today=todayStr();
   const weekAgoDate=new Date(); weekAgoDate.setDate(weekAgoDate.getDate()-7);
-  const weekAgo=ymd(weekAgoDate);
-  const inWindow=d=> !!d && d>=weekAgo && d<=today;
+  const weekAheadDate=new Date(); weekAheadDate.setDate(weekAheadDate.getDate()+7);
+  const weekAgo=ymd(weekAgoDate), weekAhead=ymd(weekAheadDate);
+  const inPast=d=> !!d && d>=weekAgo && d<=today;
+  const inFuture=d=> !!d && d>=today && d<=weekAhead;
   const doneItems=[], plannedItems=[];
 
   let tasks=[];
@@ -2037,23 +2088,23 @@ async function buildWeeklySummary(){
     const updated=(t.updated_at||'').slice(0,10);
     const kind=`${TASK_TEAM_META[t.team]?.label||t.team} Team Task`;
     const ctx={deal_name:t.deal_name||'', customer:t.customer||''};
-    if(t.status==='done' && inWindow(updated)) doneItems.push({text:t.text, date:updated, ctx, kind});
-    else if(t.status!=='done' && inWindow(t.due)) plannedItems.push({text:t.text, date:t.due, ctx, kind});
+    if(t.status==='done' && inPast(updated)) doneItems.push({text:t.text, date:updated, ctx, kind});
+    else if(t.status!=='done' && inFuture(t.due)) plannedItems.push({text:t.text, date:t.due, ctx, kind});
   });
 
   (ALL_DEALS||[]).forEach(d=>{
     const ctx={deal_name:d.deal_name, customer:d.customer};
     normalizeTimelineItems(d.next_actions).forEach(it=>{
-      if(it.status==='done' && inWindow(it.date)) doneItems.push({text:it.text, date:it.date, ctx, kind:'Timeline Item'});
-      else if(it.status!=='done' && inWindow(it.date)) plannedItems.push({text:it.text, date:it.date, ctx, kind:'Timeline Item'});
+      if(it.status==='done' && inPast(it.date)) doneItems.push({text:it.text, date:it.date, ctx, kind:'Timeline Item'});
+      else if(it.status!=='done' && inFuture(it.date)) plannedItems.push({text:it.text, date:it.date, ctx, kind:'Timeline Item'});
     });
     const pr=normalizeProofs(d.proofs);
     PROOF_FRAMEWORK.forEach((p,i)=>{
       (pr[p.key].entries||[]).forEach(e=>{
         if(!e.date) return;
         const kind=`${i+1}. ${p.name.replace('Proof of ','')}`;
-        if(e.status==='done' && inWindow(e.date)) doneItems.push({text:e.text, date:e.date, ctx, kind});
-        else if(e.status!=='done' && inWindow(e.date)) plannedItems.push({text:e.text, date:e.date, ctx, kind});
+        if(e.status==='done' && inPast(e.date)) doneItems.push({text:e.text, date:e.date, ctx, kind});
+        else if(e.status!=='done' && inFuture(e.date)) plannedItems.push({text:e.text, date:e.date, ctx, kind});
       });
     });
   });
@@ -2062,14 +2113,20 @@ async function buildWeeklySummary(){
   plannedItems.sort((a,b)=>a.date.localeCompare(b.date));
   return {doneItems, plannedItems};
 }
-function summaryItemRow(it, accent){
+function groupSummaryByDeal(items){
+  const byDeal={};
+  items.forEach(it=>{ const k=it.ctx.deal_name||'—'; (byDeal[k]=byDeal[k]||{deal_name:it.ctx.deal_name,customer:it.ctx.customer,items:[]}).items.push(it); });
+  return Object.values(byDeal);
+}
+function summaryGroupCard(group, accent){
   return `<div class="rounded-lg p-2.5" style="background:var(--surface-2)">
-    <div class="flex items-center gap-2 mb-0.5">
-      <span class="chip" style="color:${accent};border-color:${accent}">${escapeHtml(it.date)}</span>
-      <span class="text-[10px]" style="color:var(--text-faint)">${escapeHtml(it.kind)}</span>
-    </div>
-    <p class="text-sm" style="color:var(--text)">${escapeHtml(it.text)}</p>
-    <p class="text-[10px]" style="color:var(--text-faint)">${escapeHtml(it.ctx.deal_name)}${it.ctx.customer?' · '+escapeHtml(it.ctx.customer):''}</p>
+    <p class="text-sm font-medium mb-1" style="color:var(--text)">${escapeHtml(group.deal_name)}${group.customer?` <span class="text-[11px] font-normal" style="color:var(--text-faint)">· ${escapeHtml(group.customer)}</span>`:''}</p>
+    <ul class="space-y-1">
+      ${group.items.map(it=>`<li class="text-xs flex items-start gap-1.5" style="color:var(--text-muted)">
+        <span class="chip flex-shrink-0" style="color:${accent};border-color:${accent}">${escapeHtml(it.date)}</span>
+        <span><span style="color:var(--text)">${escapeHtml(it.text)}</span> <span class="text-[10px]" style="color:var(--text-faint)">(${escapeHtml(it.kind)})</span></span>
+      </li>`).join('')}
+    </ul>
   </div>`;
 }
 document.getElementById('wmSummaryBtn').addEventListener('click',async()=>{
@@ -2081,8 +2138,9 @@ document.getElementById('wmSummaryBtn').addEventListener('click',async()=>{
     const {doneItems, plannedItems}=await buildWeeklySummary();
     document.getElementById('wmSummaryDoneCount').textContent=String(doneItems.length);
     document.getElementById('wmSummaryPlannedCount').textContent=String(plannedItems.length);
-    document.getElementById('wmSummaryDoneList').innerHTML = doneItems.map(it=>summaryItemRow(it,'var(--success)')).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing marked done in the last 7 days.</p>`;
-    document.getElementById('wmSummaryPlannedList').innerHTML = plannedItems.map(it=>summaryItemRow(it,'var(--primary)')).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing dated in the last 7 days.</p>`;
+    const doneGroups=groupSummaryByDeal(doneItems), plannedGroups=groupSummaryByDeal(plannedItems);
+    document.getElementById('wmSummaryDoneList').innerHTML = doneGroups.map(g=>summaryGroupCard(g,'var(--success)')).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing marked done in the last 7 days.</p>`;
+    document.getElementById('wmSummaryPlannedList').innerHTML = plannedGroups.map(g=>summaryGroupCard(g,'var(--primary)')).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing planned for the next 7 days.</p>`;
   } else {
     panel.style.display='none';
   }
@@ -2953,6 +3011,7 @@ function renderAnalytics(){
   renderStrategyPlaybook(ds);
   renderLeaderboard(ds);
   renderSummary(ds,total,value,weighted,closed,blocked);
+  renderPoRevSummary(ds);
   syncAnalyticsFilterSelects();
 }
 
@@ -3178,6 +3237,32 @@ function renderSummary(ds,total,value,weighted,closed,blocked){
     <p>${topAM?`<b>${escapeHtml(topAM[0])}</b> leads with ${fmtIDR(topAM[1])} of pipeline. `:''}${topPillar?`<b>${escapeHtml(topPillar[0])}</b> is the strongest pillar (${fmtIDR(topPillar[1])}). `:''}${fmtIDR(negoValue)} is already in Negotiation.</p>
     <p>${blocked?`<b style="color:var(--danger)">${blocked} opportunity(ies) blocked</b> — escalate this week. `:'No opportunities are blocked. '}Closed-won to date: ${fmtIDR(closed)}.</p>
     <p><b>Recommendations:</b> push Negotiation-stage deals to close, lock fixed partner pricing on large device-bundling deals, assign dedicated PICs to the biggest Enterprise Solutions pursuits, and maintain frequent engagement on CCTV &amp; Vision projects.</p>`;
+}
+
+function renderPoRevSummary(ds){
+  const rows=ds||ALL_DEALS;
+  const byAM={};
+  rows.forEach(d=>{ const am=d.assigned_am||'—'; (byAM[am]=byAM[am]||[]).push(d); });
+  const amRows=Object.entries(byAM).map(([am,deals])=>{
+    const withPO=deals.filter(d=>d.expected_po_date).sort((a,b)=>a.expected_po_date.localeCompare(b.expected_po_date));
+    const missing=deals.length-withPO.length;
+    return {am, next:withPO[0]||null, missing, total:deals.length};
+  }).sort((a,b)=>(a.next?a.next.expected_po_date:'9999-99-99').localeCompare(b.next?b.next.expected_po_date:'9999-99-99'));
+  document.getElementById('poRevByAm').innerHTML = amRows.map(r=>`
+    <div class="flex items-center justify-between gap-2 text-xs py-2" style="border-top:1px solid var(--border)">
+      <span class="font-medium flex-shrink-0" style="color:var(--text)">${escapeHtml(r.am)}</span>
+      <span class="flex-1 text-right" style="color:var(--text-muted)">${r.next?`Next: <b style="color:var(--text)">${r.next.expected_po_date}</b> — ${escapeHtml(r.next.deal_name)}`:'No PO target date set'}</span>
+      ${r.missing?`<span class="chip flex-shrink-0" style="color:var(--warning);border-color:var(--warning)">${r.missing} missing</span>`:''}
+    </div>`).join('') || `<p class="text-xs" style="color:var(--text-faint)">No data</p>`;
+
+  const missingRows=rows.filter(d=>!d.expected_po_date || !d.expected_revenue_date);
+  document.getElementById('poRevMissingList').innerHTML = missingRows.map(d=>{
+    const gaps=[!d.expected_po_date?'No PO date':null, !d.expected_revenue_date?'No revenue date':null].filter(Boolean).join(' · ');
+    return `<div class="flex items-center justify-between gap-2 text-xs py-2" style="border-top:1px solid var(--border)">
+      <span style="color:var(--text)">${escapeHtml(d.deal_name)} <span style="color:var(--text-faint)">· ${escapeHtml(d.assigned_am||'—')}</span></span>
+      <span class="flex-shrink-0" style="color:var(--warning)">${gaps}</span>
+    </div>`;
+  }).join('') || `<p class="text-xs" style="color:var(--success)"><i class="fa-solid fa-circle-check mr-1"></i>Every opportunity has both dates set.</p>`;
 }
 
 /* ================= SETTINGS ================= */

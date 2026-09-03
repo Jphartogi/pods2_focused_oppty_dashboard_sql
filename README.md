@@ -169,14 +169,26 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   one place, filterable by team and status, built specifically to run the weekly cross-team sync and
   see what's most urgent to resolve. Unlike My Team Tasks, Weekly Meeting is visible to **every role**
   (Sales and admin/management included, not just Solution/Project/Product) so everyone can see the
-  same picture ahead of the meeting; it's read-only there. Like My Team Tasks, it hides the FY
-  target/gap/coverage strip too — both are focused worklists.
-- **Get Weekly Summary** — a button on the Weekly Meeting tab that pulls together everything **planned
-  or done in the last 7 days** across the whole portfolio: team tasks (done ones by their last-updated
-  date, not-yet-done ones by their target date), Timeline Items, and dated Execution Framework
-  evidence entries, in one place to walk through in the meeting. Two columns — **Done** and
-  **Planned** — each entry showing its date, source (which team task, Timeline Item, or which of the 8
-  Enterprise Proofs it came from), the text, and which opportunity it's on.
+  same picture ahead of the meeting; unlike My Team Tasks it's editable there too (see next), but only
+  the checklist state, not the task itself. Like My Team Tasks, it hides the FY target/gap/coverage
+  strip too — both are focused worklists.
+- **Weekly Meeting threads** — the board groups every task by **opportunity** instead of listing them
+  flat, so everything Solution/Project/Product/Sales flagged on the same deal reads as one discussion
+  thread (with an "N open" count on the thread header) instead of scattered rows you have to piece
+  together during the sync. Each task inside a thread has its own **status dropdown and note field
+  right there** — closing it as **Done**, flipping it to **Needs discussion**, or leaving a note as you
+  talk through it — no need to open the opportunity to update the checklist. Editability follows the
+  same ownership rule as Team Tasks (a cross-functional team can only touch its own tasks, an AM only
+  their own deals, admin everything); **management** can also change status/note on any task from this
+  view specifically so they can run the review and mark items resolved, without gaining edit rights
+  over the opportunity itself.
+- **Get Weekly Summary** — a button on the Weekly Meeting tab that pulls together, condensed by
+  opportunity, what **happened in the last 7 days** and what's **planned for the next 7 days** across
+  the whole portfolio: team tasks (done ones by their last-updated date, not-yet-done ones by their
+  target date), Timeline Items, and dated Execution Framework evidence entries. Two columns — **Done
+  (last 7 days)** and **Planned (next 7 days)** — grouped one card per opportunity with a bullet per
+  item (date, text, and source — which team task, Timeline Item, or which of the 8 Enterprise Proofs it
+  came from) so the meeting can scan a handful of opportunity cards instead of a long flat list.
 - **Action Plan timeline** — in the same Action Plan tab, Sales can set two **milestones** per
   opportunity: the **expected PO date** and the **expected revenue booking date**. A **vertical**
   timeline right below plots those milestones together with every dated **Timeline Item** (see next),
@@ -193,6 +205,12 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 - **Framework analytics** — Analytics shows a proof-by-proof funnel (done / in progress / not
   started across the filtered deals), completion by Account Manager, and a click-to-drill list of the
   deals stuck at any given proof. The PDF report includes the same breakdown.
+- **Target PO Closed Date per AM** — on the Leaderboard & Summary analytics tab, a card lists each
+  Account Manager's nearest upcoming **expected PO date** across their opportunities (or "No PO target
+  date set" if none has one), plus how many of their deals are missing it. A second card lists every
+  opportunity in the current filter that's missing its **expected PO date** and/or **expected revenue
+  collected date**, so management can chase the gaps before the weekly review instead of discovering
+  them deal-by-deal.
 - **Account Manager focus** — when an AM signs in, the Tracker is pre-filtered to their own
   opportunities (clearly flagged, and they can widen it to the whole team at any time).
 - **Management View** (admin + management only) — a simple executive briefing that management lands
@@ -268,7 +286,9 @@ AM choosing any team, or a cross-functional role creating only under its own tea
 is ignored and forced server-side for them; both may set the starting `status` and an optional `due`
 date at creation time), `PUT/DELETE /api/tasks/<id>` (cross-functional roles may edit/delete only
 their own team's tasks, and can change `text`/`status`/`note`/`due` but never `team`; admin/owning AM
-can edit or delete any field on any task on their deals), `GET /api/tasks?team=&status=&scope=`
+can edit or delete any field on any task on their deals; `management` may `PUT` `status`/`note` only,
+on any task — powers the inline checklist editing on the Weekly Meeting board — and cannot delete or
+change `text`/`team`/`due`), `GET /api/tasks?team=&status=&scope=`
 (cross-opportunity list, any authenticated role — by default a cross-functional role only ever sees
 its own team's tasks; pass `scope=all` to see every team's tasks instead, which is what the shared
 Weekly Meeting board uses so every role sees the same picture). Every task also carries a
