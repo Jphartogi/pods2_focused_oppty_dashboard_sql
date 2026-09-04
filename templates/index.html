@@ -1108,6 +1108,7 @@
                 <option value="project">Project</option>
                 <option value="product">Product</option>
               </select>
+              <input id="newTaskAssignee" type="text" placeholder="Assigned to — who specifically?" class="field px-3 py-2 text-sm flex-1" style="min-width:160px" title="Who this task is targeted to, by name">
               <select id="newTaskStatus" class="field px-3 py-2 text-sm" style="width:150px" title="Status right now">
                 <option value="not_started">Not started</option>
                 <option value="in_progress">In progress</option>
@@ -1901,9 +1902,12 @@ const TASK_TEAM_META = {
 };
 function taskFromToChips(t){
   const fromM=TASK_TEAM_META[t.source_team]||TASK_TEAM_META.sales, toM=TASK_TEAM_META[t.team];
-  return `<span class="chip" style="background:${fromM.bg};color:${fromM.color};border-color:transparent" title="Filed by">${fromM.label}</span>
+  const fromWho=t.created_by?` <span style="opacity:.85">· ${escapeHtml(t.created_by)}</span>`:'';
+  return `<span class="chip" style="background:${fromM.bg};color:${fromM.color};border-color:transparent" title="Filed by">${fromM.label}${fromWho}</span>
     <i class="fa-solid fa-arrow-right-long text-[9px]" style="color:var(--text-faint)"></i>
-    <span class="chip" style="background:${toM.bg};color:${toM.color};border-color:transparent" title="Assigned to">${toM.label}</span>`;
+    <span class="chip" style="background:${toM.bg};color:${toM.color};border-color:transparent" title="Assigned to team">${toM.label}</span>
+    ${t.assigned_to?`<span class="chip" style="color:var(--text)" title="Assigned to">
+      <i class="fa-solid fa-user text-[9px] mr-1" style="color:var(--text-faint)"></i>${escapeHtml(t.assigned_to)}</span>`:''}`;
 }
 const TASK_STATUS_META = {
   not_started:{label:'Not started', color:'var(--text-faint)', bg:'var(--surface-3)'},
@@ -1941,13 +1945,18 @@ function renderTeamTasks(){
         </select>
         ${rowEditable?`<button type="button" class="tt-del" data-id="${t.id}" style="color:var(--text-faint)" title="Remove"><i class="fa-solid fa-xmark"></i></button>`:`<span style="width:16px"></span>`}
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 mb-1.5">
+        <input type="text" class="tt-assignee field px-2 py-1 text-xs" data-id="${t.id}" ${rowEditable?'':'disabled'} style="width:160px" placeholder="Assigned to — who specifically?" title="Who this task is targeted to, by name" value="${escapeHtml(t.assigned_to||'')}">
         <input type="text" class="tt-note field flex-1 px-2 py-1 text-xs" data-id="${t.id}" ${rowEditable?'':'disabled'} placeholder="Note — what's the status, or what needs to be discussed..." value="${escapeHtml(t.note||'')}">
         <input type="date" class="tt-due field px-2 py-1 text-xs" data-id="${t.id}" ${rowEditable?'':'disabled'} style="width:140px;${overdue?'color:var(--danger)':''}" title="Target date to resolve this by" value="${t.due||''}">
       </div>
     </div>`;
   }).join('') || `<p class="text-xs" style="color:var(--text-faint)">No team tasks yet — add what Solution, Project or Product need to follow up on below.</p>`;
   list.querySelectorAll('.tt-status').forEach(s=>s.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{status:e.target.value})));
+  list.querySelectorAll('.tt-assignee').forEach(inp=>inp.addEventListener('change',e=>{
+    const v=inp.value.trim(); if(!v){ showToast('Assigned to is required',true); inp.value=dealTasksDraft.find(t=>t.id===parseInt(inp.dataset.id))?.assigned_to||''; return; }
+    saveTaskField(parseInt(inp.dataset.id),{assigned_to:v});
+  }));
   list.querySelectorAll('.tt-note').forEach(inp=>inp.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{note:e.target.value})));
   list.querySelectorAll('.tt-due').forEach(inp=>inp.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{due:e.target.value})));
   list.querySelectorAll('.tt-del').forEach(b=>b.addEventListener('click',()=>deleteTask(parseInt(b.dataset.id))));
@@ -1970,11 +1979,13 @@ async function deleteTask(taskId){
 document.getElementById('addTaskBtn').addEventListener('click',async()=>{
   if(!currentTaskDealId) return;
   const txt=document.getElementById('newTaskText'), team=document.getElementById('newTaskTeam');
+  const assignee=document.getElementById('newTaskAssignee');
   const status=document.getElementById('newTaskStatus'), due=document.getElementById('newTaskDue');
   const v=txt.value.trim(); if(!v) return;
+  const who=assignee.value.trim(); if(!who){ showToast('Please say who this task is assigned to',true); return; }
   try{
-    const created=await api(`/api/deals/${currentTaskDealId}/tasks`,{method:'POST',body:JSON.stringify({text:v,team:team.value,status:status.value,due:due.value})});
-    dealTasksDraft.push(created); txt.value=''; status.value='not_started'; due.value=''; renderTeamTasks();
+    const created=await api(`/api/deals/${currentTaskDealId}/tasks`,{method:'POST',body:JSON.stringify({text:v,team:team.value,assigned_to:who,status:status.value,due:due.value})});
+    dealTasksDraft.push(created); txt.value=''; assignee.value=''; status.value='not_started'; due.value=''; renderTeamTasks();
   }catch(err){ showToast(err.message,true); }
 });
 document.getElementById('newTaskText').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('addTaskBtn').click(); } });
@@ -2038,24 +2049,31 @@ async function renderWeeklyMeeting(){
           const sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
           const overdue=t.due && t.status!=='done' && t.due<today;
           const editable=canEditTask(t);
+          const isReviewer=ROLE==='admin'||ROLE==='management';
           return `<div class="px-3 py-2.5">
             <div class="flex items-center gap-2 mb-1 flex-wrap">
               ${taskFromToChips(t)}
               <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
               ${t.due?`<span class="chip" style="color:${overdue?'var(--danger)':'var(--text-muted)'};border-color:${overdue?'var(--danger)':'var(--border)'}">${overdue?'⚠ ':''}${t.due}</span>`:''}
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 mb-1.5 flex-wrap">
               <select class="wm-status field text-xs px-2 py-1" data-id="${t.id}" ${editable?'':'disabled'} style="width:150px;background:${sm.bg};color:${sm.color};border-color:transparent">
                 ${Object.entries(TASK_STATUS_META).map(([v,m])=>`<option value="${v}" ${t.status===v?'selected':''}>${m.label}</option>`).join('')}
               </select>
               <input type="text" class="wm-note field flex-1 px-2 py-1 text-xs" data-id="${t.id}" ${editable?'':'disabled'} placeholder="Note — discussed in weekly review, next step, blocker..." value="${escapeHtml(t.note||'')}">
             </div>
+            ${isReviewer?`<div class="flex items-center gap-1.5">
+              <button type="button" class="wm-mark-solved text-[11px] px-2 py-1 rounded-md flex items-center gap-1" data-id="${t.id}" ${t.status==='done'?'disabled':''} style="background:${t.status==='done'?'var(--surface-3)':'var(--success)'};color:${t.status==='done'?'var(--text-faint)':'#fff'}"><i class="fa-solid fa-circle-check"></i> ${t.status==='done'?'Solved':'Mark solved'}</button>
+              <button type="button" class="wm-mark-discuss text-[11px] px-2 py-1 rounded-md flex items-center gap-1" data-id="${t.id}" ${t.status==='needs_discussion'?'disabled':''} style="background:${t.status==='needs_discussion'?'var(--surface-3)':'var(--warning)'};color:${t.status==='needs_discussion'?'var(--text-faint)':'#fff'}"><i class="fa-solid fa-comments"></i> ${t.status==='needs_discussion'?'Needs discussion':'Needs further discussion'}</button>
+            </div>`:''}
           </div>`;
         }).join('')}
       </div>
     </div>`).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing to show${team?` for ${escapeHtml(TASK_TEAM_META[team]?.label||team)}`:''}.</p>`;
 
   document.getElementById('wmList').querySelectorAll('.wm-status').forEach(s=>s.addEventListener('change',e=>saveWmTaskField(parseInt(e.target.dataset.id),{status:e.target.value})));
+  document.getElementById('wmList').querySelectorAll('.wm-mark-solved').forEach(b=>b.addEventListener('click',()=>saveWmTaskField(parseInt(b.dataset.id),{status:'done'})));
+  document.getElementById('wmList').querySelectorAll('.wm-mark-discuss').forEach(b=>b.addEventListener('click',()=>saveWmTaskField(parseInt(b.dataset.id),{status:'needs_discussion'})));
   document.getElementById('wmList').querySelectorAll('.wm-note').forEach(inp=>inp.addEventListener('change',e=>saveWmTaskField(parseInt(e.target.dataset.id),{note:e.target.value})));
 }
 async function saveWmTaskField(taskId,patch){

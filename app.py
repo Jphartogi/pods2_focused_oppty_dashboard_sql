@@ -383,6 +383,17 @@ def migrate_db(db):
                          AND users.role IN ('solution', 'project', 'product')
                    )"""
             )
+        if "assigned_to" not in task_cols:
+            db.execute("ALTER TABLE deal_tasks ADD COLUMN assigned_to TEXT DEFAULT ''")
+            # Best-effort backfill: a task a cross-functional team filed on their own
+            # initiative was implicitly for the opportunity's AM to see - anything
+            # sales/admin filed already names its target via the `team` column, so
+            # leave those blank rather than guess an individual.
+            db.execute(
+                """UPDATE deal_tasks SET assigned_to = (
+                       SELECT assigned_am FROM deals WHERE deals.id = deal_tasks.deal_id
+                   ) WHERE source_team != 'sales' AND (assigned_to IS NULL OR assigned_to = '')"""
+            )
 
 
 def init_db():
@@ -435,6 +446,7 @@ def init_db():
             note TEXT DEFAULT '',
             due TEXT DEFAULT '',
             created_by TEXT DEFAULT '',
+            assigned_to TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -972,6 +984,7 @@ def task_to_dict(row):
         "status": row["status"],
         "note": row["note"] or "",
         "due": (row["due"] or "") if "due" in keys else "",
+        "assigned_to": (row["assigned_to"] if "assigned_to" in keys else "") or "",
         "created_by": row["created_by"] or "",
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
@@ -1020,6 +1033,12 @@ def create_deal_task(deal_id):
     if not text:
         return jsonify({"error": "text is required"}), 400
 
+    # Every task must name who it's actually for, not just which team - so the
+    # weekly review can see who to chase without opening the opportunity.
+    assigned_to = str(data.get("assigned_to", "") or "").strip()
+    if not assigned_to:
+        return jsonify({"error": "assigned_to is required - who is this task for?"}), 400
+
     # The creator decides the starting status and an optional target date right away,
     # rather than always starting at "not_started" and having to change it afterward.
     status = str(data.get("status", "") or "").strip()
@@ -1029,9 +1048,9 @@ def create_deal_task(deal_id):
 
     creator = user.get("full_name") or user.get("username", "")
     cur = db.execute(
-        """INSERT INTO deal_tasks (deal_id, text, team, source_team, status, due, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (deal_id, text, team, source_team, status, due, creator),
+        """INSERT INTO deal_tasks (deal_id, text, team, source_team, status, due, created_by, assigned_to)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (deal_id, text, team, source_team, status, due, creator, assigned_to),
     )
     db.commit()
     row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (cur.lastrowid,)).fetchone()
@@ -1050,10 +1069,12 @@ def update_task(task_id):
     user = g.current_user
     text, team, status, note = row["text"], row["team"], row["status"], row["note"]
     due = row["due"] if "due" in row.keys() else ""
+    assigned_to = row["assigned_to"] if "assigned_to" in row.keys() else ""
 
     if user["role"] in CROSS_FUNCTIONAL_ROLES:
-        # Own team's tasks only; text/status/note/due are theirs to keep current, but
-        # the team assignment itself is fixed - they can't move a task to another team.
+        # Own team's tasks only; text/status/note/due/assigned_to are theirs to keep
+        # current, but the team assignment itself is fixed - they can't move a task
+        # to another team.
         if row["team"] != user["role"]:
             return jsonify({"error": "You can only update your own team's tasks"}), 403
         if str(data.get("text", "")).strip():
@@ -1067,6 +1088,11 @@ def update_task(task_id):
             note = str(data["note"] or "")
         if "due" in data:
             due = str(data["due"] or "").strip()[:10]
+        if "assigned_to" in data:
+            new_assignee = str(data["assigned_to"] or "").strip()
+            if not new_assignee:
+                return jsonify({"error": "assigned_to is required - who is this task for?"}), 400
+            assigned_to = new_assignee
     elif user["role"] in ("admin", "account_manager"):
         deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (row["deal_id"],)).fetchone()
         if not deal_row or not can_edit_deal(user, deal_row):
@@ -1087,6 +1113,11 @@ def update_task(task_id):
             note = str(data["note"] or "")
         if "due" in data:
             due = str(data["due"] or "").strip()[:10]
+        if "assigned_to" in data:
+            new_assignee = str(data["assigned_to"] or "").strip()
+            if not new_assignee:
+                return jsonify({"error": "assigned_to is required - who is this task for?"}), 400
+            assigned_to = new_assignee
     elif user["role"] == "management":
         # Read-only everywhere else, but management runs the weekly review, so they
         # can mark a task's checklist state (done / needs discussion / etc.) and log
@@ -1104,8 +1135,8 @@ def update_task(task_id):
 
     db.execute(
         """UPDATE deal_tasks SET text = ?, team = ?, status = ?, note = ?, due = ?,
-           updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
-        (text, team, status, note, due, task_id),
+           assigned_to = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+        (text, team, status, note, due, assigned_to, task_id),
     )
     db.commit()
     row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()

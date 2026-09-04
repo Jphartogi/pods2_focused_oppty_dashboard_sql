@@ -150,12 +150,16 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 - **Team Tasks — the Sales ↔ Solution/Project/Product bridge.** A fourth tab in the opportunity edit
   modal where anyone who can touch it — Sales (AM/admin), or Solution/Project/Product themselves —
   files a follow-up task, deciding its **status right away** (Not started / In progress / **Blocked**
-  / **Needs discussion** / Done — not stuck defaulting to Not started) and an optional **target date**
-  it needs to be resolved by. Every task shows a **From → To** pair of chips (e.g. "Sales → Solution")
-  so it's always clear which team filed it and which team it's assigned to: Sales-filed tasks always
-  show "Sales" as the source; when Solution/Project/Product file their own follow-up, both chips show
-  their own team. Sales sees the full opportunity and can assign a task to any of the three teams,
-  reassign or delete any task, and edit anything else on the deal as usual. A cross-functional user
+  / **Needs discussion** / Done — not stuck defaulting to Not started), a required **"Assigned to"**
+  name (who specifically this is for — not just which team), and an optional **target date** it needs
+  to be resolved by. Every task shows a **From → To** pair of chips (e.g. "Sales · Administrator →
+  Solution") plus a name chip for who it's assigned to, so it's always clear who filed it, which team
+  it's assigned to, and who specifically owns it: Sales-filed tasks always show "Sales · <filer's
+  name>" as the source; when Solution/Project/Product file their own follow-up, the source chip shows
+  their own team and name instead. The "Assigned to" name can be edited later the same way the note
+  can, and is required on every create/edit — the API rejects a task or update with it blank. Sales
+  sees the full opportunity and can assign a task to any of the three teams, reassign or delete any
+  task, and edit anything else on the deal as usual. A cross-functional user
   instead gets a stripped-down version of the same modal (title "Team Tasks", no other tabs, no Save
   button — just a read-only summary of the opportunity for context): they can only file tasks under
   their *own* team and can only edit/delete their own team's tasks; every other team's tasks on that
@@ -181,7 +185,10 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
   same ownership rule as Team Tasks (a cross-functional team can only touch its own tasks, an AM only
   their own deals, admin everything); **management** can also change status/note on any task from this
   view specifically so they can run the review and mark items resolved, without gaining edit rights
-  over the opportunity itself.
+  over the opportunity itself. **Admin and management** additionally get two one-click buttons on every
+  task — **"Mark solved"** and **"Needs further discussion"** — that set its status directly to `done`
+  or `needs_discussion` without touching the dropdown, so it's a single click to categorize a weekly
+  item as resolved or still open. Each button disables itself once the task is already in that state.
 - **Get Weekly Summary** — a button on the Weekly Meeting tab that pulls together, condensed by
   opportunity, what **happened in the last 7 days** and what's **planned for the next 7 days** across
   the whole portfolio: team tasks (done ones by their last-updated date, not-yet-done ones by their
@@ -283,18 +290,24 @@ Enforced both in the UI and server-side (`can_edit_deal()` in `app.py`).
 `account_manager`, `management`, `solution`, `project`, `product`.
 **Team Tasks** — `GET/POST /api/deals/<id>/tasks` (list: any authenticated role; create: admin/owning
 AM choosing any team, or a cross-functional role creating only under its own team — the `team` field
-is ignored and forced server-side for them; both may set the starting `status` and an optional `due`
-date at creation time), `PUT/DELETE /api/tasks/<id>` (cross-functional roles may edit/delete only
-their own team's tasks, and can change `text`/`status`/`note`/`due` but never `team`; admin/owning AM
-can edit or delete any field on any task on their deals; `management` may `PUT` `status`/`note` only,
-on any task — powers the inline checklist editing on the Weekly Meeting board — and cannot delete or
-change `text`/`team`/`due`), `GET /api/tasks?team=&status=&scope=`
+is ignored and forced server-side for them; both must supply a non-blank `assigned_to` — who
+specifically the task is for — and may set the starting `status` and an optional `due` date at
+creation time; a request with `assigned_to` missing or blank is rejected with 400), `PUT/DELETE
+/api/tasks/<id>` (cross-functional roles may edit/delete only their own team's tasks, and can change
+`text`/`status`/`note`/`due`/`assigned_to` but never `team`; admin/owning AM can edit or delete any
+field on any task on their deals; `management` may `PUT` `status`/`note` only, on any task — powers
+the inline checklist editing and the one-click Mark Solved / Needs Discussion buttons on the Weekly
+Meeting board — and cannot delete or change `text`/`team`/`due`/`assigned_to`; an `assigned_to` sent
+as blank on a `PUT` that's allowed to change it is rejected with 400, same as on create),
+`GET /api/tasks?team=&status=&scope=`
 (cross-opportunity list, any authenticated role — by default a cross-functional role only ever sees
 its own team's tasks; pass `scope=all` to see every team's tasks instead, which is what the shared
 Weekly Meeting board uses so every role sees the same picture). Every task also carries a
 `source_team` (`sales`, or one of `solution`/`project`/`product` when that team files its own
-follow-up) alongside `team` (who it's assigned to) — set automatically at creation time from the
-creator's role and never editable afterward.
+follow-up) alongside `team` (which team it's assigned to) and `assigned_to` (which individual it's
+assigned to, by name) — `source_team`/`team` are set automatically at creation time from the
+creator's role and never editable afterward; `assigned_to` is a free-text name entered by whoever
+files or edits the task.
 **Config** — `GET /api/config` (all), `PUT /api/config` (admin). Config includes `target_amount`,
 `strategic_pillars`, and `am_targets` (a map of AM full-name → 2026 revenue target). It still
 carries a `squads` field for backward compatibility with existing data — the Squad feature is
