@@ -129,6 +129,14 @@
   .widget > summary::-webkit-details-marker { display:none; }
   .widget summary .chev { transition: transform .18s ease; }
   .widget[open] summary .chev { transform: rotate(90deg); }
+  /* --- searchable "assigned to" user picker --- */
+  .assignee-dropdown {
+    position:absolute; z-index:60; top:calc(100% + 2px); left:0; right:0; max-height:190px;
+    overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    box-shadow:0 8px 20px -4px var(--shadow-2, rgba(0,0,0,.35));
+  }
+  .assignee-opt { padding:6px 10px; font-size:12px; cursor:pointer; }
+  .assignee-opt:hover, .assignee-opt.hl { background:var(--surface-2); }
   /* --- dark top bar, AWS-style: fixed navy chrome regardless of light/dark theme --- */
   header.app-topbar {
     background: #16222c; border-bottom: 1px solid rgba(255,255,255,.08);
@@ -456,6 +464,16 @@
         <div class="card elev p-5">
           <div id="wmList" class="space-y-2"></div>
         </div>
+        <details id="wmSolvedSection" class="widget card elev p-5 mt-4" style="display:none">
+          <summary class="flex items-center gap-2" style="list-style:none;cursor:pointer">
+            <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
+            <i class="fa-solid fa-circle-check" style="color:var(--success)"></i>
+            <span class="text-sm font-medium" style="color:var(--text)">Solved</span>
+            <span id="wmSolvedCount" class="chip" style="color:var(--text-muted)">0</span>
+          </summary>
+          <p class="text-[11px] mt-1 mb-3" style="color:var(--text-faint)">Items already marked done, moved out of the active list above so it stays focused on what's still open.</p>
+          <div id="wmSolvedList" class="space-y-2"></div>
+        </details>
       </section>
 
       <!-- ============ MY TEAM TASKS (solution / project / product) ============ -->
@@ -1108,7 +1126,10 @@
                 <option value="project">Project</option>
                 <option value="product">Product</option>
               </select>
-              <input id="newTaskAssignee" type="text" placeholder="Assigned to — who specifically?" class="field px-3 py-2 text-sm flex-1" style="min-width:160px" title="Who this task is targeted to, by name">
+              <div class="assignee-combo flex-1" style="position:relative;min-width:180px">
+                <input id="newTaskAssignee" type="text" class="assignee-input field px-3 py-2 text-sm w-full" placeholder="Assigned to — search users..." title="Who this task is targeted to" autocomplete="off">
+                <div class="assignee-dropdown" style="display:none"></div>
+              </div>
               <select id="newTaskStatus" class="field px-3 py-2 text-sm" style="width:150px" title="Status right now">
                 <option value="not_started">Not started</option>
                 <option value="in_progress">In progress</option>
@@ -1176,7 +1197,7 @@ let TOKEN = localStorage.getItem('dt_token');
 let ROLE = localStorage.getItem('dt_role');
 let USERNAME = localStorage.getItem('dt_username');
 let FULLNAME = localStorage.getItem('dt_fullname');
-let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[], squads:[], stages:[], am_targets:{}, am_achievements:{}, am_recurring:{}, current_achievement:0, recurring_revenue:0, max_login_logs:100 }, USERS = [], AMS = [];
+let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[], squads:[], stages:[], am_targets:{}, am_achievements:{}, am_recurring:{}, current_achievement:0, recurring_revenue:0, max_login_logs:100 }, USERS = [], AMS = [], ASSIGNABLE_USERS = [];
 let timelineItemsDraft = [], confirmCallback = null, analyticsFilters = {};
 let dealModalDirty = false, dealModalRestricted = false, dealAutosaveTimer = null, dealAutosaveInFlight = false;
 let currentPage = 1, calMonth = new Date();
@@ -1391,6 +1412,7 @@ async function enterApp(){
   else { calAM.disabled=false; }
   await loadConfig();
   await loadAMs();
+  await loadAssignableUsers();
   // An Account Manager lands focused on their own opportunities by default
   if(ROLE==='account_manager'){
     const f=document.getElementById('filterAM');
@@ -1433,6 +1455,7 @@ function switchTab(tab){
 /* ================= CONFIG / AMS ================= */
 async function loadConfig(){ CONFIG = await api('/api/config'); populateSelectors(); updateMetrics(); }
 async function loadAMs(){ try { AMS = await api('/api/account_managers'); } catch(e){ AMS=[]; } populateSelectors(); }
+async function loadAssignableUsers(){ try { ASSIGNABLE_USERS = await api('/api/assignable_users'); } catch(e){ ASSIGNABLE_USERS=[]; } }
 
 function populateSelectors(){
   const pl=CONFIG.strategic_pillars||[];
@@ -1916,6 +1939,44 @@ const TASK_STATUS_META = {
   needs_discussion:{label:'Needs discussion', color:'#fff', bg:'var(--warning)'},
   done:{label:'Done', color:'#fff', bg:'var(--success)'},
 };
+/* Searchable "assigned to" picker over ASSIGNABLE_USERS (every role except admin/
+   management) — deliberately not free text: the typed value only commits when it
+   exactly matches a real user, picked from the dropdown or typed in full. */
+function wireAssigneeCombo(container, currentValue, onCommit){
+  const input=container.querySelector('.assignee-input'), dropdown=container.querySelector('.assignee-dropdown');
+  if(!input || !dropdown || input.disabled) return;
+  input.dataset.committed = currentValue||'';
+  function showOptions(){
+    const q=input.value.trim().toLowerCase();
+    const matches=ASSIGNABLE_USERS.filter(u=>u.full_name.toLowerCase().includes(q)).slice(0,8);
+    dropdown.innerHTML = matches.length
+      ? matches.map(u=>`<div class="assignee-opt" data-name="${escapeHtml(u.full_name)}">${escapeHtml(u.full_name)} <span style="color:var(--text-faint)">· ${escapeHtml(TASK_TEAM_META[u.role]?.label||u.role)}</span></div>`).join('')
+      : `<div class="assignee-opt" style="color:var(--text-faint);cursor:default">No matching users</div>`;
+    dropdown.querySelectorAll('.assignee-opt[data-name]').forEach(opt=>opt.addEventListener('mousedown',ev=>{
+      ev.preventDefault();
+      const name=opt.dataset.name;
+      input.value=name; input.dataset.committed=name; dropdown.style.display='none';
+      onCommit(name);
+    }));
+    dropdown.style.display='';
+  }
+  input.addEventListener('focus',showOptions);
+  input.addEventListener('input',showOptions);
+  input.addEventListener('blur',()=>{
+    setTimeout(()=>{ dropdown.style.display='none'; }, 150);
+    const typed=input.value.trim(), committed=input.dataset.committed||'';
+    if(!ASSIGNABLE_USERS.some(u=>u.full_name===typed)){
+      if(committed) showToast('Please pick a user from the list',true);
+      input.value=committed;
+    } else if(typed!==committed){
+      input.dataset.committed=typed; onCommit(typed);
+    }
+  });
+}
+function resetAssigneeCombo(container){
+  const input=container.querySelector('.assignee-input');
+  if(input){ input.value=''; input.dataset.committed=''; }
+}
 let dealTasksDraft=[], currentTaskDealId=null;
 
 async function loadTeamTasks(dealId){
@@ -1946,17 +2007,21 @@ function renderTeamTasks(){
         ${rowEditable?`<button type="button" class="tt-del" data-id="${t.id}" style="color:var(--text-faint)" title="Remove"><i class="fa-solid fa-xmark"></i></button>`:`<span style="width:16px"></span>`}
       </div>
       <div class="flex items-center gap-2 mb-1.5">
-        <input type="text" class="tt-assignee field px-2 py-1 text-xs" data-id="${t.id}" ${rowEditable?'':'disabled'} style="width:160px" placeholder="Assigned to — who specifically?" title="Who this task is targeted to, by name" value="${escapeHtml(t.assigned_to||'')}">
+        <div class="assignee-combo tt-assignee-combo" style="position:relative;width:170px" data-id="${t.id}">
+          <input type="text" class="assignee-input tt-assignee field px-2 py-1 text-xs w-full" ${rowEditable?'':'disabled'} placeholder="Assigned to — search users..." title="Who this task is targeted to" autocomplete="off" value="${escapeHtml(t.assigned_to||'')}">
+          <div class="assignee-dropdown" style="display:none"></div>
+        </div>
         <input type="text" class="tt-note field flex-1 px-2 py-1 text-xs" data-id="${t.id}" ${rowEditable?'':'disabled'} placeholder="Note — what's the status, or what needs to be discussed..." value="${escapeHtml(t.note||'')}">
         <input type="date" class="tt-due field px-2 py-1 text-xs" data-id="${t.id}" ${rowEditable?'':'disabled'} style="width:140px;${overdue?'color:var(--danger)':''}" title="Target date to resolve this by" value="${t.due||''}">
       </div>
     </div>`;
   }).join('') || `<p class="text-xs" style="color:var(--text-faint)">No team tasks yet — add what Solution, Project or Product need to follow up on below.</p>`;
   list.querySelectorAll('.tt-status').forEach(s=>s.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{status:e.target.value})));
-  list.querySelectorAll('.tt-assignee').forEach(inp=>inp.addEventListener('change',e=>{
-    const v=inp.value.trim(); if(!v){ showToast('Assigned to is required',true); inp.value=dealTasksDraft.find(t=>t.id===parseInt(inp.dataset.id))?.assigned_to||''; return; }
-    saveTaskField(parseInt(inp.dataset.id),{assigned_to:v});
-  }));
+  list.querySelectorAll('.tt-assignee-combo').forEach(combo=>{
+    const id=parseInt(combo.dataset.id);
+    const current=dealTasksDraft.find(t=>t.id===id)?.assigned_to||'';
+    wireAssigneeCombo(combo, current, name=>saveTaskField(id,{assigned_to:name}));
+  });
   list.querySelectorAll('.tt-note').forEach(inp=>inp.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{note:e.target.value})));
   list.querySelectorAll('.tt-due').forEach(inp=>inp.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{due:e.target.value})));
   list.querySelectorAll('.tt-del').forEach(b=>b.addEventListener('click',()=>deleteTask(parseInt(b.dataset.id))));
@@ -1976,22 +2041,24 @@ async function deleteTask(taskId){
     renderTeamTasks();
   }catch(err){ showToast(err.message,true); }
 }
+wireAssigneeCombo(document.querySelector('#mtab-teamtasks .assignee-combo'), '', name=>{});
 document.getElementById('addTaskBtn').addEventListener('click',async()=>{
   if(!currentTaskDealId) return;
   const txt=document.getElementById('newTaskText'), team=document.getElementById('newTaskTeam');
   const assignee=document.getElementById('newTaskAssignee');
   const status=document.getElementById('newTaskStatus'), due=document.getElementById('newTaskDue');
   const v=txt.value.trim(); if(!v) return;
-  const who=assignee.value.trim(); if(!who){ showToast('Please say who this task is assigned to',true); return; }
+  const who=assignee.value.trim();
+  if(!ASSIGNABLE_USERS.some(u=>u.full_name===who)){ showToast('Search and pick who this task is assigned to',true); return; }
   try{
     const created=await api(`/api/deals/${currentTaskDealId}/tasks`,{method:'POST',body:JSON.stringify({text:v,team:team.value,assigned_to:who,status:status.value,due:due.value})});
-    dealTasksDraft.push(created); txt.value=''; assignee.value=''; status.value='not_started'; due.value=''; renderTeamTasks();
+    dealTasksDraft.push(created); txt.value=''; resetAssigneeCombo(assignee.closest('.assignee-combo')); status.value='not_started'; due.value=''; renderTeamTasks();
   }catch(err){ showToast(err.message,true); }
 });
 document.getElementById('newTaskText').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('addTaskBtn').click(); } });
 
 /* ---------- Weekly Meeting (admin + management): cross-team sync view ---------- */
-let wmStatusFilter=null;
+let wmStatusFilter=null, wmExpandedThreads=new Set();
 async function renderWeeklyMeeting(){
   const team=document.getElementById('wmTeamFilter').value;
   const params=new URLSearchParams({scope:'all'}); if(team) params.set('team',team);
@@ -2013,19 +2080,6 @@ async function renderWeeklyMeeting(){
   const rank=s=>({blocked:0,needs_discussion:1,in_progress:2,not_started:3,done:4}[s]??5);
   const today=todayStr();
 
-  // Thread by opportunity: everything Solution/Project/Product/Sales flagged on the
-  // same deal is one discussion thread, so the meeting can work project-by-project
-  // instead of jumping between unrelated rows.
-  const threads={};
-  visible.forEach(t=>{ (threads[t.deal_id]=threads[t.deal_id]||{deal_id:t.deal_id,deal_name:t.deal_name,customer:t.customer,assigned_am:t.assigned_am,tasks:[]}).tasks.push(t); });
-  const threadList=Object.values(threads).map(th=>{
-    th.tasks.sort((a,b)=>(a.status==='done')-(b.status==='done') || (a.due||'9999-99-99').localeCompare(b.due||'9999-99-99') || rank(a.status)-rank(b.status));
-    th.openCount=th.tasks.filter(t=>t.status!=='done').length;
-    th.minRank=Math.min(...th.tasks.map(t=>rank(t.status)));
-    th.minDue=th.tasks.reduce((m,t)=>(t.status!=='done'&&t.due&&(!m||t.due<m))?t.due:m,null);
-    return th;
-  }).sort((a,b)=> a.minRank-b.minRank || (a.minDue||'9999-99-99').localeCompare(b.minDue||'9999-99-99') || (a.deal_name||'').localeCompare(b.deal_name||''));
-
   const canEditTask=t=>{
     if(CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return t.team===ROLE;
     if(ROLE==='admin') return true;
@@ -2033,48 +2087,92 @@ async function renderWeeklyMeeting(){
     if(ROLE==='management') return true;
     return false;
   };
+  const isReviewer=ROLE==='admin'||ROLE==='management';
 
-  document.getElementById('wmList').innerHTML = threadList.map(th=>`
-    <div class="rounded-lg" style="background:var(--surface-2);border:1px solid var(--border)">
-      <div class="flex items-center gap-2 px-3 py-2 flex-wrap" style="border-bottom:1px solid var(--border)">
+  // Group by opportunity into a "thread" — everything Solution/Project/Product/Sales
+  // flagged on the same deal reads together, so the meeting can work project-by-
+  // project. Threads render as <details>, collapsed by default so the board opens
+  // to a scannable list of projects rather than every task at once; expand state
+  // persists per deal (wmExpandedThreads) across re-renders within the session.
+  function groupByDeal(items){
+    const g={};
+    items.forEach(t=>{ (g[t.deal_id]=g[t.deal_id]||{deal_id:t.deal_id,deal_name:t.deal_name,customer:t.customer,assigned_am:t.assigned_am,tasks:[]}).tasks.push(t); });
+    return Object.values(g);
+  }
+  function taskRow(t){
+    const sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
+    const overdue=t.due && t.status!=='done' && t.due<today;
+    const editable=canEditTask(t);
+    return `<div class="px-3 py-2.5">
+      <div class="flex items-center gap-2 mb-1 flex-wrap">
+        ${taskFromToChips(t)}
+        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
+        ${t.due?`<span class="chip" style="color:${overdue?'var(--danger)':'var(--text-muted)'};border-color:${overdue?'var(--danger)':'var(--border)'}">${overdue?'⚠ ':''}${t.due}</span>`:''}
+        ${ROLE==='admin'?`<button type="button" class="wm-del text-xs" data-id="${t.id}" style="color:var(--text-faint)" title="Delete from Weekly Meeting"><i class="fa-solid fa-trash"></i></button>`:''}
+      </div>
+      <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+        <select class="wm-status field text-xs px-2 py-1" data-id="${t.id}" ${editable?'':'disabled'} style="width:150px;background:${sm.bg};color:${sm.color};border-color:transparent">
+          ${Object.entries(TASK_STATUS_META).map(([v,m])=>`<option value="${v}" ${t.status===v?'selected':''}>${m.label}</option>`).join('')}
+        </select>
+        <input type="text" class="wm-note field flex-1 px-2 py-1 text-xs" data-id="${t.id}" ${editable?'':'disabled'} placeholder="Note — discussed in weekly review, next step, blocker..." value="${escapeHtml(t.note||'')}">
+      </div>
+      ${isReviewer?`<div class="flex items-center gap-1.5">
+        <button type="button" class="wm-mark-solved text-[11px] px-2 py-1 rounded-md flex items-center gap-1" data-id="${t.id}" ${t.status==='done'?'disabled':''} style="background:${t.status==='done'?'var(--surface-3)':'var(--success)'};color:${t.status==='done'?'var(--text-faint)':'#fff'}"><i class="fa-solid fa-circle-check"></i> ${t.status==='done'?'Solved':'Mark solved'}</button>
+        <button type="button" class="wm-mark-discuss text-[11px] px-2 py-1 rounded-md flex items-center gap-1" data-id="${t.id}" ${t.status==='needs_discussion'?'disabled':''} style="background:${t.status==='needs_discussion'?'var(--surface-3)':'var(--warning)'};color:${t.status==='needs_discussion'?'var(--text-faint)':'#fff'}"><i class="fa-solid fa-comments"></i> ${t.status==='needs_discussion'?'Needs discussion':'Needs further discussion'}</button>
+      </div>`:''}
+    </div>`;
+  }
+  function threadHtml(th, accentKey){
+    const openKey=`${accentKey}:${th.deal_id}`;
+    return `<details class="widget rounded-lg wm-thread" style="background:var(--surface-2);border:1px solid var(--border)" data-key="${openKey}" ${wmExpandedThreads.has(openKey)?'open':''}>
+      <summary class="flex items-center gap-2 px-3 py-2 flex-wrap" style="border-bottom:1px solid var(--border)">
+        <i class="fa-solid fa-chevron-right chev text-[10px]" style="color:var(--text-faint)"></i>
         <i class="fa-solid fa-comments text-xs" style="color:var(--text-faint)"></i>
         <span class="text-sm font-medium" style="color:var(--text)">${escapeHtml(th.deal_name)}</span>
         <span class="text-xs" style="color:var(--text-muted)">${escapeHtml(th.customer||'')}</span>
         <span class="chip" style="color:var(--text-muted)">${escapeHtml((th.assigned_am||'').split(' ')[0])}</span>
         <span class="flex-1"></span>
-        <span class="chip" style="color:${th.openCount?'var(--warning)':'var(--success)'}">${th.openCount} open</span>
-      </div>
-      <div class="divide-y" style="border-color:var(--border)">
-        ${th.tasks.map(t=>{
-          const sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
-          const overdue=t.due && t.status!=='done' && t.due<today;
-          const editable=canEditTask(t);
-          const isReviewer=ROLE==='admin'||ROLE==='management';
-          return `<div class="px-3 py-2.5">
-            <div class="flex items-center gap-2 mb-1 flex-wrap">
-              ${taskFromToChips(t)}
-              <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
-              ${t.due?`<span class="chip" style="color:${overdue?'var(--danger)':'var(--text-muted)'};border-color:${overdue?'var(--danger)':'var(--border)'}">${overdue?'⚠ ':''}${t.due}</span>`:''}
-            </div>
-            <div class="flex items-center gap-2 mb-1.5 flex-wrap">
-              <select class="wm-status field text-xs px-2 py-1" data-id="${t.id}" ${editable?'':'disabled'} style="width:150px;background:${sm.bg};color:${sm.color};border-color:transparent">
-                ${Object.entries(TASK_STATUS_META).map(([v,m])=>`<option value="${v}" ${t.status===v?'selected':''}>${m.label}</option>`).join('')}
-              </select>
-              <input type="text" class="wm-note field flex-1 px-2 py-1 text-xs" data-id="${t.id}" ${editable?'':'disabled'} placeholder="Note — discussed in weekly review, next step, blocker..." value="${escapeHtml(t.note||'')}">
-            </div>
-            ${isReviewer?`<div class="flex items-center gap-1.5">
-              <button type="button" class="wm-mark-solved text-[11px] px-2 py-1 rounded-md flex items-center gap-1" data-id="${t.id}" ${t.status==='done'?'disabled':''} style="background:${t.status==='done'?'var(--surface-3)':'var(--success)'};color:${t.status==='done'?'var(--text-faint)':'#fff'}"><i class="fa-solid fa-circle-check"></i> ${t.status==='done'?'Solved':'Mark solved'}</button>
-              <button type="button" class="wm-mark-discuss text-[11px] px-2 py-1 rounded-md flex items-center gap-1" data-id="${t.id}" ${t.status==='needs_discussion'?'disabled':''} style="background:${t.status==='needs_discussion'?'var(--surface-3)':'var(--warning)'};color:${t.status==='needs_discussion'?'var(--text-faint)':'#fff'}"><i class="fa-solid fa-comments"></i> ${t.status==='needs_discussion'?'Needs discussion':'Needs further discussion'}</button>
-            </div>`:''}
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing to show${team?` for ${escapeHtml(TASK_TEAM_META[team]?.label||team)}`:''}.</p>`;
+        <span class="chip" style="color:var(--text-muted)">${th.tasks.length} item${th.tasks.length===1?'':'s'}</span>
+      </summary>
+      <div class="divide-y" style="border-color:var(--border)">${th.tasks.map(taskRow).join('')}</div>
+    </details>`;
+  }
 
-  document.getElementById('wmList').querySelectorAll('.wm-status').forEach(s=>s.addEventListener('change',e=>saveWmTaskField(parseInt(e.target.dataset.id),{status:e.target.value})));
-  document.getElementById('wmList').querySelectorAll('.wm-mark-solved').forEach(b=>b.addEventListener('click',()=>saveWmTaskField(parseInt(b.dataset.id),{status:'done'})));
-  document.getElementById('wmList').querySelectorAll('.wm-mark-discuss').forEach(b=>b.addEventListener('click',()=>saveWmTaskField(parseInt(b.dataset.id),{status:'needs_discussion'})));
-  document.getElementById('wmList').querySelectorAll('.wm-note').forEach(inp=>inp.addEventListener('change',e=>saveWmTaskField(parseInt(e.target.dataset.id),{note:e.target.value})));
+  const openTasks=visible.filter(t=>t.status!=='done'), doneTasks=visible.filter(t=>t.status==='done');
+  const openThreads=groupByDeal(openTasks).map(th=>{
+    th.tasks.sort((a,b)=>(a.due||'9999-99-99').localeCompare(b.due||'9999-99-99') || rank(a.status)-rank(b.status));
+    th.minRank=Math.min(...th.tasks.map(t=>rank(t.status)));
+    th.minDue=th.tasks.reduce((m,t)=>(t.due&&(!m||t.due<m))?t.due:m,null);
+    return th;
+  }).sort((a,b)=> a.minRank-b.minRank || (a.minDue||'9999-99-99').localeCompare(b.minDue||'9999-99-99') || (a.deal_name||'').localeCompare(b.deal_name||''));
+  const doneThreads=groupByDeal(doneTasks).sort((a,b)=>(a.deal_name||'').localeCompare(b.deal_name||''));
+
+  document.getElementById('wmList').innerHTML =
+    openThreads.map(th=>threadHtml(th,'open')).join('')
+    || `<p class="text-xs" style="color:var(--text-faint)">Nothing open${team?` for ${escapeHtml(TASK_TEAM_META[team]?.label||team)}`:''}.</p>`;
+
+  const solvedSection=document.getElementById('wmSolvedSection');
+  document.getElementById('wmSolvedCount').textContent=String(doneTasks.length);
+  if(doneThreads.length){
+    solvedSection.style.display='';
+    document.getElementById('wmSolvedList').innerHTML=doneThreads.map(th=>threadHtml(th,'solved')).join('');
+  } else {
+    solvedSection.style.display='none';
+  }
+
+  document.querySelectorAll('#tab-weeklymeeting .wm-thread').forEach(det=>det.addEventListener('toggle',()=>{
+    if(det.open) wmExpandedThreads.add(det.dataset.key); else wmExpandedThreads.delete(det.dataset.key);
+  }));
+  document.querySelectorAll('#tab-weeklymeeting .wm-status').forEach(s=>s.addEventListener('change',e=>saveWmTaskField(parseInt(e.target.dataset.id),{status:e.target.value})));
+  document.querySelectorAll('#tab-weeklymeeting .wm-mark-solved').forEach(b=>b.addEventListener('click',()=>saveWmTaskField(parseInt(b.dataset.id),{status:'done'})));
+  document.querySelectorAll('#tab-weeklymeeting .wm-mark-discuss').forEach(b=>b.addEventListener('click',()=>saveWmTaskField(parseInt(b.dataset.id),{status:'needs_discussion'})));
+  document.querySelectorAll('#tab-weeklymeeting .wm-note').forEach(inp=>inp.addEventListener('change',e=>saveWmTaskField(parseInt(e.target.dataset.id),{note:e.target.value})));
+  document.querySelectorAll('#tab-weeklymeeting .wm-del').forEach(b=>b.addEventListener('click',()=>{
+    openConfirm('Delete this task from the Weekly Meeting? This removes it entirely from the opportunity.',async()=>{
+      try{ await api(`/api/tasks/${b.dataset.id}`,{method:'DELETE'}); renderWeeklyMeeting(); }
+      catch(err){ showToast(err.message,true); }
+    });
+  }));
 }
 async function saveWmTaskField(taskId,patch){
   try{ await api(`/api/tasks/${taskId}`,{method:'PUT',body:JSON.stringify(patch)}); renderWeeklyMeeting(); }

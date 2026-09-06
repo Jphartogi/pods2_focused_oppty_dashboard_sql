@@ -571,6 +571,18 @@ def can_edit_deal(user, deal_row):
     return False
 
 
+def is_valid_assignee(db, name):
+    """A task's assigned_to must be a real, currently-registered user who isn't
+    admin/management - it's a picker, not free text."""
+    if not name:
+        return False
+    row = db.execute(
+        "SELECT 1 FROM users WHERE full_name = ? AND role NOT IN ('admin', 'management')",
+        (name,),
+    ).fetchone()
+    return row is not None
+
+
 def current_config(db):
     return config_to_dict(db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone())
 
@@ -772,6 +784,21 @@ def get_account_managers():
     ).fetchall()
     names = [r["full_name"] for r in rows if r["full_name"]]
     return jsonify(names)
+
+
+@app.route("/api/assignable_users", methods=["GET"])
+@login_required()
+def get_assignable_users():
+    """Everyone a Team Task can actually be assigned to: every role except admin and
+    management, who run the system rather than execute follow-ups. Used to populate
+    the "Assigned to" picker so it's a real selection, not free text."""
+    db = get_db()
+    rows = db.execute(
+        """SELECT full_name, role FROM users
+           WHERE role NOT IN ('admin', 'management') AND full_name != ''
+           ORDER BY full_name"""
+    ).fetchall()
+    return jsonify([{"full_name": r["full_name"], "role": r["role"]} for r in rows])
 
 
 # --------------------------------------------------------------------------
@@ -1034,10 +1061,11 @@ def create_deal_task(deal_id):
         return jsonify({"error": "text is required"}), 400
 
     # Every task must name who it's actually for, not just which team - so the
-    # weekly review can see who to chase without opening the opportunity.
+    # weekly review can see who to chase without opening the opportunity. It's a
+    # picker over registered users (excluding admin/management), not free text.
     assigned_to = str(data.get("assigned_to", "") or "").strip()
-    if not assigned_to:
-        return jsonify({"error": "assigned_to is required - who is this task for?"}), 400
+    if not is_valid_assignee(db, assigned_to):
+        return jsonify({"error": "Choose who this task is assigned to from the user list"}), 400
 
     # The creator decides the starting status and an optional target date right away,
     # rather than always starting at "not_started" and having to change it afterward.
@@ -1090,8 +1118,8 @@ def update_task(task_id):
             due = str(data["due"] or "").strip()[:10]
         if "assigned_to" in data:
             new_assignee = str(data["assigned_to"] or "").strip()
-            if not new_assignee:
-                return jsonify({"error": "assigned_to is required - who is this task for?"}), 400
+            if not is_valid_assignee(db, new_assignee):
+                return jsonify({"error": "Choose who this task is assigned to from the user list"}), 400
             assigned_to = new_assignee
     elif user["role"] in ("admin", "account_manager"):
         deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (row["deal_id"],)).fetchone()
@@ -1115,8 +1143,8 @@ def update_task(task_id):
             due = str(data["due"] or "").strip()[:10]
         if "assigned_to" in data:
             new_assignee = str(data["assigned_to"] or "").strip()
-            if not new_assignee:
-                return jsonify({"error": "assigned_to is required - who is this task for?"}), 400
+            if not is_valid_assignee(db, new_assignee):
+                return jsonify({"error": "Choose who this task is assigned to from the user list"}), 400
             assigned_to = new_assignee
     elif user["role"] == "management":
         # Read-only everywhere else, but management runs the weekly review, so they
