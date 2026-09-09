@@ -2297,7 +2297,7 @@ def _fmt_idr(value):
 @login_required()
 def export_pdf():
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import cm
     from reportlab.platypus import (
@@ -2326,7 +2326,7 @@ def export_pdf():
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
-        buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm,
+        buf, pagesize=landscape(A4), topMargin=1.4 * cm, bottomMargin=1.4 * cm,
         leftMargin=1.6 * cm, rightMargin=1.6 * cm,
     )
     styles = getSampleStyleSheet()
@@ -2335,6 +2335,20 @@ def export_pdf():
     h2_style = ParagraphStyle("H2C", parent=styles["Heading2"], fontSize=13, textColor=brand,
                               spaceBefore=14, spaceAfter=6)
     body_style = styles["BodyText"]
+
+    def fmt_date(value):
+        return value if value else "-"
+
+    def days_label(target_date):
+        try:
+            delta = (date.fromisoformat(target_date) - date.today()).days
+        except (TypeError, ValueError):
+            return ""
+        if delta < 0:
+            return f"{abs(delta)}d overdue"
+        if delta == 0:
+            return "Today"
+        return f"in {delta}d"
 
     def make_table(data, col_widths):
         t = Table(data, colWidths=col_widths)
@@ -2433,20 +2447,61 @@ def export_pdf():
     ))
     story.append(Spacer(1, 0.4 * cm))
 
-    # Opportunity detail
+    # Opportunity detail — one row per opportunity with everything management asks
+    # about in review: pillar, quarter, target PO/revenue close dates, and a
+    # blocked flag, alongside the value/stage/progress already shown.
     story.append(Paragraph("Opportunity Detail", h2_style))
-    detail_rows = [["Opportunity", "Customer", "AM", "Value", "Stage", "Prog."]]
+    small_cell = ParagraphStyle("s", parent=body_style, fontSize=7.5, leading=9)
+    detail_rows = [["Opportunity", "Customer", "AM", "Pillar", "TCV", "Rev 2026", "Stage",
+                    "Qtr", "Target PO", "Target Rev.", "Prog."]]
     for d in sorted(deals, key=lambda x: x["estimated_value"], reverse=True):
+        name = d["deal_name"] + (" ⚠" if d["is_blocked"] else "")
         detail_rows.append([
-            Paragraph(d["deal_name"], ParagraphStyle("s", parent=body_style, fontSize=7.5)),
-            Paragraph(d["customer"], ParagraphStyle("s", parent=body_style, fontSize=7.5)),
+            Paragraph(name, small_cell),
+            Paragraph(d["customer"], small_cell),
             d["assigned_am"].split(" ")[0],
+            Paragraph(d["strategic_pillar"] or "-", small_cell),
             _fmt_idr(d["estimated_value"]),
+            _fmt_idr(d["revenue_2026"]),
             d["stage"],
+            d["target_quarter"] or "-",
+            fmt_date(d["expected_po_date"]),
+            fmt_date(d["expected_revenue_date"]),
             f"{d['progress']}%",
         ])
-    story.append(make_table(detail_rows, [5 * cm, 4 * cm, 2.2 * cm, 2.6 * cm, 2.2 * cm, 1.2 * cm]))
+    story.append(make_table(detail_rows, [4.4 * cm, 3.2 * cm, 2 * cm, 2.6 * cm, 2.2 * cm, 2.2 * cm,
+                                          2 * cm, 1.6 * cm, 2.2 * cm, 2.2 * cm, 1.3 * cm]))
+    story.append(Paragraph(
+        "⚠ marks a blocked opportunity &mdash; see its blocker note in the dashboard. "
+        "Target PO / Target Rev. are the expected PO-received and revenue-booking dates set on "
+        "each opportunity's Action Plan.",
+        ParagraphStyle("note", parent=body_style, fontSize=7.5, textColor=colors.HexColor("#5f6368")),
+    ))
     story.append(Spacer(1, 0.4 * cm))
+
+    # Upcoming target close dates — every dated PO/revenue milestone across the
+    # portfolio, nearest first, so management can see what's closing when without
+    # cross-referencing each opportunity individually.
+    milestones = []
+    for d in deals:
+        if d["expected_po_date"]:
+            milestones.append((d["expected_po_date"], "Target PO", d))
+        if d["expected_revenue_date"]:
+            milestones.append((d["expected_revenue_date"], "Target Revenue", d))
+    if milestones:
+        milestones.sort(key=lambda m: m[0])
+        story.append(Paragraph("Upcoming Target Close Dates", h2_style))
+        ms_rows = [["Date", "In / Overdue", "Milestone", "Opportunity", "Customer", "AM", "Stage"]]
+        for dt, kind, d in milestones:
+            ms_rows.append([
+                dt, days_label(dt), kind,
+                Paragraph(d["deal_name"], small_cell),
+                Paragraph(d["customer"], small_cell),
+                d["assigned_am"].split(" ")[0],
+                d["stage"],
+            ])
+        story.append(make_table(ms_rows, [2.2 * cm, 2.4 * cm, 2.6 * cm, 5 * cm, 3.4 * cm, 2 * cm, 2 * cm]))
+        story.append(Spacer(1, 0.4 * cm))
 
     # Execution framework coverage across the 8 Enterprise Proofs
     if deals:
