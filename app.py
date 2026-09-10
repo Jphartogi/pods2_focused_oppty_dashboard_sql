@@ -10,11 +10,18 @@ import json
 import os
 import secrets
 import sqlite3
+import urllib.error
+import urllib.request
 from datetime import datetime, date, timedelta, timezone
 from functools import wraps
 
 from flask import Flask, g, jsonify, render_template, request, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
+
+# Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
+# feature/fix and record it in CHANGELOG.md, so "which version is live" is
+# always answerable from the UI (bottom of the nav rail) or GET /api/version.
+APP_VERSION = "1.5.0"
 
 # Keep the database next to app.py so it persists in a predictable location
 # regardless of the host's working directory (Render, PythonAnywhere, Docker, etc.).
@@ -362,6 +369,22 @@ def migrate_db(db):
         db.execute("ALTER TABLE config ADD COLUMN stage_rules TEXT DEFAULT '{}'")
     if "max_login_logs" not in config_cols:
         db.execute("ALTER TABLE config ADD COLUMN max_login_logs INTEGER DEFAULT 100")
+    if "engine1_url" not in config_cols:
+        db.execute("ALTER TABLE config ADD COLUMN engine1_url TEXT DEFAULT ''")
+    if "engine1_username" not in config_cols:
+        db.execute("ALTER TABLE config ADD COLUMN engine1_username TEXT DEFAULT ''")
+    if "engine1_password" not in config_cols:
+        db.execute("ALTER TABLE config ADD COLUMN engine1_password TEXT DEFAULT ''")
+    if "engine1_last_sync" not in config_cols:
+        db.execute("ALTER TABLE config ADD COLUMN engine1_last_sync TEXT DEFAULT ''")
+
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS deal_sync_map (
+            local_deal_id INTEGER PRIMARY KEY REFERENCES deals(id) ON DELETE CASCADE,
+            engine1_deal_id INTEGER NOT NULL,
+            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )"""
+    )
 
     if "deal_tasks" in {r[0] for r in db.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
@@ -624,7 +647,12 @@ def deal_to_dict(row):
 # --------------------------------------------------------------------------
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", app_version=APP_VERSION)
+
+
+@app.route("/api/version", methods=["GET"])
+def get_version():
+    return jsonify({"version": APP_VERSION})
 
 
 # --------------------------------------------------------------------------
@@ -1386,6 +1414,222 @@ def update_config():
     db.commit()
     row = db.execute("SELECT * FROM config WHERE id = ?", (row["id"],)).fetchone()
     return jsonify(config_to_dict(row))
+
+
+# --------------------------------------------------------------------------
+# Engine 1 sync - pushes every opportunity here into Engine 1's PODS 2 over
+# its own REST API, so this standalone tracker and the multi-POD Engine 1
+# Command Center stay in step without re-typing anything by hand. Credentials
+# are a login for an Engine 1 account scoped to (or with rights over) PODS 2 -
+# stored server-side, the password is write-only (never read back over the API).
+# --------------------------------------------------------------------------
+def _engine1_config(row):
+    return {
+        "url": (row["engine1_url"] if "engine1_url" in row.keys() else "") or "",
+        "username": (row["engine1_username"] if "engine1_username" in row.keys() else "") or "",
+        "password": (row["engine1_password"] if "engine1_password" in row.keys() else "") or "",
+        "last_sync": (row["engine1_last_sync"] if "engine1_last_sync" in row.keys() else "") or "",
+    }
+
+
+@app.route("/api/config/engine1", methods=["GET"])
+@login_required(roles=("admin",))
+def get_engine1_config():
+    db = get_db()
+    row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    cfg = _engine1_config(row)
+    return jsonify({
+        "url": cfg["url"],
+        "username": cfg["username"],
+        "password_set": bool(cfg["password"]),
+        "last_sync": cfg["last_sync"],
+    })
+
+
+@app.route("/api/config/engine1", methods=["PUT"])
+@login_required(roles=("admin",))
+def update_engine1_config():
+    data = request.get_json(force=True) or {}
+    db = get_db()
+    row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    current = _engine1_config(row)
+    url = str(data.get("url", current["url"]) or "").strip().rstrip("/")
+    username = str(data.get("username", current["username"]) or "").strip()
+    password = str(data["password"]) if data.get("password") else current["password"]
+    db.execute(
+        "UPDATE config SET engine1_url = ?, engine1_username = ?, engine1_password = ? WHERE id = ?",
+        (url, username, password, row["id"]),
+    )
+    db.commit()
+    return jsonify({"ok": True, "url": url, "username": username, "password_set": bool(password)})
+
+
+def _engine1_request(method, url, token=None, payload=None):
+    """A tiny JSON HTTP client using only the standard library (no `requests`
+    dependency to install on the server) - POST/PUT/GET against Engine 1's API."""
+    req = urllib.request.Request(url, method=method)
+    req.add_header("Content-Type", "application/json")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    try:
+        with urllib.request.urlopen(req, data=body, timeout=20) as resp:
+            return resp.status, json.loads(resp.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as exc:
+        try:
+            return exc.code, json.loads(exc.read().decode("utf-8") or "{}")
+        except (ValueError, UnicodeDecodeError):
+            return exc.code, {"error": exc.reason}
+    except urllib.error.URLError as exc:
+        raise ConnectionError(str(exc.reason)) from exc
+
+
+def _deal_to_engine1_payload(d):
+    return {
+        "pod": "pods2",
+        "deal_name": d["deal_name"],
+        "customer": d["customer"],
+        "assigned_am": d["assigned_am"],
+        "squad": d["squad"],
+        "strategic_pillar": d["strategic_pillar"],
+        "estimated_value": d["estimated_value"],
+        "revenue_2026": d["revenue_2026"],
+        "target_quarter": d["target_quarter"],
+        "stage": d["stage"],
+        "progress": d["progress"],
+        "is_blocked": d["is_blocked"],
+        "blocker_description": d["blocker_description"],
+        "next_actions": d["next_actions"],
+        "strategy": d["strategy"],
+        "proofs": d["proofs"],
+        "expected_po_date": d["expected_po_date"],
+        "expected_revenue_date": d["expected_revenue_date"],
+    }
+
+
+@app.route("/api/sync/engine1", methods=["POST"])
+@login_required(roles=("admin",))
+def sync_engine1():
+    db = get_db()
+    row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    cfg = _engine1_config(row)
+    if not cfg["url"] or not cfg["username"] or not cfg["password"]:
+        return jsonify({"error": "Set the Engine 1 URL, username and password in Settings first"}), 400
+
+    try:
+        status, body = _engine1_request(
+            "POST", f"{cfg['url']}/api/login",
+            payload={"username": cfg["username"], "password": cfg["password"]},
+        )
+    except ConnectionError as exc:
+        return jsonify({"error": f"Could not reach Engine 1 at {cfg['url']} ({exc}). If this server "
+                                 "can't make outbound requests (common on a free PythonAnywhere plan), "
+                                 "use \"Export for Engine 1 import\" instead."}), 502
+    if status != 200 or "token" not in body:
+        return jsonify({"error": f"Engine 1 login failed: {body.get('error', 'invalid credentials')}"}), 502
+    token = body["token"]
+
+    deals = [deal_to_dict(r) for r in db.execute("SELECT * FROM deals").fetchall()]
+    sync_map = {r["local_deal_id"]: r["engine1_deal_id"] for r in
+                db.execute("SELECT * FROM deal_sync_map").fetchall()}
+
+    created, updated, failed = [], [], []
+    for d in deals:
+        payload = _deal_to_engine1_payload(d)
+        engine1_id = sync_map.get(d["id"])
+        try:
+            if engine1_id:
+                status, body = _engine1_request(
+                    "PUT", f"{cfg['url']}/api/deals/{engine1_id}", token=token, payload=payload)
+                if status == 404:
+                    engine1_id = None  # deleted on the Engine 1 side - recreate below
+                elif status >= 400:
+                    failed.append({"deal_name": d["deal_name"], "error": body.get("error", f"HTTP {status}")})
+                    continue
+                else:
+                    updated.append(d["deal_name"])
+            if not engine1_id:
+                status, body = _engine1_request(
+                    "POST", f"{cfg['url']}/api/deals", token=token, payload=payload)
+                if status >= 400:
+                    failed.append({"deal_name": d["deal_name"], "error": body.get("error", f"HTTP {status}")})
+                    continue
+                engine1_id = body["id"]
+                db.execute(
+                    """INSERT INTO deal_sync_map (local_deal_id, engine1_deal_id, synced_at)
+                       VALUES (?, ?, CURRENT_TIMESTAMP)
+                       ON CONFLICT(local_deal_id) DO UPDATE SET
+                         engine1_deal_id = excluded.engine1_deal_id, synced_at = CURRENT_TIMESTAMP""",
+                    (d["id"], engine1_id),
+                )
+                created.append(d["deal_name"])
+        except ConnectionError as exc:
+            failed.append({"deal_name": d["deal_name"], "error": str(exc)})
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    db.execute("UPDATE config SET engine1_last_sync = ? WHERE id = ?", (now, row["id"]))
+    db.commit()
+    return jsonify({
+        "ok": True, "total": len(deals), "created": len(created), "updated": len(updated),
+        "failed": failed, "last_sync": now,
+    })
+
+
+@app.route("/api/export/engine1_xlsx", methods=["GET"])
+@login_required(roles=("admin",))
+def export_engine1_xlsx():
+    """Fallback for when this server can't reach Engine 1 directly (e.g. a free
+    PythonAnywhere plan blocks outbound requests): an .xlsx laid out exactly like
+    Engine 1's own backup-import format, ready to upload as-is from a PODS-2-
+    scoped account's Settings -> Data Backup -> Import on Engine 1. The ID column
+    is always left blank - there's no reliable way to know Engine 1's row IDs
+    from here, so re-uploading always creates unless you tick "Replace all"
+    there, which cleanly replaces PODS 2's opportunities with this file."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    db = get_db()
+    deals = [deal_to_dict(r) for r in db.execute("SELECT * FROM deals ORDER BY deal_name").fetchall()]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Opportunities"
+    headers = ["ID", "Opportunity", "Customer", "Account Manager", "Squad", "Strategic Pillar",
+               "TCV (IDR)", "Rev 2026 (IDR)", "Target Quarter", "Stage", "Progress (%)",
+               "Blocked", "Blocker", "Closed Lost", "Closed Lost Reason", "Strategy", "Next Actions"]
+    ws.append(headers)
+    head_fill = PatternFill("solid", fgColor="1a73e8")
+    head_font = Font(color="FFFFFF", bold=True)
+    for c in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=c)
+        cell.fill, cell.font = head_fill, head_font
+    ws.freeze_panes = "A2"
+
+    for d in deals:
+        ws.append([
+            None, d["deal_name"], d["customer"], d["assigned_am"], d["squad"],
+            d["strategic_pillar"], d["estimated_value"], d["revenue_2026"],
+            d["target_quarter"], d["stage"], d["progress"],
+            "Yes" if d["is_blocked"] else "No", d["blocker_description"],
+            "No", "",
+            d["strategy"], actions_to_text(d["next_actions"]),
+        ])
+    for col, width in zip("ABCDEFGHIJKLMNOPQ",
+                          [6, 38, 28, 18, 16, 22, 16, 16, 14, 14, 11, 9, 26, 12, 26, 50, 50]):
+        ws.column_dimensions[col].width = width
+    for wsrow in ws.iter_rows(min_row=2):
+        wsrow[15].alignment = Alignment(wrap_text=True, vertical="top")  # Strategy
+        wsrow[16].alignment = Alignment(wrap_text=True, vertical="top")  # Next Actions
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"pods2_for_engine1_import_{date.today().isoformat()}.xlsx"
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name=filename,
+    )
 
 
 # --------------------------------------------------------------------------

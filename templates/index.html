@@ -187,6 +187,7 @@
         <button type="submit" class="btn-primary w-full text-sm font-medium py-2.5 rounded-lg">Sign in</button>
       </form>
       <p class="text-[11px] mt-7" style="color:var(--text-faint)">Access is managed by your administrator. Contact them if you need an account or a password reset.</p>
+      <p class="text-[10px] mt-2" style="color:var(--text-faint)">v{{ app_version }}</p>
     </div>
 
     <!-- Right: dark-navy brand panel, matching the app's fixed AWS-style header -->
@@ -306,6 +307,7 @@
           </div>
         </div>
       </nav>
+      <p class="rail-label px-5 pt-3 text-[10px]" style="color:var(--text-faint)">v{{ app_version }}</p>
     </aside>
 
     <!-- Main -->
@@ -816,6 +818,34 @@
               <button id="importXlsxBtn" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-file-arrow-up mr-1.5"></i>Import</button>
             </div>
             <p id="importResult" class="text-xs mt-3" style="color:var(--text-muted)"></p>
+          </div>
+
+          <div class="card elev p-5 lg:col-span-2">
+            <p class="text-sm font-medium mb-1"><i class="fa-solid fa-arrows-rotate mr-1.5" style="color:var(--primary)"></i>Engine 1 Sync</p>
+            <p class="text-[11px] mb-4" style="color:var(--text-faint)">Push every opportunity here into Engine 1's PODS 2 (engine1.pythonanywhere.com) over its own API — creates new ones and updates ones already synced, so re-running it is always safe. Uses a login on Engine 1 for an account scoped to PODS 2 (or with rights over it); the password is stored here but never shown back.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+              <div>
+                <label class="block text-xs mb-1" style="color:var(--text-muted)">Engine 1 URL</label>
+                <input id="engine1Url" type="text" placeholder="https://engine1.pythonanywhere.com" class="field w-full px-3 py-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs mb-1" style="color:var(--text-muted)">Username</label>
+                <input id="engine1Username" type="text" class="field w-full px-3 py-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs mb-1" style="color:var(--text-muted)">Password <span id="engine1PasswordHint" style="color:var(--text-faint)"></span></label>
+                <input id="engine1Password" type="password" class="field w-full px-3 py-2 text-sm">
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button id="saveEngine1ConfigBtn" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text)">Save Connection</button>
+              <button id="syncEngine1Btn" class="btn-primary text-sm px-4 py-2 rounded-lg"><i class="fa-solid fa-arrows-rotate mr-1.5"></i>Sync to Engine 1</button>
+              <span style="color:var(--border)">|</span>
+              <button id="exportEngine1XlsxBtn" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-file-arrow-down mr-1.5"></i>Export for Engine 1 import</button>
+              <span id="engine1LastSync" class="text-[11px]" style="color:var(--text-faint)"></span>
+            </div>
+            <p class="text-[11px] mt-2" style="color:var(--text-faint)">If this server can't reach Engine 1 directly (common on a free PythonAnywhere plan), use <b>Export for Engine 1 import</b> instead — download the file here and upload it from a PODS-2-scoped account's Settings → Data Backup → Import on Engine 1. Tick "Replace all" there each time to avoid duplicates.</p>
+            <p id="engine1SyncResult" class="text-xs mt-3" style="color:var(--text-muted)"></p>
           </div>
         </div>
       </section>
@@ -3388,6 +3418,7 @@ function renderSettings(){
   document.getElementById('settingsRecurring').value=fmtThousands(CONFIG.recurring_revenue||0);
   renderAmTargets();
   renderUsersTable();
+  loadEngine1Config();
 }
 /* ================= CONFIGURATION (taxonomy lists) ================= */
 function renderConfiguration(){
@@ -3484,6 +3515,56 @@ document.getElementById('importXlsxBtn').addEventListener('click',()=>{
       renderSettings();
     }catch(err){ out.innerHTML=`<span style="color:var(--danger)">${escapeHtml(err.message)}</span>`; showToast(err.message,true); }
   });
+});
+/* ================= ENGINE 1 SYNC ================= */
+async function loadEngine1Config(){
+  try{
+    const cfg=await api('/api/config/engine1');
+    document.getElementById('engine1Url').value=cfg.url||'';
+    document.getElementById('engine1Username').value=cfg.username||'';
+    document.getElementById('engine1PasswordHint').textContent=cfg.password_set?'(blank = keep current)':'';
+    document.getElementById('engine1LastSync').textContent=cfg.last_sync?`Last synced: ${cfg.last_sync}`:'Never synced yet';
+  }catch(err){ /* non-admin or not yet configured - leave fields blank */ }
+}
+document.getElementById('saveEngine1ConfigBtn').addEventListener('click',async()=>{
+  const url=document.getElementById('engine1Url').value.trim();
+  const username=document.getElementById('engine1Username').value.trim();
+  const password=document.getElementById('engine1Password').value;
+  try{
+    const body={url,username}; if(password) body.password=password;
+    await api('/api/config/engine1',{method:'PUT',body:JSON.stringify(body)});
+    document.getElementById('engine1Password').value='';
+    showToast('Connection saved');
+    await loadEngine1Config();
+  }catch(err){ showToast(err.message,true); }
+});
+document.getElementById('syncEngine1Btn').addEventListener('click',()=>{
+  openConfirm('Push every opportunity here into Engine 1\'s PODS 2? Ones already synced before are updated in place; everything else is created new.', async()=>{
+    const out=document.getElementById('engine1SyncResult');
+    out.textContent='Syncing...';
+    try{
+      const data=await api('/api/sync/engine1',{method:'POST'});
+      out.innerHTML=`<span style="color:var(--success)">Synced.</span> ${data.created} created, ${data.updated} updated`
+        + (data.failed.length ? `, <span style="color:var(--danger)">${data.failed.length} failed</span>: ${data.failed.map(f=>`${escapeHtml(f.deal_name)} (${escapeHtml(f.error)})`).join('; ')}` : '.');
+      showToast(`Synced: ${data.created} created, ${data.updated} updated`);
+      await loadEngine1Config();
+    }catch(err){
+      out.innerHTML=`<span style="color:var(--danger)">${escapeHtml(err.message)}</span>`;
+      showToast(err.message,true);
+    }
+  });
+});
+document.getElementById('exportEngine1XlsxBtn').addEventListener('click',async()=>{
+  try{
+    showToast('Building Excel file...');
+    const res=await fetch('/api/export/engine1_xlsx',{headers:{'Authorization':'Bearer '+TOKEN}});
+    if(!res.ok){ const b=await res.json().catch(()=>({})); throw new Error(b.error||'Export failed'); }
+    const blob=await res.blob(), url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url;
+    a.download=`pods2_for_engine1_import_${new Date().toISOString().split('T')[0]}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    showToast('File downloaded — upload it on Engine 1\'s Settings → Data Backup → Import');
+  }catch(err){ showToast(err.message,true); }
 });
 document.getElementById('saveTargetBtn').addEventListener('click',async()=>{
   CONFIG.target_amount=parseThousands(document.getElementById('settingsTarget').value);
