@@ -293,6 +293,7 @@
           <div class="nav-group-items space-y-1">
             <button data-tab="analytics" id="analyticsNavBtn" title="Pipeline Analytics" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-chart-line w-4"></i> <span class="rail-label">Pipeline Analytics</span></button>
             <button data-tab="performance" id="perfNavBtn" title="Performance" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-gauge-high w-4"></i> <span class="rail-label">Performance</span></button>
+            <button data-tab="coverage" id="coverageNavBtn" title="Account Coverage" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-users-viewfinder w-4"></i> <span class="rail-label">Account Coverage</span></button>
           </div>
         </div>
         <!-- Configuration -->
@@ -751,6 +752,115 @@
               <p class="text-xs mb-2" style="color:var(--text-faint)">Opportunities without a target PO closed date or target revenue collected date.</p>
               <div id="poRevMissingList" class="space-y-0 max-h-72 overflow-y-auto"></div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ ACCOUNT COVERAGE ============ -->
+      <section id="tab-coverage" class="tab-panel px-6 py-5">
+        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Every account the performance team hands the AMs, cross-checked against opportunities already in the Tracker (matched by Customer name). Use it to spot accounts nobody is actively working &mdash; especially big ones &mdash; and to flag "champion" accounts an AM is confident in. Click any chart to filter the table below.</p>
+
+        <div id="covMasterImportWrap" class="card elev p-4 mb-4" style="display:none">
+          <p class="text-sm font-medium mb-1"><i class="fa-solid fa-file-arrow-up mr-1.5" style="color:var(--primary)"></i>Import master account list</p>
+          <p class="text-[11px] mb-3" style="color:var(--text-faint)">Uploads the Engine-1-wide "Master Account Planning" workbook (sheets named like <b>Target &amp; AM name</b> and <b>Revenue Data</b>) and pulls in only the PODS 2 rows &mdash; each account's 2026 target and assigned AM. This is the authoritative account list; anything not in here that shows up as an opportunity in the Tracker is flagged below as a "new" account instead. <b>The uploaded file itself is never saved</b> &mdash; only the account figures it contains are extracted and stored.</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <input id="covMasterImportFile" type="file" accept=".xlsx" class="text-xs" style="color:var(--text-muted)">
+            <button id="covMasterImportBtn" class="text-xs px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-file-arrow-up mr-1"></i>Import master account list</button>
+            <span id="covMasterImportResult" class="text-[11px]" style="color:var(--text-muted)"></span>
+          </div>
+        </div>
+
+        <p id="covTotalLine" class="text-xs mb-3" style="color:var(--text-muted)"></p>
+        <div id="covHeadlineGauges" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          <div class="card elev p-5">
+            <p class="text-sm font-medium mb-1">Relationship status</p>
+            <p class="text-[11px] mb-3" style="color:var(--text-faint)">Not just "cold" &mdash; an account can be in good standing without an open opportunity.</p>
+            <div id="covStatusChart"></div>
+          </div>
+          <div class="card elev p-5">
+            <p class="text-sm font-medium mb-1">Account source</p>
+            <p class="text-[11px] mb-3" style="color:var(--text-faint)">Given by the performance team's imports vs. surfaced only from Tracker activity or added by hand.</p>
+            <div id="covSourceChart"></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          <div class="card elev p-5">
+            <p class="text-sm font-medium mb-3">Account load by AM</p>
+            <div id="covByAmChart"></div>
+          </div>
+          <div class="card elev p-5">
+            <p class="text-sm font-medium mb-1"><i class="fa-solid fa-arrows-rotate mr-1.5" style="color:var(--warning)"></i>Rotation signal</p>
+            <p class="text-[11px] mb-3" style="color:var(--text-muted)">Top-quartile accounts by size with no opportunity, no champion flag, and not marked Not Preferable.</p>
+            <div id="covRotationList"></div>
+          </div>
+        </div>
+
+        <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
+          <input id="covSearch" type="text" placeholder="Search account or AM…" class="field text-sm px-3 py-1.5" style="min-width:200px">
+          <select id="covFilterAM" class="field text-sm px-3 py-1.5"><option value="">All AMs</option></select>
+          <select id="covFilterStatus" class="field text-sm px-3 py-1.5">
+            <option value="">All statuses</option>
+            <option value="handled">Engaged (has opportunity)</option>
+            <optgroup label="Good standing">
+              <option value="existing_customer">Existing customer</option>
+              <option value="preferred">Preferred / good relationship</option>
+            </optgroup>
+            <optgroup label="Opportunity">
+              <option value="growth_potential">Growth potential</option>
+              <option value="unreviewed">Unreviewed</option>
+            </optgroup>
+            <optgroup label="Needs attention">
+              <option value="at_risk">At risk / cooling</option>
+              <option value="low_priority">Low priority</option>
+              <option value="no_contact">No contact</option>
+              <option value="not_preferable">Not preferable</option>
+            </optgroup>
+          </select>
+          <select id="covFilterSource" class="field text-sm px-3 py-1.5">
+            <option value="">All sources</option>
+            <option value="official">Given by performance team</option>
+            <option value="new">New (Tracker / manual)</option>
+          </select>
+          <label class="flex items-center gap-1.5 text-xs" style="color:var(--text-muted)"><input id="covChampionOnly" type="checkbox" class="rounded">Champions only</label>
+          <label class="flex items-center gap-1.5 text-xs" style="color:var(--text-muted)"><input id="covRotationOnly" type="checkbox" class="rounded">Rotation candidates only</label>
+          <button id="covFilterClear" class="text-xs px-2 py-1.5 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
+          <div class="flex-1"></div>
+          <span id="covResultCount" class="text-[11px]" style="color:var(--text-faint)"></span>
+          <button id="covAddBtn" class="text-sm card px-3 py-1.5" style="color:var(--text)"><i class="fa-solid fa-plus mr-1.5" style="color:var(--primary)"></i>Add account</button>
+        </div>
+        <div id="covAddWrap" class="card elev p-4 mb-4" style="display:none">
+          <p class="text-sm font-medium mb-2">Add an account you're working that isn't in the performance import</p>
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <input id="covAddName" type="text" placeholder="Account / company name" class="field text-sm px-3 py-2 sm:col-span-2">
+            <input id="covAddPillar" type="text" placeholder="Pillar (optional)" class="field text-sm px-3 py-2">
+            <select id="covAddAM" class="field text-sm px-3 py-2" style="display:none"></select>
+          </div>
+          <div class="flex items-center gap-2 mt-2">
+            <button id="covAddSaveBtn" class="btn-primary text-xs px-3 py-1.5 rounded-lg">Save</button>
+            <button id="covAddCancelBtn" class="text-xs px-3 py-1.5 rounded-lg" style="color:var(--text-muted)">Cancel</button>
+            <span id="covAddResult" class="text-[11px]" style="color:var(--text-faint)"></span>
+          </div>
+        </div>
+        <div class="card elev p-5">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead style="color:var(--text-muted)"><tr class="text-xs uppercase" style="border-bottom:1px solid var(--border)">
+                <th class="text-left py-2 cov-th clickable" data-sort="account_name">Account</th>
+                <th class="text-left py-2 cov-th clickable" data-sort="source">Source</th>
+                <th class="text-left py-2 cov-th clickable" data-sort="am">AM</th>
+                <th class="text-left py-2 cov-th clickable" data-sort="pillar">Pillar</th>
+                <th class="text-right py-2 cov-th clickable" data-sort="size">Target / Size</th>
+                <th class="text-left py-2 cov-th clickable" data-sort="deal_count">Open opportunity</th>
+                <th class="text-left py-2 w-44 cov-th clickable" data-sort="status">Status</th>
+                <th class="text-center py-2 cov-th clickable" data-sort="is_champion">Champion</th>
+                <th class="text-left py-2 w-56">Notes</th>
+                <th class="py-2"></th>
+              </tr></thead>
+              <tbody id="covTableBody"></tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -1228,6 +1338,7 @@ let ROLE = localStorage.getItem('dt_role');
 let USERNAME = localStorage.getItem('dt_username');
 let FULLNAME = localStorage.getItem('dt_fullname');
 let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[], squads:[], stages:[], am_targets:{}, am_achievements:{}, am_recurring:{}, current_achievement:0, recurring_revenue:0, max_login_logs:100 }, USERS = [], AMS = [], ASSIGNABLE_USERS = [];
+let COVERAGE = [];
 let timelineItemsDraft = [], confirmCallback = null, analyticsFilters = {};
 let dealModalDirty = false, dealModalRestricted = false, dealAutosaveTimer = null, dealAutosaveInFlight = false;
 let currentPage = 1, calMonth = new Date();
@@ -1427,12 +1538,13 @@ async function enterApp(){
   document.getElementById('quickConfigBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('perfUploadWrap').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('amTargetsImportWrap').style.display = ROLE==='admin' ? '' : 'none';
+  document.getElementById('covMasterImportWrap').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('addDealBtn').style.display = (ROLE==='admin'||ROLE==='account_manager') ? '' : 'none';
   // Solution / Project / Product can see every opportunity (read-only, for context) and
   // their own task inbox, but not Calendar / Analytics / Performance / any edit control.
   const isCrossFunctional = CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
   document.getElementById('myTeamTasksNavBtn').style.display = isCrossFunctional ? '' : 'none';
-  ['calendarNavBtn','analyticsNavBtn','perfNavBtn'].forEach(id=>{
+  ['calendarNavBtn','analyticsNavBtn','perfNavBtn','coverageNavBtn'].forEach(id=>{
     document.getElementById(id).style.display = isCrossFunctional ? 'none' : '';
   });
   try { PROOF_FRAMEWORK = await api('/api/proof_framework'); } catch(e) { /* keep fallback */ }
@@ -1453,6 +1565,7 @@ async function enterApp(){
   }
   await loadDeals();
   await loadPerformance();
+  if(!CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) await loadAccountCoverage();
   if(ROLE==='admin') await loadUsers();
   // Management lands on the executive briefing; everyone else on the tracker
   switchTab(ROLE==='management' ? 'management' : CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE) ? 'myteamtasks' : 'tracker');
@@ -1464,12 +1577,12 @@ function switchTab(tab){
   if((tab==='settings'||tab==='configuration'||tab==='loginlogs') && ROLE!=='admin') return;
   if(tab==='management' && !(ROLE==='admin'||ROLE==='management')) return;
   if(tab==='myteamtasks' && !CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
-  if(['calendar','analytics','performance'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
+  if(['calendar','analytics','performance','coverage'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   // My Team Tasks and Weekly Meeting are focused worklists - the FY target / gap / coverage strip is noise there.
-  document.getElementById('metricStripWrap').style.display = (tab==='myteamtasks'||tab==='weeklymeeting') ? 'none' : '';
+  document.getElementById('metricStripWrap').style.display = (tab==='myteamtasks'||tab==='weeklymeeting'||tab==='coverage') ? 'none' : '';
   refreshNavGroups(tab);
   if(tab==='analytics'){ switchAnalyticsTab('gap'); renderAnalytics(); }
   if(tab==='settings') renderSettings();
@@ -1478,6 +1591,7 @@ function switchTab(tab){
   if(tab==='calendar') renderCalendar();
   if(tab==='management') renderManagement();
   if(tab==='performance') renderPerformance();
+  if(tab==='coverage') renderCoverage();
   if(tab==='weeklymeeting') renderWeeklyMeeting();
   if(tab==='myteamtasks') renderMyTeamTasks();
 }
@@ -3126,6 +3240,333 @@ function switchAnalyticsTab(tab){
   document.querySelectorAll('.atab-pane').forEach(p=>p.style.display=(p.id==='atab-'+tab)?'':'none');
 }
 
+/* ---------- Account Coverage: load vs. what the tracker actually shows worked ---------- */
+async function loadAccountCoverage(){ try{ const d=await api('/api/account_coverage'); COVERAGE=d.accounts||[]; }catch(e){ COVERAGE=[]; } }
+
+document.getElementById('covMasterImportBtn').addEventListener('click',()=>{
+  const f=document.getElementById('covMasterImportFile').files[0];
+  if(!f){ showToast('Choose the master account .xlsx first',true); return; }
+  openConfirm(`Import PODS 2 accounts from "${f.name}"? This refreshes each account's AM, target and revenue figures from the master file, without touching any status/champion tags already set.`, async()=>{
+    try{
+      const fd=new FormData(); fd.append('file',f);
+      const res=await fetch('/api/account_coverage/import_master',{method:'POST',headers:{'Authorization':'Bearer '+TOKEN},body:fd});
+      const data=await res.json();
+      if(!res.ok) throw new Error(data.error||'Import failed');
+      document.getElementById('covMasterImportResult').textContent=`${data.total} accounts (${data.created} new, ${data.updated} refreshed).`;
+      document.getElementById('covMasterImportFile').value='';
+      showToast(`Imported ${data.total} accounts`);
+      await loadAccountCoverage(); renderCoverage();
+    }catch(err){ showToast(err.message,true); }
+  });
+});
+
+// Relationship-status taxonomy: an account can be in genuinely good standing
+// (already a customer, good rapport) without an open opportunity - this isn't
+// just a "how cold is it" scale. Grouped as good standing / opportunity / needs attention.
+const COV_STATUS_LABEL = {
+  existing_customer:'Existing customer', preferred:'Preferred / good relationship',
+  growth_potential:'Growth potential', unreviewed:'Unreviewed',
+  at_risk:'At risk / cooling', low_priority:'Low priority', no_contact:'No contact', not_preferable:'Not preferable',
+};
+const COV_STATUS_COLOR = {
+  existing_customer:'#14b8a6', preferred:'#0ea5e9',
+  growth_potential:'#8b5cf6', unreviewed:'var(--text-faint)',
+  at_risk:'#f59e0b', low_priority:'#fb923c', no_contact:'var(--danger)', not_preferable:'var(--text-muted)',
+};
+const COV_SOURCE_LABEL = {performance:'Performance import', master:'Master account list', tracker:'New (Tracker)', manual:'New (manual)'};
+
+function amNameMatches(a,b){
+  const an=(a||'').toLowerCase().trim(), bn=(b||'').toLowerCase().trim();
+  if(!an||!bn) return false;
+  return an===bn || an.startsWith(bn) || bn.startsWith(an);
+}
+function covCanEdit(row){ return ROLE==='admin' || (ROLE==='account_manager' && amNameMatches(row.am, FULLNAME)); }
+
+function covPercentile(arr, p){
+  if(!arr.length) return 0;
+  const s=[...arr].sort((a,b)=>a-b);
+  const idx=(s.length-1)*p, lo=Math.floor(idx), hi=Math.ceil(idx);
+  return lo===hi ? s[lo] : s[lo] + (s[hi]-s[lo])*(idx-lo);
+}
+
+let covSort = {field:'size', dir:'desc'};
+
+function covDonut(entries, filterField){
+  const total = entries.reduce((s,e)=>s+e[2],0);
+  if(!total) return `<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`;
+  const cx=90,cy=90,r=70,sw=26,C=2*Math.PI*r; let off=0,circ='';
+  entries.forEach(([key,label,count,color])=>{
+    if(!count) return;
+    const dash=count/total*C;
+    circ+=`<circle class="clickable cov-chart-seg" data-filter="${filterField}" data-value="${key}" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"><title>${label}: ${count} (click to filter)</title></circle>`;
+    off+=dash;
+  });
+  const tc=cssVar('--chart-text');
+  const legend=entries.filter(e=>e[2]>0).map(([key,label,count,color])=>
+    `<div class="flex items-center gap-1.5 text-xs clickable cov-chart-seg" data-filter="${filterField}" data-value="${key}" style="color:var(--text-muted)"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${color}"></span>${label} (${count})</div>`
+  ).join('');
+  return `<div class="flex items-center gap-6"><svg viewBox="0 0 180 180" style="width:140px;height:140px" class="flex-shrink-0">${circ}<text x="90" y="96" text-anchor="middle" font-size="22" font-weight="700" fill="${tc}">${total}</text></svg><div class="space-y-1.5 flex-1 min-w-0">${legend}</div></div>`;
+}
+
+function covGauge(pct, label, sub, color){
+  const cx=50,cy=50,r=40,sw=10,C=2*Math.PI*r;
+  const dash=Math.max(0,Math.min(100,pct))/100*C;
+  const tc=cssVar('--chart-text');
+  return `<div class="card elev p-4 flex items-center gap-3">
+    <svg viewBox="0 0 100 100" style="width:72px;height:72px" class="flex-shrink-0">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="${sw}"/>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-dasharray="${dash} ${C-dash}" stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
+      <text x="50" y="56" text-anchor="middle" font-size="20" font-weight="700" fill="${tc}">${Math.round(pct)}%</text>
+    </svg>
+    <div class="min-w-0">
+      <p class="text-xs font-medium" style="color:var(--text)">${label}</p>
+      <p class="text-[11px]" style="color:var(--text-faint)">${sub}</p>
+    </div>
+  </div>`;
+}
+
+function covMiniBarList(rows, valueKey, color, emptyMsg){
+  if(!rows.length) return `<p class="text-xs py-6 text-center" style="color:var(--text-faint)">${emptyMsg}</p>`;
+  const max=Math.max(...rows.map(r=>r[valueKey]||0),1);
+  return rows.map(r=>{
+    const pct=(r[valueKey]||0)/max*100;
+    return `<div class="mb-2.5">
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span style="color:var(--text)">${escapeHtml(r.account_name)} <span style="color:var(--text-faint)">(${escapeHtml(r.am||'unassigned')})</span></span>
+        <span style="color:${color}">${fmtIDR(r[valueKey]||0)}</span>
+      </div>
+      <div class="rounded-full h-2" style="background:var(--surface-3)"><div class="h-2 rounded-full" style="width:${pct}%;background:${color}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function covByAmChart(rows){
+  const byAM={};
+  rows.forEach(r=>{ const k=r.am||'Unassigned'; const x=byAM[k]=byAM[k]||{total:0,handled:0}; x.total++; if(r.deal_count>0) x.handled++; });
+  const entries=Object.entries(byAM).sort((a,b)=>b[1].total-a[1].total);
+  if(!entries.length) return `<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`;
+  const max=Math.max(...entries.map(([,x])=>x.total),1);
+  return entries.map(([am,x])=>{
+    const hPct = x.total ? x.handled/x.total*100 : 0;
+    const widthPct = x.total/max*100;
+    return `<div class="flex items-center gap-3 mb-2.5">
+      <span class="text-xs clickable cov-chart-seg" data-filter="am" data-value="${escapeHtml(am)}" style="color:var(--text);width:150px;flex-shrink:0" title="Filter to ${escapeHtml(am)}">${escapeHtml(am)}</span>
+      <div class="flex-1 rounded-full h-3 overflow-hidden" style="background:var(--surface-3)">
+        <div style="width:${widthPct}%;height:100%;display:flex">
+          <div style="width:${hPct}%;background:var(--success)" title="Handled: ${x.handled}"></div>
+          <div style="width:${100-hPct}%;background:var(--border)" title="Not handled: ${x.total-x.handled}"></div>
+        </div>
+      </div>
+      <span class="text-[11px]" style="color:var(--text-muted);width:70px;text-align:right;flex-shrink:0">${x.handled}/${x.total}</span>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('tab-coverage').addEventListener('click', (e)=>{
+  const seg=e.target.closest('.cov-chart-seg'); if(!seg) return;
+  const field=seg.dataset.filter, value=seg.dataset.value;
+  if(field==='status') document.getElementById('covFilterStatus').value=value;
+  else if(field==='source') document.getElementById('covFilterSource').value=value;
+  else if(field==='am' && document.getElementById('covFilterAM').style.display!=='none') document.getElementById('covFilterAM').value=value;
+  renderCoverage();
+});
+
+document.querySelectorAll('.cov-th').forEach(th=>th.addEventListener('click', ()=>{
+  const f=th.dataset.sort;
+  if(covSort.field===f) covSort.dir = covSort.dir==='asc'?'desc':'asc';
+  else { covSort={field:f, dir:(f==='account_name'||f==='am'||f==='pillar'||f==='status'||f==='source')?'asc':'desc'}; }
+  renderCoverage();
+}));
+
+function renderCoverage(){
+  const body=document.getElementById('covTableBody');
+  if(!body) return;
+  const amFilter=document.getElementById('covFilterAM').value;
+  const statusFilter=document.getElementById('covFilterStatus').value;
+  const sourceFilter=document.getElementById('covFilterSource').value;
+  const rotationOnly=document.getElementById('covRotationOnly').checked;
+  const championOnly=document.getElementById('covChampionOnly').checked;
+  const search=document.getElementById('covSearch').value.trim().toLowerCase();
+
+  const sizeP75=covPercentile(COVERAGE.map(r=>r.size||0), 0.75);
+  const rows=COVERAGE.map(r=>Object.assign({}, r, {
+    is_rotation: sizeP75>0 && (r.size||0)>=sizeP75 && r.deal_count===0 && !r.is_champion && r.status!=='not_preferable',
+  }));
+
+  if(ROLE!=='account_manager'){
+    const amSel=document.getElementById('covFilterAM');
+    const ams=[...new Set(COVERAGE.map(r=>r.am).filter(Boolean))].sort();
+    const cur=amSel.value;
+    amSel.innerHTML='<option value="">All AMs</option>'+ams.map(a=>`<option value="${escapeHtml(a)}"${a===cur?' selected':''}>${escapeHtml(a)}</option>`).join('');
+  } else {
+    document.getElementById('covFilterAM').style.display='none';
+  }
+
+  const scoped = amFilter ? rows.filter(r=>amNameMatches(r.am, amFilter)) : rows;
+  const counts = {handled:0, champion:0, existing_customer:0, preferred:0, growth_potential:0, unreviewed:0, at_risk:0, low_priority:0, no_contact:0, not_preferable:0};
+  scoped.forEach(r=>{
+    if(r.deal_count>0) counts.handled++;
+    else if(counts[r.status]!==undefined) counts[r.status]++;
+    if(r.is_champion) counts.champion++;
+  });
+  const total = scoped.length || 1;
+  const officialCount = scoped.filter(r=>r.source==='performance'||r.source==='master').length;
+  const newCount = scoped.length - officialCount;
+  const attentionCount = counts.at_risk + counts.low_priority + counts.no_contact;
+
+  document.getElementById('covTotalLine').textContent = `${scoped.length} account${scoped.length===1?'':'s'} tracked${amFilter?' for '+amFilter:''}.`;
+
+  document.getElementById('covHeadlineGauges').innerHTML =
+    covGauge(officialCount/total*100, 'Given by performance team', `${officialCount} of ${scoped.length} accounts`, 'var(--primary)') +
+    covGauge(counts.handled/total*100, 'Engaged (running projects/solutions)', `${counts.handled} of ${scoped.length} have an open opportunity`, 'var(--success)') +
+    covGauge(counts.champion/total*100, 'Champion accounts', `${counts.champion} of ${scoped.length} flagged as champion`, '#0ea5e9') +
+    covGauge(attentionCount/total*100, 'Needs attention', `${attentionCount} at risk, low priority or no contact`, 'var(--warning)');
+
+  document.getElementById('covStatusChart').innerHTML = covDonut([
+    ['handled','Engaged',counts.handled,'var(--success)'],
+    ['existing_customer',COV_STATUS_LABEL.existing_customer,counts.existing_customer,COV_STATUS_COLOR.existing_customer],
+    ['preferred',COV_STATUS_LABEL.preferred,counts.preferred,COV_STATUS_COLOR.preferred],
+    ['growth_potential',COV_STATUS_LABEL.growth_potential,counts.growth_potential,COV_STATUS_COLOR.growth_potential],
+    ['unreviewed',COV_STATUS_LABEL.unreviewed,counts.unreviewed,COV_STATUS_COLOR.unreviewed],
+    ['at_risk',COV_STATUS_LABEL.at_risk,counts.at_risk,COV_STATUS_COLOR.at_risk],
+    ['low_priority',COV_STATUS_LABEL.low_priority,counts.low_priority,COV_STATUS_COLOR.low_priority],
+    ['no_contact',COV_STATUS_LABEL.no_contact,counts.no_contact,COV_STATUS_COLOR.no_contact],
+    ['not_preferable',COV_STATUS_LABEL.not_preferable,counts.not_preferable,COV_STATUS_COLOR.not_preferable],
+  ], 'status');
+
+  document.getElementById('covSourceChart').innerHTML = covDonut([
+    ['official','Given by performance team',officialCount,'var(--primary)'],
+    ['new','New (Tracker / manual)',newCount,'var(--warning)'],
+  ], 'source');
+
+  document.getElementById('covByAmChart').innerHTML = covByAmChart(scoped);
+
+  let filtered = scoped;
+  if(statusFilter==='handled') filtered=filtered.filter(r=>r.deal_count>0);
+  else if(statusFilter) filtered=filtered.filter(r=>r.status===statusFilter && r.deal_count===0);
+  if(sourceFilter==='official') filtered=filtered.filter(r=>r.source==='performance'||r.source==='master');
+  else if(sourceFilter==='new') filtered=filtered.filter(r=>r.source==='tracker'||r.source==='manual');
+  if(rotationOnly) filtered=filtered.filter(r=>r.is_rotation);
+  if(championOnly) filtered=filtered.filter(r=>r.is_champion);
+  if(search) filtered=filtered.filter(r=>(r.account_name||'').toLowerCase().includes(search) || (r.am||'').toLowerCase().includes(search));
+
+  filtered=[...filtered].sort((a,b)=>{
+    let av=a[covSort.field], bv=b[covSort.field];
+    if(typeof av==='boolean') av=av?1:0;
+    if(typeof bv==='boolean') bv=bv?1:0;
+    if(typeof av==='string' || typeof bv==='string'){ av=(av||'').toString().toLowerCase(); bv=(bv||'').toString().toLowerCase(); }
+    else { av=av||0; bv=bv||0; }
+    if(av<bv) return covSort.dir==='asc'?-1:1;
+    if(av>bv) return covSort.dir==='asc'?1:-1;
+    return 0;
+  });
+
+  document.querySelectorAll('.cov-th').forEach(th=>{
+    const f=th.dataset.sort;
+    const base=th.textContent.replace(/\s*[▲▼]\s*$/,'').trim();
+    th.textContent = base + (covSort.field===f ? (covSort.dir==='asc'?' ▲':' ▼') : '');
+  });
+  document.getElementById('covResultCount').textContent = `${filtered.length} of ${scoped.length} accounts`;
+
+  body.innerHTML = filtered.map(r=>{
+    const editable=covCanEdit(r);
+    const dealsLabel = r.deal_count>0
+      ? r.open_deals.map(d=>escapeHtml(d.deal_name)).join(', ')
+      : '<span style="color:var(--text-faint)">— none —</span>';
+    const statusCell = editable
+      ? `<select class="field text-xs px-2 py-1 cov-status" data-id="${r.id}">${Object.entries(COV_STATUS_LABEL).map(([v,l])=>`<option value="${v}"${v===r.status?' selected':''}>${l}</option>`).join('')}</select>`
+      : `<span class="text-xs" style="color:${COV_STATUS_COLOR[r.status]||'var(--text-muted)'}">${COV_STATUS_LABEL[r.status]||r.status}</span>`;
+    const champCell = `<input type="checkbox" class="rounded cov-champion" data-id="${r.id}" ${r.is_champion?'checked':''} ${editable?'':'disabled'}>`;
+    const notesCell = editable
+      ? `<input type="text" class="field text-xs px-2 py-1 w-full cov-notes" data-id="${r.id}" value="${escapeHtml(r.notes||'')}" placeholder="Notes…">`
+      : `<span class="text-xs" style="color:var(--text-faint)">${escapeHtml(r.notes||'')}</span>`;
+    const delBtn = (r.is_manual && editable)
+      ? `<button class="cov-del text-xs" data-id="${r.id}" style="color:var(--text-faint)" title="Remove"><i class="fa-solid fa-trash"></i></button>` : '';
+    const sourceBadge = COV_SOURCE_LABEL[r.source] || r.source;
+    return `<tr style="border-bottom:1px solid var(--border)${r.is_rotation?';background:rgba(239,68,68,0.06)':''}">
+      <td class="py-2">${escapeHtml(r.account_name)}${r.is_rotation?' <i class="fa-solid fa-arrows-rotate" style="color:var(--warning)" title="Rotation candidate"></i>':''}</td>
+      <td class="py-2"><span class="text-[10px] px-1.5 py-0.5 rounded" style="background:var(--surface-3);color:var(--text-muted)">${sourceBadge}</span></td>
+      <td class="py-2">${escapeHtml(r.am||'—')}</td>
+      <td class="py-2">${escapeHtml(r.pillar||'—')}</td>
+      <td class="py-2 text-right">${fmtIDR(r.size||0)}</td>
+      <td class="py-2">${dealsLabel}</td>
+      <td class="py-2">${statusCell}</td>
+      <td class="py-2 text-center">${champCell}</td>
+      <td class="py-2">${notesCell}</td>
+      <td class="py-2">${delBtn}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="10" class="py-6 text-center text-xs" style="color:var(--text-faint)">No accounts to show.</td></tr>`;
+
+  const rotList=rows.filter(r=>r.is_rotation).sort((a,b)=>(b.size||0)-(a.size||0)).slice(0,10);
+  document.getElementById('covRotationList').innerHTML = covMiniBarList(rotList, 'size', 'var(--warning)', 'No rotation candidates right now.');
+}
+
+document.getElementById('covFilterAM').addEventListener('change', renderCoverage);
+document.getElementById('covFilterStatus').addEventListener('change', renderCoverage);
+document.getElementById('covFilterSource').addEventListener('change', renderCoverage);
+document.getElementById('covRotationOnly').addEventListener('change', renderCoverage);
+document.getElementById('covChampionOnly').addEventListener('change', renderCoverage);
+document.getElementById('covSearch').addEventListener('input', renderCoverage);
+document.getElementById('covFilterClear').addEventListener('click', ()=>{
+  document.getElementById('covFilterAM').value='';
+  document.getElementById('covFilterStatus').value='';
+  document.getElementById('covFilterSource').value='';
+  document.getElementById('covRotationOnly').checked=false;
+  document.getElementById('covChampionOnly').checked=false;
+  document.getElementById('covSearch').value='';
+  renderCoverage();
+});
+
+document.getElementById('covAddBtn').addEventListener('click', ()=>{
+  const wrap=document.getElementById('covAddWrap');
+  const show = wrap.style.display==='none';
+  wrap.style.display = show ? '' : 'none';
+  if(show){
+    const amSel=document.getElementById('covAddAM');
+    if(ROLE==='admin'){ amSel.style.display=''; amSel.innerHTML=AMS.map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join(''); }
+    else { amSel.style.display='none'; }
+  }
+});
+document.getElementById('covAddCancelBtn').addEventListener('click', ()=>{ document.getElementById('covAddWrap').style.display='none'; });
+document.getElementById('covAddSaveBtn').addEventListener('click', async ()=>{
+  const name=document.getElementById('covAddName').value.trim();
+  const pillar=document.getElementById('covAddPillar').value.trim();
+  const am=document.getElementById('covAddAM').value;
+  const resultEl=document.getElementById('covAddResult');
+  if(!name){ resultEl.textContent='Account name is required'; resultEl.style.color='var(--danger)'; return; }
+  try{
+    await api('/api/account_coverage',{method:'POST', body:JSON.stringify({account_name:name, pillar, am})});
+    resultEl.textContent='Added'; resultEl.style.color='var(--success)';
+    document.getElementById('covAddName').value=''; document.getElementById('covAddPillar').value='';
+    await loadAccountCoverage(); renderCoverage();
+  }catch(err){ resultEl.textContent=err.message; resultEl.style.color='var(--danger)'; }
+});
+
+document.getElementById('covTableBody').addEventListener('change', async (e)=>{
+  const id=e.target.dataset.id; if(!id) return;
+  if(e.target.classList.contains('cov-status')){
+    try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({status:e.target.value})}); await loadAccountCoverage(); renderCoverage(); }
+    catch(err){ showToast(err.message,true); }
+  } else if(e.target.classList.contains('cov-champion')){
+    try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({is_champion:e.target.checked})}); await loadAccountCoverage(); renderCoverage(); }
+    catch(err){ showToast(err.message,true); }
+  }
+});
+document.getElementById('covTableBody').addEventListener('blur', async (e)=>{
+  if(!e.target.classList || !e.target.classList.contains('cov-notes')) return;
+  const id=e.target.dataset.id;
+  try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({notes:e.target.value})}); await loadAccountCoverage(); }
+  catch(err){ showToast(err.message,true); }
+}, true);
+document.getElementById('covTableBody').addEventListener('click', (e)=>{
+  const btn=e.target.closest('.cov-del'); if(!btn) return;
+  const id=btn.dataset.id;
+  openConfirm('Remove this account from coverage tracking?', async ()=>{
+    try{ await api(`/api/account_coverage/${id}`,{method:'DELETE'}); showToast('Removed'); await loadAccountCoverage(); renderCoverage(); }
+    catch(err){ showToast(err.message,true); }
+  });
+});
+
 function renderAnalytics(){
   const ds=analyticsDeals();
   const total=ds.length, value=ds.reduce((s,d)=>s+d.estimated_value,0);
@@ -3697,6 +4138,7 @@ const CMD_FEATURES = [
   {label:'Calendar', desc:'Week/month view of every scheduled action item', icon:'fa-calendar-days', tab:'calendar'},
   {label:'Pipeline Analytics', desc:'Gap & targets, breakdown, execution framework, strategy, leaderboard', icon:'fa-chart-line', tab:'analytics'},
   {label:'Performance', desc:'Monthly ACH actuals, targets, pipeline cover, churn watch', icon:'fa-gauge-high', tab:'performance'},
+  {label:'Account Coverage', desc:'AM load, cold/champion accounts, rotation signal, new vs. performance-given', icon:'fa-users-viewfinder', tab:'coverage'},
   {label:'Lists & Automation', desc:'Deal stages, pillars, stage automation rules', icon:'fa-list-check', tab:'configuration', roles:['admin']},
   {label:'Login Logs', desc:'Sign-in history, retention limit, export', icon:'fa-user-clock', tab:'loginlogs', roles:['admin']},
   {label:'Settings', desc:'Targets, AM figures, users, data backup & restore', icon:'fa-sliders', tab:'settings', roles:['admin']},

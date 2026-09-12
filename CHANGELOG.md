@@ -6,6 +6,66 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [1.8.0] - 2026-09-11
+### Changed
+- Account Coverage: replaced the flat "Accounts / Handled / Champion /
+  Unreviewed / Cold / ..." card grid with four headline % gauges (given by
+  performance team, engaged, champion, needs attention) and a richer
+  "Relationship status" taxonomy that isn't just a bad-news scale - an
+  account can now be tagged **Existing customer**, **Preferred / good
+  relationship**, or **Growth potential**, alongside the needs-attention
+  tags (renamed **At risk / cooling**, Low priority, No contact, Not
+  preferable). New accounts from an import that already show billed revenue
+  are now auto-tagged Existing customer instead of Unreviewed.
+- Reworked the page layout: headline gauges, then a 2-up status/source donut
+  row, then a 2-up AM-load/rotation-signal row (rotation signal is now a
+  proportional bar list instead of plain text), then the filterable table.
+### Fixed
+- Added a migration for local databases that already had the old, narrower
+  account_coverage status list (SQLite can't ALTER a CHECK constraint in
+  place, so this rebuilds the table exactly as done for the past user-roles
+  widening, remapping the old "cold" value to "at_risk").
+
+## [1.7.0] - 2026-09-11
+### Changed
+- Account Coverage redesigned to be easier to read at a glance: the
+  Full-Year Target / Achieved-YTD / Coverage-toward-target strip (a different,
+  unrelated notion of "coverage") no longer shows on this page. Added a
+  status donut, a New-vs-performance-given donut, and a stacked bar chart of
+  account load per AM &mdash; every chart segment is clickable and filters
+  the table below it. The account table now has a search box, a source
+  filter, a champions-only filter, and sortable columns (click a header to
+  sort, click again to reverse).
+### Fixed
+- Confirmed uploaded workbooks (monthly ACH and master account list) are
+  never written to disk or stored in the database &mdash; only the account
+  figures extracted from them are kept.
+
+## [1.6.1] - 2026-09-11
+### Changed
+- Account Coverage moved out from under Pipeline Analytics into its own
+  top-level nav item ("Account Coverage", next to Pipeline Analytics and
+  Performance under the Analytics group) instead of being a sub-tab.
+
+## [1.6.0] - 2026-09-11
+### Added
+- **Account Coverage** (Analytics &rarr; Account Coverage): combines every
+  account the performance team's monthly import assigns to an AM with
+  whatever opportunities the tracker already has for that company, so you can
+  see how "loaded" each AM's book really is. Accounts without a matching
+  opportunity can be tagged Cold / Low Priority / No Contact / Not Preferable,
+  or marked as a "Champion" account; a Rotation Signal panel flags large
+  accounts with no open opportunity, no champion tag, and no Not-Preferable
+  reason as the best candidates for a coverage push or reassignment. An AM
+  can also manually add an account they're working that isn't in the import.
+- **Import master account list** (Account Coverage, admin only): uploads the
+  Engine-1-wide "Master Account Planning" workbook and pulls in each PODS 2
+  account's 2026 target and AM as the authoritative list. A **Coverage
+  source breakdown** shows how many accounts came from the performance team
+  (this import, or the monthly ACH one) versus how many are "new" &mdash;
+  surfaced only because an AM filed a Tracker opportunity or added them by
+  hand &mdash; plus overall and performance-given % handled.
+
 ## [1.5.0] - 2026-09-10
 ### Added
 - **Engine 1 Sync** (Settings, admin only): push every opportunity here into

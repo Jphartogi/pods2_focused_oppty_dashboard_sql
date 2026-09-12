@@ -8,6 +8,7 @@ assigned to them; ADMIN can edit everything; MANAGEMENT is read-only.
 import io
 import json
 import os
+import re
 import secrets
 import sqlite3
 import urllib.error
@@ -21,7 +22,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.8.0"
 
 # Keep the database next to app.py so it persists in a predictable location
 # regardless of the host's working directory (Render, PythonAnywhere, Docker, etc.).
@@ -297,6 +298,53 @@ def _seed_deals():
     return rows
 
 
+def _widen_cov_status(db):
+    """Older databases have the pre-1.7.0 account_coverage status CHECK (just
+    cold/low_priority/no_contact/not_preferable). SQLite can't ALTER a CHECK
+    constraint in place, so rebuild with the richer relationship-status
+    taxonomy - copying every row unchanged except remapping 'cold' to its
+    renamed equivalent 'at_risk'."""
+    row = db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='account_coverage'"
+    ).fetchone()
+    if not row or not row["sql"] or "'existing_customer'" in row["sql"]:
+        return  # table doesn't exist yet, or already migrated
+    db.executescript(
+        """
+        ALTER TABLE account_coverage RENAME TO account_coverage_pre_status_widen;
+        CREATE TABLE account_coverage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_key TEXT UNIQUE NOT NULL,
+            account_name TEXT NOT NULL,
+            am TEXT DEFAULT '',
+            pillar TEXT DEFAULT '',
+            revenue_category TEXT DEFAULT '',
+            account_size REAL DEFAULT 0,
+            account_target REAL DEFAULT 0,
+            source TEXT NOT NULL DEFAULT 'performance' CHECK(source IN
+                ('performance', 'master', 'tracker', 'manual')),
+            is_manual BOOLEAN DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'unreviewed' CHECK(status IN
+                ('unreviewed', 'existing_customer', 'preferred', 'growth_potential',
+                 'at_risk', 'low_priority', 'no_contact', 'not_preferable')),
+            is_champion BOOLEAN DEFAULT 0,
+            notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO account_coverage (id, account_key, account_name, am, pillar, revenue_category,
+                account_size, account_target, source, is_manual, status, is_champion, notes,
+                created_at, updated_at)
+            SELECT id, account_key, account_name, am, pillar, revenue_category,
+                account_size, account_target, source, is_manual,
+                CASE status WHEN 'cold' THEN 'at_risk' ELSE status END,
+                is_champion, notes, created_at, updated_at
+            FROM account_coverage_pre_status_widen;
+        DROP TABLE account_coverage_pre_status_widen;
+        """
+    )
+
+
 def _widen_user_roles(db):
     """Older databases have CHECK(role IN ('admin','account_manager','management')) on
     users. SQLite can't ALTER a CHECK constraint in place, so when the constraint is too
@@ -385,6 +433,16 @@ def migrate_db(db):
             synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )"""
     )
+
+    if "account_coverage" in {r[0] for r in db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )}:
+        cov_cols = columns("account_coverage")
+        if "account_target" not in cov_cols:
+            db.execute("ALTER TABLE account_coverage ADD COLUMN account_target REAL DEFAULT 0")
+        if "source" not in cov_cols:
+            db.execute("ALTER TABLE account_coverage ADD COLUMN source TEXT NOT NULL DEFAULT 'performance'")
+        _widen_cov_status(db)
 
     if "deal_tasks" in {r[0] for r in db.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
@@ -491,6 +549,27 @@ def init_db():
             am_summary TEXT DEFAULT '[]',
             accounts TEXT DEFAULT '[]',
             uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS account_coverage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_key TEXT UNIQUE NOT NULL,
+            account_name TEXT NOT NULL,
+            am TEXT DEFAULT '',
+            pillar TEXT DEFAULT '',
+            revenue_category TEXT DEFAULT '',
+            account_size REAL DEFAULT 0,
+            account_target REAL DEFAULT 0,
+            source TEXT NOT NULL DEFAULT 'performance' CHECK(source IN
+                ('performance', 'master', 'tracker', 'manual')),
+            is_manual BOOLEAN DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'unreviewed' CHECK(status IN
+                ('unreviewed', 'existing_customer', 'preferred', 'growth_potential',
+                 'at_risk', 'low_priority', 'no_contact', 'not_preferable')),
+            is_champion BOOLEAN DEFAULT 0,
+            notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS config (
@@ -2229,8 +2308,344 @@ def import_performance():
     # keep the last 12 snapshots
     db.execute("""DELETE FROM performance WHERE id NOT IN
                   (SELECT id FROM performance ORDER BY id DESC LIMIT 12)""")
+    _sync_account_coverage(db, accounts)
     db.commit()
     return jsonify({"ok": True, "am_count": len(am_rows), "account_rows": len(accounts)})
+
+
+def normalize_account_name(name):
+    """Loose key for matching an account name across the performance-team's
+    import and whatever an AM typed into the tracker's Customer field."""
+    s = str(name or "").strip().lower()
+    s = re.sub(r"\b(pt|tbk|persero|cv|ltd|inc|corp|corporation|company|co)\b\.?", " ", s)
+    s = re.sub(r"[^a-z0-9]+", " ", s)
+    return " ".join(s.split())
+
+
+def _sync_account_coverage(db, accounts):
+    """Upsert the monthly ACH import's account list into account_coverage,
+    refreshing the import-sourced fields (AM, pillar, size) while leaving any
+    status/champion/notes an AM already set untouched. A row already sourced
+    from the (richer) master import keeps that source; only a tracker/manual
+    row gets upgraded to 'performance' by this."""
+    agg = {}
+    for a in accounts:
+        name = str(a.get("account") or "").strip()
+        key = normalize_account_name(name)
+        if not key:
+            continue
+        entry = agg.setdefault(key, {"account_name": name, "am": "", "pillar": "",
+                                      "revenue_category": "", "size": 0.0})
+        entry["size"] += sum(_perf_num(v) for v in (a.get("months") or {}).values())
+        if a.get("am"):
+            entry["am"] = a["am"]
+        if a.get("pillar"):
+            entry["pillar"] = a["pillar"]
+        if a.get("revenue_category"):
+            entry["revenue_category"] = a["revenue_category"]
+    for key, e in agg.items():
+        existing = db.execute("SELECT id, source FROM account_coverage WHERE account_key = ?", (key,)).fetchone()
+        if existing:
+            new_source = existing["source"] if existing["source"] in ("performance", "master") else "performance"
+            db.execute(
+                """UPDATE account_coverage SET account_name=?, am=?, pillar=?, revenue_category=?,
+                       account_size=?, source=?, is_manual=0, updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                (e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], new_source, existing["id"]),
+            )
+        else:
+            # A brand-new account that already shows billed revenue is, by
+            # definition, an existing customer - not an unreviewed unknown.
+            initial_status = "existing_customer" if e["size"] > 0 else "unreviewed"
+            db.execute(
+                """INSERT INTO account_coverage
+                       (account_key, account_name, am, pillar, revenue_category, account_size, source, status, is_manual)
+                   VALUES (?, ?, ?, ?, ?, ?, 'performance', ?, 0)""",
+                (key, e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], initial_status),
+            )
+
+
+_HEAD2_RE = re.compile(r"head\s*2\b", re.I)
+
+# Account Coverage relationship-status taxonomy: not just "bad" states like a
+# CRM lead-status field usually has - an account can be in genuinely good
+# standing (already a customer, good rapport) without an open opportunity.
+COV_STATUSES = (
+    "unreviewed", "existing_customer", "preferred", "growth_potential",
+    "at_risk", "low_priority", "no_contact", "not_preferable",
+)
+
+
+def parse_master_account_workbook(wb):
+    """Read the broader Engine-1-wide 'Master Account Planning' workbook
+    (sheets named like 'Target & AM name' and 'Revenue Data') and pull out
+    only the PODS 2 rows (PODS/Engine Head column reading 'Business Engine 1
+    Head 2'), keyed by normalized account name. Distinct layout from the
+    monthly PODS-2-only ACH file parsed by parse_performance_workbook().
+
+    Uses sequential iter_rows(values_only=True) rather than .cell() random
+    access - this file's real sheets can carry 1M+ nominal rows (Excel's
+    formatting bloat far past the last populated row), and random-access
+    .cell() calls are painfully slow row-by-row on an openpyxl read_only
+    sheet of that size. Stops early once a long stretch of fully-blank rows
+    is seen after real data has started, since the padding is otherwise
+    empty for the rest of the sheet."""
+    target_sheet = revenue_sheet = None
+    for nm in wb.sheetnames:
+        low = nm.strip().lower()
+        if target_sheet is None and "target" in low:
+            target_sheet = wb[nm]
+        if revenue_sheet is None and "revenue" in low:
+            revenue_sheet = wb[nm]
+
+    accounts = {}
+
+    def cellv(row, idx):
+        return row[idx] if idx < len(row) else None
+
+    if target_sheet is not None:
+        blanks = 0
+        for row in target_sheet.iter_rows(min_row=2, values_only=True):
+            if not any(v is not None for v in row):
+                blanks += 1
+                if blanks > 500:
+                    break
+                continue
+            blanks = 0
+            engine_head = str(cellv(row, 2) or "")
+            if not _HEAD2_RE.search(engine_head):
+                continue
+            name = str(cellv(row, 3) or "").strip()
+            key = normalize_account_name(name)
+            if not key:
+                continue
+            e = accounts.setdefault(key, {"account_name": name, "am": "", "pillar": "",
+                                           "revenue_category": "", "size": 0.0, "target": 0.0})
+            e["target"] += _perf_num(cellv(row, 6))
+            am = str(cellv(row, 7) or "").strip()
+            if am:
+                e["am"] = am
+
+    if revenue_sheet is not None:
+        header_rows = list(revenue_sheet.iter_rows(min_row=3, max_row=3, values_only=True))
+        header = header_rows[0] if header_rows else ()
+        month_idxs = [i for i in range(9, len(header))
+                      if hasattr(header[i], "strftime") or (isinstance(header[i], str) and header[i].strip())]
+        blanks = 0
+        for row in revenue_sheet.iter_rows(min_row=4, values_only=True):
+            if not any(v is not None for v in row):
+                blanks += 1
+                if blanks > 500:
+                    break
+                continue
+            blanks = 0
+            pods = str(cellv(row, 7) or "")
+            if not _HEAD2_RE.search(pods):
+                continue
+            name = str(cellv(row, 5) or "").strip()
+            key = normalize_account_name(name)
+            if not key:
+                continue
+            e = accounts.setdefault(key, {"account_name": name, "am": "", "pillar": "",
+                                           "revenue_category": "", "size": 0.0, "target": 0.0})
+            e["size"] += sum(_perf_num(cellv(row, i)) for i in month_idxs)
+            pillar = str(cellv(row, 0) or "").strip()
+            if pillar:
+                e["pillar"] = pillar
+            rev_cat = str(cellv(row, 3) or "").strip()
+            if rev_cat:
+                e["revenue_category"] = rev_cat
+            am = str(cellv(row, 8) or "").strip()
+            if am and not e["am"]:
+                e["am"] = am
+
+    return accounts
+
+
+def _sync_tracker_only_accounts(db):
+    """A tracker opportunity for a company the performance team never handed
+    the AM is itself a coverage-relevant fact, not something to hide: give it
+    a coverage row (source='tracker') the first time it's seen so it counts
+    toward the new-vs-official split and can be tagged like any other."""
+    existing_keys = {r["account_key"] for r in db.execute("SELECT account_key FROM account_coverage").fetchall()}
+    rows = db.execute("SELECT DISTINCT customer, assigned_am FROM deals").fetchall()
+    added = False
+    seen = set()
+    for r in rows:
+        name = str(r["customer"] or "").strip()
+        key = normalize_account_name(name)
+        if not key or key in existing_keys or key in seen:
+            continue
+        seen.add(key)
+        db.execute(
+            "INSERT INTO account_coverage (account_key, account_name, am, source, is_manual) VALUES (?, ?, ?, 'tracker', 0)",
+            (key, name, r["assigned_am"] or ""),
+        )
+        added = True
+    if added:
+        db.commit()
+
+
+@app.route("/api/account_coverage/import_master", methods=["POST"])
+@login_required(roles=("admin",))
+def import_master_accounts():
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return jsonify({"error": "openpyxl is not installed on the server. "
+                                 "Run: pip install --user openpyxl, then reload."}), 500
+    upload = request.files.get("file")
+    if not upload:
+        return jsonify({"error": "No file uploaded"}), 400
+    try:
+        # read_only: this workbook can carry 1M+ nominal rows of Excel padding
+        # well past the real data - loading it normally is far too slow.
+        wb = load_workbook(upload, data_only=True, read_only=True)
+    except Exception as exc:
+        return jsonify({"error": f"Could not read this file as .xlsx ({exc})"}), 400
+
+    accounts = parse_master_account_workbook(wb)
+    if not accounts:
+        return jsonify({"error": "No PODS 2 (Business Engine 1 Head 2) rows found. Expected sheets "
+                                 "named like 'Target & AM name' and 'Revenue Data'."}), 400
+
+    db = get_db()
+    created = updated = 0
+    for key, e in accounts.items():
+        existing = db.execute("SELECT id FROM account_coverage WHERE account_key = ?", (key,)).fetchone()
+        if existing:
+            db.execute(
+                """UPDATE account_coverage SET account_name=?, am=?, pillar=?, revenue_category=?,
+                       account_size=?, account_target=?, source='master', is_manual=0,
+                       updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                (e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], e["target"], existing["id"]),
+            )
+            updated += 1
+        else:
+            initial_status = "existing_customer" if e["size"] > 0 else "unreviewed"
+            db.execute(
+                """INSERT INTO account_coverage
+                       (account_key, account_name, am, pillar, revenue_category, account_size, account_target, source, status, is_manual)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'master', ?, 0)""",
+                (key, e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], e["target"], initial_status),
+            )
+            created += 1
+    db.commit()
+    return jsonify({"ok": True, "created": created, "updated": updated, "total": len(accounts)})
+
+
+def _deals_by_account_key(db):
+    """normalized customer name -> list of tracker deals for that account
+    (PODS-2 has no closed-lost concept of its own, so every deal counts as
+    the account being actively worked)."""
+    rows = db.execute(
+        "SELECT id, deal_name, customer, stage, assigned_am FROM deals"
+    ).fetchall()
+    out = {}
+    for r in rows:
+        key = normalize_account_name(r["customer"])
+        if not key:
+            continue
+        out.setdefault(key, []).append({
+            "id": r["id"], "deal_name": r["deal_name"],
+            "stage": r["stage"], "assigned_am": r["assigned_am"],
+        })
+    return out
+
+
+@app.route("/api/account_coverage", methods=["GET"])
+@login_required()
+def get_account_coverage():
+    user = g.current_user
+    db = get_db()
+    _sync_tracker_only_accounts(db)
+    rows = db.execute("SELECT * FROM account_coverage ORDER BY account_target DESC, account_size DESC").fetchall()
+    deals_by_key = _deals_by_account_key(db)
+    out = []
+    for r in rows:
+        if user["role"] == "account_manager" and not _perf_am_matches(r["am"], user["full_name"]):
+            continue
+        open_deals = deals_by_key.get(r["account_key"], [])
+        out.append({
+            "id": r["id"], "account_key": r["account_key"], "account_name": r["account_name"],
+            "am": r["am"], "pillar": r["pillar"], "revenue_category": r["revenue_category"],
+            "account_size": r["account_size"], "account_target": r["account_target"],
+            "size": r["account_target"] if r["account_target"] else r["account_size"],
+            "source": r["source"], "is_manual": bool(r["is_manual"]),
+            "status": r["status"], "is_champion": bool(r["is_champion"]), "notes": r["notes"] or "",
+            "updated_at": r["updated_at"],
+            "open_deals": open_deals, "deal_count": len(open_deals),
+        })
+    return jsonify({"accounts": out})
+
+
+@app.route("/api/account_coverage", methods=["POST"])
+@login_required(roles=("admin", "account_manager"))
+def create_account_coverage():
+    user = g.current_user
+    data = request.get_json(force=True) or {}
+    account_name = str(data.get("account_name") or "").strip()
+    key = normalize_account_name(account_name)
+    if not key:
+        return jsonify({"error": "Account name is required"}), 400
+    if user["role"] == "account_manager":
+        am = user["full_name"]
+    else:
+        am = str(data.get("am") or "").strip()
+        if not am:
+            return jsonify({"error": "AM is required"}), 400
+    db = get_db()
+    existing = db.execute("SELECT id FROM account_coverage WHERE account_key = ?", (key,)).fetchone()
+    if existing:
+        return jsonify({"error": "This account is already tracked", "id": existing["id"]}), 409
+    pillar = str(data.get("pillar") or "").strip()
+    db.execute(
+        """INSERT INTO account_coverage (account_key, account_name, am, pillar, source, is_manual, status)
+           VALUES (?, ?, ?, ?, 'manual', 1, 'unreviewed')""",
+        (key, account_name, am, pillar),
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/account_coverage/<int:cov_id>", methods=["PUT"])
+@login_required(roles=("admin", "account_manager"))
+def update_account_coverage(cov_id):
+    user = g.current_user
+    db = get_db()
+    row = db.execute("SELECT * FROM account_coverage WHERE id = ?", (cov_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    if user["role"] == "account_manager" and not _perf_am_matches(row["am"], user["full_name"]):
+        return jsonify({"error": "Not your account"}), 403
+    data = request.get_json(force=True) or {}
+    status = data.get("status", row["status"])
+    if status not in COV_STATUSES:
+        return jsonify({"error": "Invalid status"}), 400
+    is_champion = bool(data.get("is_champion", row["is_champion"]))
+    notes = str(data.get("notes", row["notes"] or ""))[:2000]
+    db.execute(
+        "UPDATE account_coverage SET status=?, is_champion=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (status, is_champion, notes, cov_id),
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/account_coverage/<int:cov_id>", methods=["DELETE"])
+@login_required(roles=("admin", "account_manager"))
+def delete_account_coverage(cov_id):
+    user = g.current_user
+    db = get_db()
+    row = db.execute("SELECT * FROM account_coverage WHERE id = ?", (cov_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    if not row["is_manual"]:
+        return jsonify({"error": "Imported accounts can't be deleted, only re-tagged"}), 400
+    if user["role"] == "account_manager" and not _perf_am_matches(row["am"], user["full_name"]):
+        return jsonify({"error": "Not your account"}), 403
+    db.execute("DELETE FROM account_coverage WHERE id = ?", (cov_id,))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 def _perf_am_matches(a, b):
