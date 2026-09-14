@@ -6,6 +6,31 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [1.9.1] - 2026-09-14
+### Changed
+- AM Workload folded into the Account Coverage page as a second tab inside
+  it (Account Coverage / AM Workload) instead of a separate nav item, so
+  it's a quick switch back and forth rather than two destinations.
+- Removed the target-vs-pipeline comparison entirely - AM Workload now shows
+  pure account-count workload instead: a PODS 2-wide total, an
+  accounts-handled-by-AM bar chart, and per-AM stat cards (total accounts,
+  engaged, champion, needs attention), answering "how many accounts does
+  PODS 2 have, and how many does AM Y actually handle" directly.
+
+## [1.9.0] - 2026-09-14
+### Added
+- **AM Workload** (new tab, Analytics group): a per-Account-Manager view of
+  everything on their plate. A ranked bar chart compares every AM's live
+  Tracker pipeline (sum of open, non-Closed opportunity TCV) against their
+  FY 2026 target as a coverage %; click any AM (bar, card, or the selector)
+  to drill into their target/pipeline/closed-won figures, a status donut of
+  their accounts, their biggest unhandled accounts, and their full editable
+  account list (same tagging as Account Coverage, reused here so an AM can
+  review their own book from one place). Account matching is name-fuzzy
+  (handles "Ashari" vs "Ashari Asrar" from different source files) so the
+  workload total reflects the real person, not each data source's own
+  spelling.
+
 ## [1.8.0] - 2026-09-11
 ### Changed
 - Account Coverage: replaced the flat "Accounts / Handled / Champion /

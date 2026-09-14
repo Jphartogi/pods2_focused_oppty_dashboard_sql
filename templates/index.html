@@ -66,9 +66,9 @@
   .modal-tab-btn { color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom:-1px; }
   .modal-tab-btn:hover { color: var(--text); }
   .modal-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight:500; }
-  .atab-btn { color: var(--text-muted); font-size:13px; padding:6px 14px; border-radius:8px; transition: background .15s ease, color .15s ease; }
-  .atab-btn:hover { color: var(--text); background: var(--surface-2); }
-  .atab-btn.active { color: #fff; background: var(--primary); font-weight:500; }
+  .atab-btn, .ctab-btn { color: var(--text-muted); font-size:13px; padding:6px 14px; border-radius:8px; transition: background .15s ease, color .15s ease; }
+  .atab-btn:hover, .ctab-btn:hover { color: var(--text); background: var(--surface-2); }
+  .atab-btn.active, .ctab-btn.active { color: #fff; background: var(--primary); font-weight:500; }
   .calview-btn { color: var(--text-muted); font-size:12px; padding:5px 12px; border-radius:6px; transition: background .15s ease, color .15s ease; }
   .calview-btn:hover { color: var(--text); background: var(--surface-2); }
   .calview-btn.active { color: #fff; background: var(--primary); font-weight:500; }
@@ -758,6 +758,12 @@
 
       <!-- ============ ACCOUNT COVERAGE ============ -->
       <section id="tab-coverage" class="tab-panel px-6 py-5">
+        <div class="flex flex-wrap items-center gap-1.5 mb-4 card elev p-1.5" style="width:fit-content">
+          <button data-ctab="coverage" class="ctab-btn active">Account Coverage</button>
+          <button data-ctab="workload" class="ctab-btn">AM Workload</button>
+        </div>
+
+        <div id="ctab-coverage" class="ctab-pane">
         <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Every account the performance team hands the AMs, cross-checked against opportunities already in the Tracker (matched by Customer name). Use it to spot accounts nobody is actively working &mdash; especially big ones &mdash; and to flag "champion" accounts an AM is confident in. Click any chart to filter the table below.</p>
 
         <div id="covMasterImportWrap" class="card elev p-4 mb-4" style="display:none">
@@ -862,6 +868,60 @@
               <tbody id="covTableBody"></tbody>
             </table>
           </div>
+        </div>
+        </div>
+
+        <div id="ctab-workload" class="ctab-pane" style="display:none">
+        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>How many accounts each Account Manager actually has on their plate, from the same Account Coverage data. Click a card, a bar, or the selector to switch AM.</p>
+
+        <p id="amwTotalLine" class="text-sm font-medium mb-3" style="color:var(--text)"></p>
+
+        <div class="card elev p-5 mb-4">
+          <p class="text-sm font-medium mb-3">Accounts handled, by AM</p>
+          <div id="amwCoverageBars"></div>
+        </div>
+
+        <div id="amwCards" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4"></div>
+
+        <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
+          <label class="text-xs" style="color:var(--text-muted)">Account Manager</label>
+          <select id="amwSelect" class="field text-sm px-3 py-1.5"></select>
+          <div class="flex-1"></div>
+          <span id="amwSelectedNote" class="text-[11px]" style="color:var(--text-faint)"></span>
+        </div>
+
+        <div id="amwStatCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          <div class="card elev p-5">
+            <p class="text-sm font-medium mb-3">Their accounts by status</p>
+            <div id="amwStatusChart"></div>
+          </div>
+          <div class="card elev p-5">
+            <p class="text-sm font-medium mb-1"><i class="fa-solid fa-arrows-rotate mr-1.5" style="color:var(--warning)"></i>Biggest unhandled accounts</p>
+            <p class="text-[11px] mb-3" style="color:var(--text-muted)">Their largest accounts with no open opportunity right now.</p>
+            <div id="amwUnhandledList"></div>
+          </div>
+        </div>
+
+        <div class="card elev p-5">
+          <p class="text-sm font-medium mb-3">Full account list</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead style="color:var(--text-muted)"><tr class="text-xs uppercase" style="border-bottom:1px solid var(--border)">
+                <th class="text-left py-2">Account</th>
+                <th class="text-left py-2">Source</th>
+                <th class="text-left py-2">Pillar</th>
+                <th class="text-right py-2">Target / Size</th>
+                <th class="text-left py-2">Open opportunity</th>
+                <th class="text-left py-2 w-44">Status</th>
+                <th class="text-center py-2">Champion</th>
+                <th class="text-left py-2 w-56">Notes</th>
+              </tr></thead>
+              <tbody id="amwTableBody"></tbody>
+            </table>
+          </div>
+        </div>
         </div>
       </section>
 
@@ -1591,7 +1651,7 @@ function switchTab(tab){
   if(tab==='calendar') renderCalendar();
   if(tab==='management') renderManagement();
   if(tab==='performance') renderPerformance();
-  if(tab==='coverage') renderCoverage();
+  if(tab==='coverage'){ renderCoverage(); renderAmWorkload(); }
   if(tab==='weeklymeeting') renderWeeklyMeeting();
   if(tab==='myteamtasks') renderMyTeamTasks();
 }
@@ -3240,6 +3300,13 @@ function switchAnalyticsTab(tab){
   document.querySelectorAll('.atab-pane').forEach(p=>p.style.display=(p.id==='atab-'+tab)?'':'none');
 }
 
+/* ---------- Account Coverage sub-tabs: Coverage overview vs. per-AM Workload ---------- */
+document.querySelectorAll('.ctab-btn').forEach(b=>b.addEventListener('click',()=>switchCoverageTab(b.dataset.ctab)));
+function switchCoverageTab(tab){
+  document.querySelectorAll('.ctab-btn').forEach(b=>b.classList.toggle('active',b.dataset.ctab===tab));
+  document.querySelectorAll('.ctab-pane').forEach(p=>p.style.display=(p.id==='ctab-'+tab)?'':'none');
+}
+
 /* ---------- Account Coverage: load vs. what the tracker actually shows worked ---------- */
 async function loadAccountCoverage(){ try{ const d=await api('/api/account_coverage'); COVERAGE=d.accounts||[]; }catch(e){ COVERAGE=[]; } }
 
@@ -3294,16 +3361,17 @@ let covSort = {field:'size', dir:'desc'};
 function covDonut(entries, filterField){
   const total = entries.reduce((s,e)=>s+e[2],0);
   if(!total) return `<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`;
+  const interactive = !!filterField;
   const cx=90,cy=90,r=70,sw=26,C=2*Math.PI*r; let off=0,circ='';
   entries.forEach(([key,label,count,color])=>{
     if(!count) return;
     const dash=count/total*C;
-    circ+=`<circle class="clickable cov-chart-seg" data-filter="${filterField}" data-value="${key}" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"><title>${label}: ${count} (click to filter)</title></circle>`;
+    circ+=`<circle class="${interactive?'clickable cov-chart-seg':''}" data-filter="${filterField||''}" data-value="${key}" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"><title>${label}: ${count}${interactive?' (click to filter)':''}</title></circle>`;
     off+=dash;
   });
   const tc=cssVar('--chart-text');
   const legend=entries.filter(e=>e[2]>0).map(([key,label,count,color])=>
-    `<div class="flex items-center gap-1.5 text-xs clickable cov-chart-seg" data-filter="${filterField}" data-value="${key}" style="color:var(--text-muted)"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${color}"></span>${label} (${count})</div>`
+    `<div class="flex items-center gap-1.5 text-xs${interactive?' clickable cov-chart-seg':''}" data-filter="${filterField||''}" data-value="${key}" style="color:var(--text-muted)"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${color}"></span>${label} (${count})</div>`
   ).join('');
   return `<div class="flex items-center gap-6"><svg viewBox="0 0 180 180" style="width:140px;height:140px" class="flex-shrink-0">${circ}<text x="90" y="96" text-anchor="middle" font-size="22" font-weight="700" fill="${tc}">${total}</text></svg><div class="space-y-1.5 flex-1 min-w-0">${legend}</div></div>`;
 }
@@ -3566,6 +3634,159 @@ document.getElementById('covTableBody').addEventListener('click', (e)=>{
     catch(err){ showToast(err.message,true); }
   });
 });
+
+/* ---------- AM Workload: per-AM account list + target vs. live pipeline coverage ---------- */
+let amwSelected = null;
+
+function amwStats(am){
+  const accounts = COVERAGE.filter(r=>amNameMatches(r.am, am));
+  const engaged = accounts.filter(r=>r.deal_count>0).length;
+  const champion = accounts.filter(r=>r.is_champion).length;
+  const attention = accounts.filter(r=>r.deal_count===0 && ['at_risk','low_priority','no_contact'].includes(r.status)).length;
+  return {am, accounts, engaged, champion, attention};
+}
+
+function renderAmwCoverageBars(){
+  const list=AMS.map(amwStats).sort((a,b)=>b.accounts.length-a.accounts.length);
+  const max=Math.max(...list.map(x=>x.accounts.length),1);
+  document.getElementById('amwCoverageBars').innerHTML = list.map(x=>{
+    const hPct = x.accounts.length ? x.engaged/x.accounts.length*100 : 0;
+    const widthPct = x.accounts.length/max*100;
+    return `<div class="flex items-center gap-3 mb-2.5 clickable amw-pick" data-am="${escapeHtml(x.am)}">
+      <span class="text-xs" style="color:var(--text);width:150px;flex-shrink:0">${escapeHtml(x.am)}</span>
+      <div class="flex-1 rounded-full h-3 overflow-hidden" style="background:var(--surface-3)">
+        <div style="width:${widthPct}%;height:100%;display:flex">
+          <div style="width:${hPct}%;background:var(--success)" title="Engaged: ${x.engaged}"></div>
+          <div style="width:${100-hPct}%;background:var(--border)" title="Not engaged: ${x.accounts.length-x.engaged}"></div>
+        </div>
+      </div>
+      <span class="text-[11px]" style="color:var(--text-muted);width:130px;text-align:right;flex-shrink:0">${x.accounts.length} accounts &middot; ${x.engaged} engaged</span>
+    </div>`;
+  }).join('') || `<p class="text-xs py-6 text-center" style="color:var(--text-faint)">No account managers defined.</p>`;
+}
+
+function renderAmwCards(){
+  const list=AMS.map(amwStats);
+  document.getElementById('amwCards').innerHTML = list.map(x=>{
+    const active = amwSelected===x.am;
+    return `<div class="card elev p-3 clickable amw-pick" data-am="${escapeHtml(x.am)}" style="${active?'box-shadow:0 0 0 2px var(--primary) inset':''}">
+      <p class="text-xs font-medium mb-1" style="color:var(--text)">${escapeHtml(x.am)}</p>
+      <p class="text-lg font-medium" style="color:var(--text)">${x.accounts.length}</p>
+      <p class="text-[10px]" style="color:var(--text-faint)">accounts &middot; ${x.engaged} engaged &middot; ${x.champion} champion &middot; ${x.attention} need attention</p>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('ctab-workload').addEventListener('click',(e)=>{
+  const el=e.target.closest('.amw-pick'); if(!el) return;
+  amwSelected=el.dataset.am;
+  document.getElementById('amwSelect').value=amwSelected;
+  renderAmwCards();
+  renderAmwDetail();
+});
+
+document.getElementById('amwSelect').addEventListener('change',()=>{
+  amwSelected=document.getElementById('amwSelect').value;
+  renderAmwCards();
+  renderAmwDetail();
+});
+
+function renderAmwDetail(){
+  if(!amwSelected) return;
+  const x=amwStats(amwSelected);
+  document.getElementById('amwSelectedNote').textContent = `${x.accounts.length} accounts on their plate`;
+
+  document.getElementById('amwStatCards').innerHTML = [
+    ['Total accounts', x.accounts.length, 'var(--text)'],
+    ['Engaged (has opportunity)', x.engaged, 'var(--success)'],
+    ['Champion', x.champion, '#0ea5e9'],
+    ['Needs attention', x.attention, 'var(--warning)'],
+  ].map(([label,val,c])=>`<div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">${label}</p><p class="text-xl font-medium mt-1" style="color:${c}">${val}</p></div>`).join('');
+
+  const counts={existing_customer:0,preferred:0,growth_potential:0,unreviewed:0,at_risk:0,low_priority:0,no_contact:0,not_preferable:0,handled:0};
+  x.accounts.forEach(r=>{ if(r.deal_count>0) counts.handled++; else if(counts[r.status]!==undefined) counts[r.status]++; });
+  document.getElementById('amwStatusChart').innerHTML = covDonut([
+    ['handled','Engaged',counts.handled,'var(--success)'],
+    ['existing_customer',COV_STATUS_LABEL.existing_customer,counts.existing_customer,COV_STATUS_COLOR.existing_customer],
+    ['preferred',COV_STATUS_LABEL.preferred,counts.preferred,COV_STATUS_COLOR.preferred],
+    ['growth_potential',COV_STATUS_LABEL.growth_potential,counts.growth_potential,COV_STATUS_COLOR.growth_potential],
+    ['unreviewed',COV_STATUS_LABEL.unreviewed,counts.unreviewed,COV_STATUS_COLOR.unreviewed],
+    ['at_risk',COV_STATUS_LABEL.at_risk,counts.at_risk,COV_STATUS_COLOR.at_risk],
+    ['low_priority',COV_STATUS_LABEL.low_priority,counts.low_priority,COV_STATUS_COLOR.low_priority],
+    ['no_contact',COV_STATUS_LABEL.no_contact,counts.no_contact,COV_STATUS_COLOR.no_contact],
+    ['not_preferable',COV_STATUS_LABEL.not_preferable,counts.not_preferable,COV_STATUS_COLOR.not_preferable],
+  ], null);
+
+  const unhandled=x.accounts.filter(r=>r.deal_count===0).sort((a,b)=>(b.size||0)-(a.size||0)).slice(0,8);
+  document.getElementById('amwUnhandledList').innerHTML = covMiniBarList(unhandled, 'size', 'var(--warning)', 'Every account has an open opportunity.');
+
+  const body=document.getElementById('amwTableBody');
+  body.innerHTML = x.accounts.slice().sort((a,b)=>(b.size||0)-(a.size||0)).map(r=>{
+    const editable=covCanEdit(r);
+    const dealsLabel = r.deal_count>0
+      ? r.open_deals.map(d=>escapeHtml(d.deal_name)).join(', ')
+      : '<span style="color:var(--text-faint)">— none —</span>';
+    const statusCell = editable
+      ? `<select class="field text-xs px-2 py-1 cov-status" data-id="${r.id}">${Object.entries(COV_STATUS_LABEL).map(([v,l])=>`<option value="${v}"${v===r.status?' selected':''}>${l}</option>`).join('')}</select>`
+      : `<span class="text-xs" style="color:${COV_STATUS_COLOR[r.status]||'var(--text-muted)'}">${COV_STATUS_LABEL[r.status]||r.status}</span>`;
+    const champCell = `<input type="checkbox" class="rounded cov-champion" data-id="${r.id}" ${r.is_champion?'checked':''} ${editable?'':'disabled'}>`;
+    const notesCell = editable
+      ? `<input type="text" class="field text-xs px-2 py-1 w-full cov-notes" data-id="${r.id}" value="${escapeHtml(r.notes||'')}" placeholder="Notes…">`
+      : `<span class="text-xs" style="color:var(--text-faint)">${escapeHtml(r.notes||'')}</span>`;
+    const sourceBadge = COV_SOURCE_LABEL[r.source] || r.source;
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td class="py-2">${escapeHtml(r.account_name)}</td>
+      <td class="py-2"><span class="text-[10px] px-1.5 py-0.5 rounded" style="background:var(--surface-3);color:var(--text-muted)">${sourceBadge}</span></td>
+      <td class="py-2">${escapeHtml(r.pillar||'—')}</td>
+      <td class="py-2 text-right">${fmtIDR(r.size||0)}</td>
+      <td class="py-2">${dealsLabel}</td>
+      <td class="py-2">${statusCell}</td>
+      <td class="py-2 text-center">${champCell}</td>
+      <td class="py-2">${notesCell}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8" class="py-6 text-center text-xs" style="color:var(--text-faint)">No accounts for this AM yet.</td></tr>`;
+}
+
+document.getElementById('amwTableBody').addEventListener('change', async (e)=>{
+  const id=e.target.dataset.id; if(!id) return;
+  if(e.target.classList.contains('cov-status')){
+    try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({status:e.target.value})}); await loadAccountCoverage(); renderAmwCoverageBars(); renderAmwCards(); renderAmwDetail(); }
+    catch(err){ showToast(err.message,true); }
+  } else if(e.target.classList.contains('cov-champion')){
+    try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({is_champion:e.target.checked})}); await loadAccountCoverage(); renderAmwCoverageBars(); renderAmwCards(); renderAmwDetail(); }
+    catch(err){ showToast(err.message,true); }
+  }
+});
+document.getElementById('amwTableBody').addEventListener('blur', async (e)=>{
+  if(!e.target.classList || !e.target.classList.contains('cov-notes')) return;
+  const id=e.target.dataset.id;
+  try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({notes:e.target.value})}); await loadAccountCoverage(); }
+  catch(err){ showToast(err.message,true); }
+}, true);
+
+function renderAmWorkload(){
+  if(!AMS.length) return;
+  const sel=document.getElementById('amwSelect');
+  const cur=sel.value;
+  sel.innerHTML = AMS.map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+  if(ROLE==='account_manager'){
+    sel.value = AMS.find(a=>amNameMatches(a,FULLNAME)) || FULLNAME;
+    sel.disabled=true;
+  } else {
+    sel.disabled=false;
+    if(cur && AMS.includes(cur)) sel.value=cur;
+  }
+  amwSelected = sel.value || AMS[0];
+  sel.value = amwSelected;
+
+  const totalEngaged = COVERAGE.filter(r=>r.deal_count>0).length;
+  document.getElementById('amwTotalLine').textContent =
+    `PODS 2 total: ${COVERAGE.length} accounts tracked, ${totalEngaged} engaged (${COVERAGE.length?Math.round(totalEngaged/COVERAGE.length*100):0}%).`;
+
+  renderAmwCoverageBars();
+  renderAmwCards();
+  renderAmwDetail();
+}
 
 function renderAnalytics(){
   const ds=analyticsDeals();
@@ -4138,7 +4359,8 @@ const CMD_FEATURES = [
   {label:'Calendar', desc:'Week/month view of every scheduled action item', icon:'fa-calendar-days', tab:'calendar'},
   {label:'Pipeline Analytics', desc:'Gap & targets, breakdown, execution framework, strategy, leaderboard', icon:'fa-chart-line', tab:'analytics'},
   {label:'Performance', desc:'Monthly ACH actuals, targets, pipeline cover, churn watch', icon:'fa-gauge-high', tab:'performance'},
-  {label:'Account Coverage', desc:'AM load, cold/champion accounts, rotation signal, new vs. performance-given', icon:'fa-users-viewfinder', tab:'coverage'},
+  {label:'Account Coverage', desc:'AM load, cold/champion accounts, rotation signal, new vs. performance-given', icon:'fa-users-viewfinder', tab:'coverage', ctab:'coverage'},
+  {label:'AM Workload', desc:'Per-AM account list: how many accounts each AM actually handles', icon:'fa-user-clock', tab:'coverage', ctab:'workload'},
   {label:'Lists & Automation', desc:'Deal stages, pillars, stage automation rules', icon:'fa-list-check', tab:'configuration', roles:['admin']},
   {label:'Login Logs', desc:'Sign-in history, retention limit, export', icon:'fa-user-clock', tab:'loginlogs', roles:['admin']},
   {label:'Settings', desc:'Targets, AM figures, users, data backup & restore', icon:'fa-sliders', tab:'settings', roles:['admin']},
@@ -4172,7 +4394,7 @@ function renderCmdResults(){
 function runCmd(idx){
   const x=cmdFiltered[idx]; if(!x) return;
   closeModal('cmdPalette');
-  if(x.tab) switchTab(x.tab); else if(x.action) x.action();
+  if(x.tab){ switchTab(x.tab); if(x.ctab) switchCoverageTab(x.ctab); } else if(x.action) x.action();
 }
 function cmdMove(delta){
   if(!cmdFiltered.length) return;
