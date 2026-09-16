@@ -6,6 +6,32 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.0.0] - 2026-09-16 (branch: v2.0, in progress)
+### Changed
+- **Postgres instead of SQLite.** Schema and all ~140 raw-SQL call sites
+  ported to `psycopg` v3 with a small connection pool; auth sessions moved
+  from an in-process dict into a `sessions` table, which is what makes
+  running multiple gunicorn workers safe (v1 was pinned to one worker for
+  exactly this reason).
+- **Docker Compose deployment**: Postgres, the app, Nginx, and an `autoheal`
+  sidecar - each service has a healthcheck, `restart: unless-stopped`
+  handles process crashes, and `autoheal` restarts anything Docker reports
+  `unhealthy` without exiting (e.g. the app losing its DB connection).
+  Verified end-to-end: killing the app process triggers a restart; stopping
+  Postgres under a live app flips its healthcheck and autoheal restarts the
+  app container until Postgres comes back.
+- **One-time migration script** (`migrate_from_sqlite.py`) to carry an
+  existing v1 `db.sqlite3` into the new Postgres database, preserving row
+  ids (and therefore foreign keys) and resetting sequences afterward.
+  Verified against a full copy of real production data (42 deals, 15 users,
+  34 login logs) with an exact row-count match and a working login
+  afterward.
+- `documents` table added to the schema for the planned PDF/PPTX upload
+  feature (upload/download endpoints and UI not wired up yet).
+### Not yet done
+- Document upload endpoints/UI, and the Chart.js/Tabulator.js frontend
+  modernization - see `DEPLOY.md`.
+
 ## [1.9.1] - 2026-09-14
 ### Changed
 - AM Workload folded into the Account Coverage page as a second tab inside

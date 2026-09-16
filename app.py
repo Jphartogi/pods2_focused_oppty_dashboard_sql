@@ -1,6 +1,6 @@
 """
 H2 2026 Command Center - PODS 2
-Deal Execution Tracker & Strategy Dashboard (SQLite-backed version)
+Deal Execution Tracker & Strategy Dashboard (Postgres-backed v2.0)
 
 Row-level access control: each Account Manager can only edit the opportunities
 assigned to them; ADMIN can edit everything; MANAGEMENT is read-only.
@@ -10,29 +10,41 @@ import json
 import os
 import re
 import secrets
-import sqlite3
 import urllib.error
 import urllib.request
 from datetime import datetime, date, timedelta, timezone
 from functools import wraps
 
+import psycopg
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 from flask import Flask, g, jsonify, render_template, request, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
 
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "1.9.1"
+APP_VERSION = "2.0.0"
 
-# Keep the database next to app.py so it persists in a predictable location
-# regardless of the host's working directory (Render, PythonAnywhere, Docker, etc.).
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "db.sqlite3"))
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgresql://pods2:pods2@localhost:5432/pods2"
+)
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads"))
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # 25MB per uploaded file
 
-# In-memory token store: token -> {user_id, username, role, full_name}
-TOKENS = {}
+# Small pool: a handful of gunicorn workers x a couple of connections each is
+# plenty for this team's traffic - session storage moving into Postgres (see
+# the `sessions` table below) is what makes running multiple workers safe at
+# all, since tokens used to live in an in-process dict.
+_pool = ConnectionPool(
+    DATABASE_URL, min_size=1, max_size=8, kwargs={"row_factory": dict_row}, open=False
+)
+_pool.open(wait=True, timeout=30)
+
+SESSION_LIFETIME = timedelta(hours=12)
 
 VALID_ROLES = ("admin", "account_manager", "management", "solution", "project", "product")
 # Cross-functional roles that can only edit the Team Tasks section of an opportunity
@@ -172,9 +184,7 @@ def _hash(pw):
 # --------------------------------------------------------------------------
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db = _pool.getconn()
     return g.db
 
 
@@ -182,7 +192,9 @@ def get_db():
 def close_db(exception=None):
     db = g.pop("db", None)
     if db is not None:
-        db.close()
+        if exception:
+            db.rollback()
+        _pool.putconn(db)
 
 
 # Seed opportunity dataset (PODS 2 real pipeline).
@@ -298,344 +310,205 @@ def _seed_deals():
     return rows
 
 
-def _widen_cov_status(db):
-    """Older databases have the pre-1.7.0 account_coverage status CHECK (just
-    cold/low_priority/no_contact/not_preferable). SQLite can't ALTER a CHECK
-    constraint in place, so rebuild with the richer relationship-status
-    taxonomy - copying every row unchanged except remapping 'cold' to its
-    renamed equivalent 'at_risk'."""
-    row = db.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='account_coverage'"
-    ).fetchone()
-    if not row or not row["sql"] or "'existing_customer'" in row["sql"]:
-        return  # table doesn't exist yet, or already migrated
-    db.executescript(
-        """
-        ALTER TABLE account_coverage RENAME TO account_coverage_pre_status_widen;
-        CREATE TABLE account_coverage (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_key TEXT UNIQUE NOT NULL,
-            account_name TEXT NOT NULL,
-            am TEXT DEFAULT '',
-            pillar TEXT DEFAULT '',
-            revenue_category TEXT DEFAULT '',
-            account_size REAL DEFAULT 0,
-            account_target REAL DEFAULT 0,
-            source TEXT NOT NULL DEFAULT 'performance' CHECK(source IN
-                ('performance', 'master', 'tracker', 'manual')),
-            is_manual BOOLEAN DEFAULT 0,
-            status TEXT NOT NULL DEFAULT 'unreviewed' CHECK(status IN
-                ('unreviewed', 'existing_customer', 'preferred', 'growth_potential',
-                 'at_risk', 'low_priority', 'no_contact', 'not_preferable')),
-            is_champion BOOLEAN DEFAULT 0,
-            notes TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        INSERT INTO account_coverage (id, account_key, account_name, am, pillar, revenue_category,
-                account_size, account_target, source, is_manual, status, is_champion, notes,
-                created_at, updated_at)
-            SELECT id, account_key, account_name, am, pillar, revenue_category,
-                account_size, account_target, source, is_manual,
-                CASE status WHEN 'cold' THEN 'at_risk' ELSE status END,
-                is_champion, notes, created_at, updated_at
-            FROM account_coverage_pre_status_widen;
-        DROP TABLE account_coverage_pre_status_widen;
-        """
-    )
-
-
-def _widen_user_roles(db):
-    """Older databases have CHECK(role IN ('admin','account_manager','management')) on
-    users. SQLite can't ALTER a CHECK constraint in place, so when the constraint is too
-    narrow for the new cross-functional roles we rebuild the table - copying every row
-    across unchanged - rather than touching any data."""
-    row = db.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
-    ).fetchone()
-    if not row or not row["sql"] or "'solution'" in row["sql"]:
-        return  # table doesn't exist yet, or already migrated
-    db.executescript(
-        """
-        ALTER TABLE users RENAME TO users_pre_roles_widen;
-        CREATE TABLE users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN
-                ('admin', 'account_manager', 'management', 'solution', 'project', 'product')),
-            full_name TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        INSERT INTO users (id, username, password, role, full_name, created_at)
-            SELECT id, username, password, role, full_name, created_at FROM users_pre_roles_widen;
-        DROP TABLE users_pre_roles_widen;
-        """
-    )
-
-
-def migrate_db(db):
-    """Add columns introduced after the first release, without touching data."""
-    def columns(table):
-        return {r[1] for r in db.execute(f"PRAGMA table_info({table})")}
-
-    _widen_user_roles(db)
-
-    deal_cols = columns("deals")
-    if "revenue_2026" not in deal_cols:
-        db.execute("ALTER TABLE deals ADD COLUMN revenue_2026 INTEGER DEFAULT 0")
-        db.execute("UPDATE deals SET revenue_2026 = estimated_value WHERE revenue_2026 = 0")
-    if "strategy" not in deal_cols:
-        db.execute("ALTER TABLE deals ADD COLUMN strategy TEXT DEFAULT ''")
-    if "proofs" not in deal_cols:
-        db.execute("ALTER TABLE deals ADD COLUMN proofs TEXT DEFAULT '{}'")
-    if "expected_po_date" not in deal_cols:
-        db.execute("ALTER TABLE deals ADD COLUMN expected_po_date TEXT DEFAULT ''")
-    if "expected_revenue_date" not in deal_cols:
-        db.execute("ALTER TABLE deals ADD COLUMN expected_revenue_date TEXT DEFAULT ''")
-
-    config_cols = columns("config")
-    if "am_targets" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN am_targets TEXT DEFAULT '{}'")
-        db.execute("UPDATE config SET am_targets = ?", (json.dumps(DEFAULT_AM_TARGETS),))
-    if "current_achievement" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN current_achievement INTEGER DEFAULT 0")
-    if "recurring_revenue" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN recurring_revenue INTEGER DEFAULT 0")
-    if "stages" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN stages TEXT")
-        db.execute("UPDATE config SET stages = ?", (json.dumps(DEFAULT_STAGES),))
-    if "am_achievements" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN am_achievements TEXT DEFAULT '{}'")
-    if "am_recurring" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN am_recurring TEXT DEFAULT '{}'")
-    if "auto_stage" not in config_cols:
-        # Column kept for backward compatibility with older backups; stage automation
-        # has been removed from the app, so this is no longer read anywhere.
-        db.execute("ALTER TABLE config ADD COLUMN auto_stage INTEGER DEFAULT 1")
-    if "stage_rules" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN stage_rules TEXT DEFAULT '{}'")
-    if "max_login_logs" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN max_login_logs INTEGER DEFAULT 100")
-    if "engine1_url" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN engine1_url TEXT DEFAULT ''")
-    if "engine1_username" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN engine1_username TEXT DEFAULT ''")
-    if "engine1_password" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN engine1_password TEXT DEFAULT ''")
-    if "engine1_last_sync" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN engine1_last_sync TEXT DEFAULT ''")
-
-    db.execute(
-        """CREATE TABLE IF NOT EXISTS deal_sync_map (
-            local_deal_id INTEGER PRIMARY KEY REFERENCES deals(id) ON DELETE CASCADE,
-            engine1_deal_id INTEGER NOT NULL,
-            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )"""
-    )
-
-    if "account_coverage" in {r[0] for r in db.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    )}:
-        cov_cols = columns("account_coverage")
-        if "account_target" not in cov_cols:
-            db.execute("ALTER TABLE account_coverage ADD COLUMN account_target REAL DEFAULT 0")
-        if "source" not in cov_cols:
-            db.execute("ALTER TABLE account_coverage ADD COLUMN source TEXT NOT NULL DEFAULT 'performance'")
-        _widen_cov_status(db)
-
-    if "deal_tasks" in {r[0] for r in db.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    )}:
-        task_cols = columns("deal_tasks")
-        if "due" not in task_cols:
-            db.execute("ALTER TABLE deal_tasks ADD COLUMN due TEXT DEFAULT ''")
-        if "source_team" not in task_cols:
-            db.execute("ALTER TABLE deal_tasks ADD COLUMN source_team TEXT DEFAULT 'sales'")
-            # Best-effort backfill for existing rows: a cross-functional user who filed
-            # a task under their own team is the source; everything else defaults to
-            # 'sales' (admin/account_manager), which is already the column default.
-            db.execute(
-                """UPDATE deal_tasks SET source_team = team
-                   WHERE EXISTS (
-                       SELECT 1 FROM users
-                       WHERE (users.full_name = deal_tasks.created_by OR users.username = deal_tasks.created_by)
-                         AND users.role = deal_tasks.team
-                         AND users.role IN ('solution', 'project', 'product')
-                   )"""
-            )
-        if "assigned_to" not in task_cols:
-            db.execute("ALTER TABLE deal_tasks ADD COLUMN assigned_to TEXT DEFAULT ''")
-            # Best-effort backfill: a task a cross-functional team filed on their own
-            # initiative was implicitly for the opportunity's AM to see - anything
-            # sales/admin filed already names its target via the `team` column, so
-            # leave those blank rather than guess an individual.
-            db.execute(
-                """UPDATE deal_tasks SET assigned_to = (
-                       SELECT assigned_am FROM deals WHERE deals.id = deal_tasks.deal_id
-                   ) WHERE source_team != 'sales' AND (assigned_to IS NULL OR assigned_to = '')"""
-            )
-
-
 def init_db():
-    db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
-    db.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS deals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            deal_name TEXT NOT NULL,
-            customer TEXT DEFAULT '',
-            assigned_am TEXT DEFAULT '',
-            squad TEXT NOT NULL,
-            strategic_pillar TEXT NOT NULL,
-            estimated_value INTEGER NOT NULL,
-            revenue_2026 INTEGER DEFAULT 0,
-            target_quarter TEXT DEFAULT '',
-            stage TEXT NOT NULL,
-            progress INTEGER DEFAULT 0,
-            is_blocked BOOLEAN DEFAULT 0,
-            blocker_description TEXT,
-            next_actions TEXT,
-            strategy TEXT DEFAULT '',
-            proofs TEXT DEFAULT '{}',
-            expected_po_date TEXT DEFAULT '',
-            expected_revenue_date TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
+    """Create the schema if it doesn't exist yet and seed a fresh database.
 
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN
-                ('admin', 'account_manager', 'management', 'solution', 'project', 'product')),
-            full_name TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS deal_tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
-            text TEXT NOT NULL,
-            team TEXT NOT NULL CHECK(team IN ('solution', 'project', 'product')),
-            source_team TEXT NOT NULL DEFAULT 'sales' CHECK(source_team IN
-                ('sales', 'solution', 'project', 'product')),
-            status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN
-                ('not_started', 'in_progress', 'blocked', 'needs_discussion', 'done')),
-            note TEXT DEFAULT '',
-            due TEXT DEFAULT '',
-            created_by TEXT DEFAULT '',
-            assigned_to TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS login_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            username TEXT DEFAULT '',
-            full_name TEXT DEFAULT '',
-            role TEXT DEFAULT '',
-            ip_address TEXT DEFAULT '',
-            login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS performance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            label TEXT DEFAULT '',
-            source_file TEXT DEFAULT '',
-            am_summary TEXT DEFAULT '[]',
-            accounts TEXT DEFAULT '[]',
-            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS account_coverage (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_key TEXT UNIQUE NOT NULL,
-            account_name TEXT NOT NULL,
-            am TEXT DEFAULT '',
-            pillar TEXT DEFAULT '',
-            revenue_category TEXT DEFAULT '',
-            account_size REAL DEFAULT 0,
-            account_target REAL DEFAULT 0,
-            source TEXT NOT NULL DEFAULT 'performance' CHECK(source IN
-                ('performance', 'master', 'tracker', 'manual')),
-            is_manual BOOLEAN DEFAULT 0,
-            status TEXT NOT NULL DEFAULT 'unreviewed' CHECK(status IN
-                ('unreviewed', 'existing_customer', 'preferred', 'growth_potential',
-                 'at_risk', 'low_priority', 'no_contact', 'not_preferable')),
-            is_champion BOOLEAN DEFAULT 0,
-            notes TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS config (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            target_amount INTEGER DEFAULT 163000000000,
-            strategic_pillars TEXT,
-            squads TEXT,
-            am_targets TEXT DEFAULT '{}',
-            current_achievement INTEGER DEFAULT 0,
-            recurring_revenue INTEGER DEFAULT 0,
-            stages TEXT,
-            am_achievements TEXT DEFAULT '{}',
-            am_recurring TEXT DEFAULT '{}',
-            auto_stage INTEGER DEFAULT 1,
-            stage_rules TEXT,
-            max_login_logs INTEGER DEFAULT 100,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """
-    )
-
-    # Safe, additive migrations for databases created by an earlier version.
-    # ALTER only when the column is missing, so existing data is preserved.
-    migrate_db(db)
-
-    # Seed users if empty
-    if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
-        seed_users = [
-            ("admin", "admin123", "admin", "Administrator"),
-            ("exec", "exec123", "management", "Management Viewer"),
-        ]
-        for username, password, role, full_name in seed_users:
-            db.execute(
-                "INSERT INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)",
-                (username, _hash(password), role, full_name),
-            )
-        for username, password, full_name in SEED_AMS:
-            db.execute(
-                "INSERT INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)",
-                (username, _hash(password), "account_manager", full_name),
-            )
-
-    # Seed config if empty
-    if db.execute("SELECT COUNT(*) FROM config").fetchone()[0] == 0:
+    v2.0 starts from a clean Postgres schema - no SQLite-era ALTER TABLE
+    migration history to carry forward, since this is a brand new database
+    populated once via migrate_from_sqlite.py rather than incrementally
+    evolved release over release."""
+    with _pool.connection() as db:
         db.execute(
-            """INSERT INTO config (target_amount, strategic_pillars, squads, am_targets, stages)
-               VALUES (?, ?, ?, ?, ?)""",
-            (163_000_000_000, json.dumps(DEFAULT_PILLARS), json.dumps(DEFAULT_SQUADS),
-             json.dumps(DEFAULT_AM_TARGETS), json.dumps(DEFAULT_STAGES)),
+            """
+            CREATE TABLE IF NOT EXISTS deals (
+                id SERIAL PRIMARY KEY,
+                deal_name TEXT NOT NULL,
+                customer TEXT DEFAULT '',
+                assigned_am TEXT DEFAULT '',
+                squad TEXT NOT NULL,
+                strategic_pillar TEXT NOT NULL,
+                estimated_value BIGINT NOT NULL,
+                revenue_2026 BIGINT DEFAULT 0,
+                target_quarter TEXT DEFAULT '',
+                stage TEXT NOT NULL,
+                progress INTEGER DEFAULT 0,
+                is_blocked BOOLEAN DEFAULT false,
+                blocker_description TEXT,
+                next_actions TEXT,
+                strategy TEXT DEFAULT '',
+                proofs TEXT DEFAULT '{}',
+                expected_po_date TEXT DEFAULT '',
+                expected_revenue_date TEXT DEFAULT '',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN
+                    ('admin', 'account_manager', 'management', 'solution', 'project', 'product')),
+                full_name TEXT DEFAULT '',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL,
+                full_name TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS deal_tasks (
+                id SERIAL PRIMARY KEY,
+                deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+                text TEXT NOT NULL,
+                team TEXT NOT NULL CHECK(team IN ('solution', 'project', 'product')),
+                source_team TEXT NOT NULL DEFAULT 'sales' CHECK(source_team IN
+                    ('sales', 'solution', 'project', 'product')),
+                status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN
+                    ('not_started', 'in_progress', 'blocked', 'needs_discussion', 'done')),
+                note TEXT DEFAULT '',
+                due TEXT DEFAULT '',
+                created_by TEXT DEFAULT '',
+                assigned_to TEXT DEFAULT '',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS login_logs (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER,
+                username TEXT DEFAULT '',
+                full_name TEXT DEFAULT '',
+                role TEXT DEFAULT '',
+                ip_address TEXT DEFAULT '',
+                login_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS performance (
+                id SERIAL PRIMARY KEY,
+                label TEXT DEFAULT '',
+                source_file TEXT DEFAULT '',
+                am_summary TEXT DEFAULT '[]',
+                accounts TEXT DEFAULT '[]',
+                uploaded_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS account_coverage (
+                id SERIAL PRIMARY KEY,
+                account_key TEXT UNIQUE NOT NULL,
+                account_name TEXT NOT NULL,
+                am TEXT DEFAULT '',
+                pillar TEXT DEFAULT '',
+                revenue_category TEXT DEFAULT '',
+                account_size REAL DEFAULT 0,
+                account_target REAL DEFAULT 0,
+                source TEXT NOT NULL DEFAULT 'performance' CHECK(source IN
+                    ('performance', 'master', 'tracker', 'manual')),
+                is_manual BOOLEAN DEFAULT false,
+                status TEXT NOT NULL DEFAULT 'unreviewed' CHECK(status IN
+                    ('unreviewed', 'existing_customer', 'preferred', 'growth_potential',
+                     'at_risk', 'low_priority', 'no_contact', 'not_preferable')),
+                is_champion BOOLEAN DEFAULT false,
+                notes TEXT DEFAULT '',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS documents (
+                id SERIAL PRIMARY KEY,
+                deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+                filename TEXT NOT NULL,
+                stored_path TEXT NOT NULL,
+                content_type TEXT DEFAULT '',
+                size_bytes INTEGER DEFAULT 0,
+                uploaded_by TEXT DEFAULT '',
+                uploaded_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS config (
+                id SERIAL PRIMARY KEY,
+                target_amount BIGINT DEFAULT 163000000000,
+                strategic_pillars TEXT,
+                squads TEXT,
+                am_targets TEXT DEFAULT '{}',
+                current_achievement BIGINT DEFAULT 0,
+                recurring_revenue BIGINT DEFAULT 0,
+                stages TEXT,
+                am_achievements TEXT DEFAULT '{}',
+                am_recurring TEXT DEFAULT '{}',
+                auto_stage INTEGER DEFAULT 1,
+                stage_rules TEXT,
+                max_login_logs INTEGER DEFAULT 100,
+                engine1_url TEXT DEFAULT '',
+                engine1_username TEXT DEFAULT '',
+                engine1_password TEXT DEFAULT '',
+                engine1_last_sync TEXT DEFAULT '',
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS deal_sync_map (
+                local_deal_id INTEGER PRIMARY KEY REFERENCES deals(id) ON DELETE CASCADE,
+                engine1_deal_id INTEGER NOT NULL,
+                synced_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+            """
         )
 
-    # Seed deals if empty
-    if db.execute("SELECT COUNT(*) FROM deals").fetchone()[0] == 0:
-        db.executemany(
-            """INSERT INTO deals
-               (deal_name, customer, assigned_am, squad, strategic_pillar,
-                estimated_value, target_quarter, stage, progress,
-                is_blocked, blocker_description, next_actions)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            _seed_deals(),
-        )
-        # Default 2026 realizable revenue to the full TCV; admin refines per deal.
-        db.execute("UPDATE deals SET revenue_2026 = estimated_value")
+        # Seed users if empty
+        if db.execute("SELECT COUNT(*) FROM users").fetchone()["count"] == 0:
+            seed_users = [
+                ("admin", "admin123", "admin", "Administrator"),
+                ("exec", "exec123", "management", "Management Viewer"),
+            ]
+            for username, password, role, full_name in seed_users:
+                db.execute(
+                    "INSERT INTO users (username, password, role, full_name) VALUES (%s, %s, %s, %s)",
+                    (username, _hash(password), role, full_name),
+                )
+            for username, password, full_name in SEED_AMS:
+                db.execute(
+                    "INSERT INTO users (username, password, role, full_name) VALUES (%s, %s, %s, %s)",
+                    (username, _hash(password), "account_manager", full_name),
+                )
 
-    db.commit()
-    db.close()
+        # Seed config if empty
+        if db.execute("SELECT COUNT(*) FROM config").fetchone()["count"] == 0:
+            db.execute(
+                """INSERT INTO config (target_amount, strategic_pillars, squads, am_targets, stages)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (163_000_000_000, json.dumps(DEFAULT_PILLARS), json.dumps(DEFAULT_SQUADS),
+                 json.dumps(DEFAULT_AM_TARGETS), json.dumps(DEFAULT_STAGES)),
+            )
+
+        # Seed deals if empty
+        if db.execute("SELECT COUNT(*) FROM deals").fetchone()["count"] == 0:
+            # _seed_deals() rows carry is_blocked as a plain 0/1 int (position 9);
+            # cast to a real bool for Postgres's boolean column.
+            seed_rows = [
+                r[:9] + (bool(r[9]),) + r[10:]
+                for r in _seed_deals()
+            ]
+            with db.cursor() as cur:
+                cur.executemany(
+                    """INSERT INTO deals
+                       (deal_name, customer, assigned_am, squad, strategic_pillar,
+                        estimated_value, target_quarter, stage, progress,
+                        is_blocked, blocker_description, next_actions)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    seed_rows,
+                )
+            # Default 2026 realizable revenue to the full TCV; admin refines per deal.
+            db.execute("UPDATE deals SET revenue_2026 = estimated_value")
+
+        db.commit()
+
+
 
 
 # --------------------------------------------------------------------------
@@ -644,7 +517,20 @@ def init_db():
 def get_current_user():
     auth = request.headers.get("Authorization", "")
     token = auth.replace("Bearer ", "").strip() if auth else request.args.get("token", "")
-    return TOKENS.get(token)
+    if not token:
+        return None
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM sessions WHERE token = %s AND expires_at > CURRENT_TIMESTAMP", (token,)
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "user_id": row["user_id"],
+        "username": row["username"],
+        "role": row["role"],
+        "full_name": row["full_name"],
+    }
 
 
 def login_required(roles=None):
@@ -679,7 +565,7 @@ def is_valid_assignee(db, name):
     if not name:
         return False
     row = db.execute(
-        "SELECT 1 FROM users WHERE full_name = ? AND role NOT IN ('admin', 'management')",
+        "SELECT 1 FROM users WHERE full_name = %s AND role NOT IN ('admin', 'management')",
         (name,),
     ).fetchone()
     return row is not None
@@ -755,7 +641,7 @@ def trim_login_logs(db, max_logs):
     """Keep only the most recent `max_logs` rows so the table never grows unbounded."""
     db.execute(
         """DELETE FROM login_logs WHERE id NOT IN (
-               SELECT id FROM login_logs ORDER BY login_at DESC, id DESC LIMIT ?
+               SELECT id FROM login_logs ORDER BY login_at DESC, id DESC LIMIT %s
            )""",
         (max_logs,),
     )
@@ -766,7 +652,7 @@ def log_login(db, row):
     to the admin-configured retention limit."""
     db.execute(
         """INSERT INTO login_logs (user_id, username, full_name, role, ip_address, login_at)
-           VALUES (?, ?, ?, ?, ?, ?)""",
+           VALUES (%s, %s, %s, %s, %s, %s)""",
         (row["id"], row["username"], row["full_name"] or row["username"], row["role"],
          client_ip(), jakarta_now_str()),
     )
@@ -781,17 +667,20 @@ def api_login():
     password = data.get("password", "")
 
     db = get_db()
-    row = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    row = db.execute("SELECT * FROM users WHERE username = %s", (username,)).fetchone()
     if not row or not check_password_hash(row["password"], password):
         return jsonify({"error": "Invalid username or password"}), 401
 
     token = secrets.token_hex(24)
-    TOKENS[token] = {
-        "user_id": row["id"],
-        "username": row["username"],
-        "role": row["role"],
-        "full_name": row["full_name"] or row["username"],
-    }
+    expires_at = datetime.utcnow() + SESSION_LIFETIME
+    # Sweep expired sessions opportunistically - no separate cron needed for a
+    # table this small and low-write.
+    db.execute("DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP")
+    db.execute(
+        """INSERT INTO sessions (token, user_id, username, role, full_name, expires_at)
+           VALUES (%s, %s, %s, %s, %s, %s)""",
+        (token, row["id"], row["username"], row["role"], row["full_name"] or row["username"], expires_at),
+    )
     log_login(db, row)
     db.commit()
     return jsonify({
@@ -806,7 +695,9 @@ def api_login():
 def api_logout():
     auth = request.headers.get("Authorization", "")
     token = auth.replace("Bearer ", "").strip()
-    TOKENS.pop(token, None)
+    db = get_db()
+    db.execute("DELETE FROM sessions WHERE token = %s", (token,))
+    db.commit()
     return jsonify({"ok": True})
 
 
@@ -922,7 +813,7 @@ def get_deals():
                        ("quarter", "target_quarter")):
         val = request.args.get(field)
         if val:
-            query += f" AND {col} = ?"
+            query += f" AND {col} = %s"
             params.append(val)
     query += " ORDER BY estimated_value DESC"
     rows = db.execute(query, params).fetchall()
@@ -955,7 +846,8 @@ def create_deal():
            (deal_name, customer, assigned_am, squad, strategic_pillar, estimated_value,
             revenue_2026, target_quarter, stage, progress, is_blocked, blocker_description,
             next_actions, strategy, proofs, expected_po_date, expected_revenue_date, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+           RETURNING id""",
         (
             data.get("deal_name", "Untitled Opportunity"),
             data.get("customer", ""),
@@ -967,7 +859,7 @@ def create_deal():
             data.get("target_quarter", ""),
             stage,
             int(data.get("progress", 0) or 0),
-            1 if new_blocked else 0,
+            new_blocked,
             data.get("blocker_description", ""),
             json.dumps(data.get("next_actions", [])),
             data.get("strategy", ""),
@@ -976,8 +868,9 @@ def create_deal():
             str(data.get("expected_revenue_date", "") or "").strip()[:10],
         ),
     )
+    new_id = cur.fetchone()["id"]
     db.commit()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (cur.lastrowid,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (new_id,)).fetchone()
     return jsonify(deal_to_dict(row)), 201
 
 
@@ -987,7 +880,7 @@ def update_deal(deal_id):
     data = request.get_json(force=True) or {}
     user = g.current_user
     db = get_db()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     if not row:
         return jsonify({"error": "Deal not found"}), 404
     if not can_edit_deal(user, row):
@@ -1011,12 +904,12 @@ def update_deal(deal_id):
     existing_rev = row["expected_revenue_date"] if "expected_revenue_date" in row.keys() else ""
     db.execute(
         """UPDATE deals SET
-             deal_name = ?, customer = ?, assigned_am = ?, squad = ?, strategic_pillar = ?,
-             estimated_value = ?, revenue_2026 = ?, target_quarter = ?, stage = ?, progress = ?,
-             is_blocked = ?, blocker_description = ?, next_actions = ?, strategy = ?, proofs = ?,
-             expected_po_date = ?, expected_revenue_date = ?,
-             updated_at = CURRENT_TIMESTAMP
-           WHERE id = ?""",
+             deal_name = %s, customer = %s, assigned_am = %s, squad = %s, strategic_pillar = %s,
+             estimated_value = %s, revenue_2026 = %s, target_quarter = %s, stage = %s, progress = %s,
+             is_blocked = %s, blocker_description = %s, next_actions = %s, strategy = %s, proofs = %s,
+             expected_po_date = %s, expected_revenue_date = %s,
+             updated_at = CURRENT_TIMESTAMP::text
+           WHERE id = %s""",
         (
             data.get("deal_name", row["deal_name"]),
             data.get("customer", row["customer"]),
@@ -1028,7 +921,7 @@ def update_deal(deal_id):
             data.get("target_quarter", row["target_quarter"]),
             upd_stage,
             int(data.get("progress", row["progress"]) or 0),
-            1 if upd_blocked else 0,
+            upd_blocked,
             data.get("blocker_description", row["blocker_description"]),
             json.dumps(data.get("next_actions", json.loads(row["next_actions"] or "[]"))),
             data.get("strategy", existing_strategy),
@@ -1039,7 +932,7 @@ def update_deal(deal_id):
         ),
     )
     db.commit()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     return jsonify(deal_to_dict(row))
 
 
@@ -1047,12 +940,12 @@ def update_deal(deal_id):
 @login_required(roles=("admin", "account_manager"))
 def delete_deal(deal_id):
     db = get_db()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     if not row:
         return jsonify({"error": "Deal not found"}), 404
     if not can_edit_deal(g.current_user, row):
         return jsonify({"error": "You can only delete opportunities assigned to you"}), 403
-    db.execute("DELETE FROM deals WHERE id = ?", (deal_id,))
+    db.execute("DELETE FROM deals WHERE id = %s", (deal_id,))
     db.commit()
     return jsonify({"ok": True})
 
@@ -1063,17 +956,17 @@ def update_progress(deal_id):
     data = request.get_json(force=True) or {}
     progress = max(0, min(100, int(data.get("progress", 0))))
     db = get_db()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     if not row:
         return jsonify({"error": "Deal not found"}), 404
     if not can_edit_deal(g.current_user, row):
         return jsonify({"error": "You can only edit opportunities assigned to you"}), 403
     db.execute(
-        "UPDATE deals SET progress = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        "UPDATE deals SET progress = %s, updated_at = CURRENT_TIMESTAMP::text WHERE id = %s",
         (progress, deal_id),
     )
     db.commit()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     return jsonify(deal_to_dict(row))
 
 
@@ -1082,7 +975,7 @@ def update_progress(deal_id):
 def update_blocker(deal_id):
     data = request.get_json(force=True) or {}
     db = get_db()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     if not row:
         return jsonify({"error": "Deal not found"}), 404
     if not can_edit_deal(g.current_user, row):
@@ -1091,12 +984,12 @@ def update_blocker(deal_id):
     proofs = normalize_proofs(json.loads((row["proofs"] if "proofs" in row.keys() else "") or "{}"))
     stage = resolve_stage(db, data, proofs, blocked, row["stage"], row["stage"])
     db.execute(
-        """UPDATE deals SET is_blocked = ?, blocker_description = ?, stage = ?,
-           updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
-        (1 if blocked else 0, data.get("blocker_description", ""), stage, deal_id),
+        """UPDATE deals SET is_blocked = %s, blocker_description = %s, stage = %s,
+           updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
+        (blocked, data.get("blocker_description", ""), stage, deal_id),
     )
     db.commit()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     return jsonify(deal_to_dict(row))
 
 
@@ -1135,7 +1028,7 @@ def task_to_dict(row):
 def get_deal_tasks(deal_id):
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM deal_tasks WHERE deal_id = ? ORDER BY created_at", (deal_id,)
+        "SELECT * FROM deal_tasks WHERE deal_id = %s ORDER BY created_at", (deal_id,)
     ).fetchall()
     return jsonify([task_to_dict(r) for r in rows])
 
@@ -1146,7 +1039,7 @@ def create_deal_task(deal_id):
     data = request.get_json(force=True) or {}
     user = g.current_user
     db = get_db()
-    deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    deal_row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     if not deal_row:
         return jsonify({"error": "Deal not found"}), 404
 
@@ -1184,11 +1077,12 @@ def create_deal_task(deal_id):
     creator = user.get("full_name") or user.get("username", "")
     cur = db.execute(
         """INSERT INTO deal_tasks (deal_id, text, team, source_team, status, due, created_by, assigned_to)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (deal_id, text, team, source_team, status, due, creator, assigned_to),
     )
+    new_id = cur.fetchone()["id"]
     db.commit()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (cur.lastrowid,)).fetchone()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (new_id,)).fetchone()
     return jsonify(task_to_dict(row)), 201
 
 
@@ -1197,7 +1091,7 @@ def create_deal_task(deal_id):
 def update_task(task_id):
     data = request.get_json(force=True) or {}
     db = get_db()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (task_id,)).fetchone()
     if not row:
         return jsonify({"error": "Task not found"}), 404
 
@@ -1229,7 +1123,7 @@ def update_task(task_id):
                 return jsonify({"error": "Choose who this task is assigned to from the user list"}), 400
             assigned_to = new_assignee
     elif user["role"] in ("admin", "account_manager"):
-        deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (row["deal_id"],)).fetchone()
+        deal_row = db.execute("SELECT * FROM deals WHERE id = %s", (row["deal_id"],)).fetchone()
         if not deal_row or not can_edit_deal(user, deal_row):
             return jsonify({"error": "You can only edit tasks on opportunities assigned to you"}), 403
         if str(data.get("text", "")).strip():
@@ -1269,12 +1163,12 @@ def update_task(task_id):
         return jsonify({"error": "Forbidden"}), 403
 
     db.execute(
-        """UPDATE deal_tasks SET text = ?, team = ?, status = ?, note = ?, due = ?,
-           assigned_to = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+        """UPDATE deal_tasks SET text = %s, team = %s, status = %s, note = %s, due = %s,
+           assigned_to = %s, updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
         (text, team, status, note, due, assigned_to, task_id),
     )
     db.commit()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (task_id,)).fetchone()
     return jsonify(task_to_dict(row))
 
 
@@ -1282,7 +1176,7 @@ def update_task(task_id):
 @login_required()
 def delete_task(task_id):
     db = get_db()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (task_id,)).fetchone()
     if not row:
         return jsonify({"error": "Task not found"}), 404
     user = g.current_user
@@ -1290,12 +1184,12 @@ def delete_task(task_id):
         if row["team"] != user["role"]:
             return jsonify({"error": "You can only delete your own team's tasks"}), 403
     elif user["role"] in ("admin", "account_manager"):
-        deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (row["deal_id"],)).fetchone()
+        deal_row = db.execute("SELECT * FROM deals WHERE id = %s", (row["deal_id"],)).fetchone()
         if not deal_row or not can_edit_deal(user, deal_row):
             return jsonify({"error": "You can only delete tasks on opportunities assigned to you"}), 403
     else:
         return jsonify({"error": "Forbidden"}), 403
-    db.execute("DELETE FROM deal_tasks WHERE id = ?", (task_id,))
+    db.execute("DELETE FROM deal_tasks WHERE id = %s", (task_id,))
     db.commit()
     return jsonify({"ok": True})
 
@@ -1317,16 +1211,16 @@ def list_tasks():
                FROM deal_tasks t JOIN deals d ON d.id = t.deal_id WHERE 1=1"""
     params = []
     if user["role"] in CROSS_FUNCTIONAL_ROLES and not scope_all:
-        query += " AND t.team = ?"
+        query += " AND t.team = %s"
         params.append(user["role"])
     else:
         team = request.args.get("team")
         if team in CROSS_FUNCTIONAL_ROLES:
-            query += " AND t.team = ?"
+            query += " AND t.team = %s"
             params.append(team)
     status = request.args.get("status")
     if status in TASK_STATUSES:
-        query += " AND t.status = ?"
+        query += " AND t.status = %s"
         params.append(status)
     query += " ORDER BY t.updated_at DESC"
     rows = db.execute(query, params).fetchall()
@@ -1359,18 +1253,19 @@ def create_user():
         return jsonify({"error": "username, password and a valid role are required"}), 400
 
     db = get_db()
-    existing = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    existing = db.execute("SELECT id FROM users WHERE username = %s", (username,)).fetchone()
     if existing:
         return jsonify({"error": "Username already exists"}), 409
 
     cur = db.execute(
-        "INSERT INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)",
+        "INSERT INTO users (username, password, role, full_name) VALUES (%s, %s, %s, %s) RETURNING id",
         (username, _hash(password), role, full_name),
     )
+    new_id = cur.fetchone()["id"]
     db.commit()
     row = db.execute(
-        "SELECT id, username, role, full_name, created_at FROM users WHERE id = ?",
-        (cur.lastrowid,),
+        "SELECT id, username, role, full_name, created_at FROM users WHERE id = %s",
+        (new_id,),
     ).fetchone()
     return jsonify(dict(row)), 201
 
@@ -1380,7 +1275,7 @@ def create_user():
 def update_user(user_id):
     data = request.get_json(force=True) or {}
     db = get_db()
-    row = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    row = db.execute("SELECT * FROM users WHERE id = %s", (user_id,)).fetchone()
     if not row:
         return jsonify({"error": "User not found"}), 404
 
@@ -1394,12 +1289,12 @@ def update_user(user_id):
         password_hash = _hash(data["password"])
 
     db.execute(
-        "UPDATE users SET role = ?, full_name = ?, password = ? WHERE id = ?",
+        "UPDATE users SET role = %s, full_name = %s, password = %s WHERE id = %s",
         (role, full_name, password_hash, user_id),
     )
     db.commit()
     row = db.execute(
-        "SELECT id, username, role, full_name, created_at FROM users WHERE id = ?",
+        "SELECT id, username, role, full_name, created_at FROM users WHERE id = %s",
         (user_id,),
     ).fetchone()
     return jsonify(dict(row))
@@ -1411,7 +1306,7 @@ def delete_user(user_id):
     if g.current_user["user_id"] == user_id:
         return jsonify({"error": "Cannot delete your own account while logged in"}), 400
     db = get_db()
-    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db.execute("DELETE FROM users WHERE id = %s", (user_id,))
     db.commit()
     return jsonify({"ok": True})
 
@@ -1480,10 +1375,10 @@ def update_config():
     max_login_logs = max(10, min(max_login_logs, 2000))
 
     db.execute(
-        """UPDATE config SET target_amount = ?, strategic_pillars = ?, squads = ?,
-           stages = ?, am_targets = ?, am_achievements = ?, am_recurring = ?,
-           current_achievement = ?, recurring_revenue = ?,
-           max_login_logs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+        """UPDATE config SET target_amount = %s, strategic_pillars = %s, squads = %s,
+           stages = %s, am_targets = %s, am_achievements = %s, am_recurring = %s,
+           current_achievement = %s, recurring_revenue = %s,
+           max_login_logs = %s, updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
         (target_amount, json.dumps(strategic_pillars), json.dumps(squads),
          json.dumps(stages), json.dumps(am_targets), json.dumps(am_achievements),
          json.dumps(am_recurring), current_achievement, recurring_revenue,
@@ -1491,7 +1386,7 @@ def update_config():
     )
     trim_login_logs(db, max_login_logs)
     db.commit()
-    row = db.execute("SELECT * FROM config WHERE id = ?", (row["id"],)).fetchone()
+    row = db.execute("SELECT * FROM config WHERE id = %s", (row["id"],)).fetchone()
     return jsonify(config_to_dict(row))
 
 
@@ -1536,7 +1431,7 @@ def update_engine1_config():
     username = str(data.get("username", current["username"]) or "").strip()
     password = str(data["password"]) if data.get("password") else current["password"]
     db.execute(
-        "UPDATE config SET engine1_url = ?, engine1_username = ?, engine1_password = ? WHERE id = ?",
+        "UPDATE config SET engine1_url = %s, engine1_username = %s, engine1_password = %s WHERE id = %s",
         (url, username, password, row["id"]),
     )
     db.commit()
@@ -1636,9 +1531,9 @@ def sync_engine1():
                 engine1_id = body["id"]
                 db.execute(
                     """INSERT INTO deal_sync_map (local_deal_id, engine1_deal_id, synced_at)
-                       VALUES (?, ?, CURRENT_TIMESTAMP)
+                       VALUES (%s, %s, CURRENT_TIMESTAMP)
                        ON CONFLICT(local_deal_id) DO UPDATE SET
-                         engine1_deal_id = excluded.engine1_deal_id, synced_at = CURRENT_TIMESTAMP""",
+                         engine1_deal_id = excluded.engine1_deal_id, synced_at = CURRENT_TIMESTAMP::text""",
                     (d["id"], engine1_id),
                 )
                 created.append(d["deal_name"])
@@ -1646,7 +1541,7 @@ def sync_engine1():
             failed.append({"deal_name": d["deal_name"], "error": str(exc)})
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    db.execute("UPDATE config SET engine1_last_sync = ? WHERE id = ?", (now, row["id"]))
+    db.execute("UPDATE config SET engine1_last_sync = %s WHERE id = %s", (now, row["id"]))
     db.commit()
     return jsonify({
         "ok": True, "total": len(deals), "created": len(created), "updated": len(updated),
@@ -1938,22 +1833,22 @@ def import_xlsx():
             payload = (
                 name, s(r[2]), s(r[3]), s(r[4]), s(r[5]), n(r[6]), n(r[7]), s(r[8]),
                 s(r[9]) or "Prospecting", max(0, min(100, n(r[10]))),
-                1 if s(r[11]).lower() in ("yes", "true", "1") else 0,
+                s(r[11]).lower() in ("yes", "true", "1"),
                 s(r[12]), s(r[13]), json.dumps(text_to_actions(r[14])),
             )
             existing = None
             if deal_id not in (None, ""):
                 try:
-                    existing = db.execute("SELECT id FROM deals WHERE id = ?",
+                    existing = db.execute("SELECT id FROM deals WHERE id = %s",
                                           (int(deal_id),)).fetchone()
                 except (TypeError, ValueError):
                     existing = None
             if existing:
                 db.execute(
-                    """UPDATE deals SET deal_name=?, customer=?, assigned_am=?, squad=?,
-                       strategic_pillar=?, estimated_value=?, revenue_2026=?, target_quarter=?,
-                       stage=?, progress=?, is_blocked=?, blocker_description=?, strategy=?,
-                       next_actions=?, updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                    """UPDATE deals SET deal_name=%s, customer=%s, assigned_am=%s, squad=%s,
+                       strategic_pillar=%s, estimated_value=%s, revenue_2026=%s, target_quarter=%s,
+                       stage=%s, progress=%s, is_blocked=%s, blocker_description=%s, strategy=%s,
+                       next_actions=%s, updated_at=CURRENT_TIMESTAMP::text WHERE id=%s""",
                     payload + (int(deal_id),),
                 )
                 seen_ids.add(int(deal_id))
@@ -1964,14 +1859,15 @@ def import_xlsx():
                        strategic_pillar, estimated_value, revenue_2026, target_quarter, stage,
                        progress, is_blocked, blocker_description, strategy, next_actions,
                        updated_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)""",
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP)
+                       RETURNING id""",
                     payload,
                 )
-                seen_ids.add(cur.lastrowid)
+                seen_ids.add(cur.fetchone()["id"])
                 summary["created"] += 1
 
         if replace_all and seen_ids:
-            placeholders = ",".join("?" * len(seen_ids))
+            placeholders = ",".join(["%s"] * len(seen_ids))
             cur = db.execute(f"DELETE FROM deals WHERE id NOT IN ({placeholders})",
                              tuple(seen_ids))
             summary["deleted"] = cur.rowcount
@@ -2017,12 +1913,12 @@ def import_xlsx():
                 "entries": entries,
             }
         for deal_id, proofs in by_deal.items():
-            existing = db.execute("SELECT proofs FROM deals WHERE id = ?", (deal_id,)).fetchone()
+            existing = db.execute("SELECT proofs FROM deals WHERE id = %s", (deal_id,)).fetchone()
             if not existing:
                 continue
             merged = normalize_proofs(json.loads(existing["proofs"] or "{}"))
             merged.update(normalize_proofs(proofs))
-            db.execute("UPDATE deals SET proofs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            db.execute("UPDATE deals SET proofs = %s, updated_at = CURRENT_TIMESTAMP::text WHERE id = %s",
                        (json.dumps(merged), deal_id))
         summary["proofs_updated"] = len(by_deal)
 
@@ -2048,9 +1944,9 @@ def import_xlsx():
             merged = config_to_dict(row)
             merged.update(incoming)
             db.execute(
-                """UPDATE config SET target_amount=?, strategic_pillars=?, squads=?, stages=?,
-                   am_targets=?, am_achievements=?, am_recurring=?, current_achievement=?,
-                   recurring_revenue=?, updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                """UPDATE config SET target_amount=%s, strategic_pillars=%s, squads=%s, stages=%s,
+                   am_targets=%s, am_achievements=%s, am_recurring=%s, current_achievement=%s,
+                   recurring_revenue=%s, updated_at=CURRENT_TIMESTAMP::text WHERE id=%s""",
                 (int(merged["target_amount"] or 0), json.dumps(merged["strategic_pillars"]),
                  json.dumps(merged["squads"]), json.dumps(merged["stages"]),
                  json.dumps(merged["am_targets"]), json.dumps(merged["am_achievements"]),
@@ -2066,14 +1962,14 @@ def import_xlsx():
             role = str(role or "").strip()
             if not username or role not in VALID_ROLES:
                 continue
-            existing = db.execute("SELECT id FROM users WHERE username = ?",
+            existing = db.execute("SELECT id FROM users WHERE username = %s",
                                   (username,)).fetchone()
             if existing:
-                db.execute("UPDATE users SET full_name = ?, role = ? WHERE id = ?",
+                db.execute("UPDATE users SET full_name = %s, role = %s WHERE id = %s",
                            (str(fname or "").strip() or username, role, existing["id"]))
             else:
                 db.execute(
-                    "INSERT INTO users (username, password, role, full_name) VALUES (?,?,?,?)",
+                    "INSERT INTO users (username, password, role, full_name) VALUES (%s,%s,%s,%s)",
                     (username, _hash("changeme123"), role,
                      str(fname or "").strip() or username),
                 )
@@ -2265,12 +2161,12 @@ def import_am_targets():
         updated.append(dash_am)
 
     db.execute(
-        """UPDATE config SET am_targets = ?, am_achievements = ?, am_recurring = ?,
-           updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+        """UPDATE config SET am_targets = %s, am_achievements = %s, am_recurring = %s,
+           updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
         (json.dumps(am_targets), json.dumps(am_achievements), json.dumps(am_recurring), row["id"]),
     )
     db.commit()
-    row = db.execute("SELECT * FROM config WHERE id = ?", (row["id"],)).fetchone()
+    row = db.execute("SELECT * FROM config WHERE id = %s", (row["id"],)).fetchone()
     return jsonify({"ok": True, "updated": updated, "unmatched": unmatched, "config": config_to_dict(row)})
 
 
@@ -2300,7 +2196,7 @@ def import_performance():
 
     db = get_db()
     db.execute(
-        "INSERT INTO performance (label, source_file, am_summary, accounts) VALUES (?, ?, ?, ?)",
+        "INSERT INTO performance (label, source_file, am_summary, accounts) VALUES (%s, %s, %s, %s)",
         (label or datetime.now().strftime("%b %Y"),
          getattr(upload, "filename", "") or "",
          json.dumps(am_rows), json.dumps(accounts)),
@@ -2344,12 +2240,12 @@ def _sync_account_coverage(db, accounts):
         if a.get("revenue_category"):
             entry["revenue_category"] = a["revenue_category"]
     for key, e in agg.items():
-        existing = db.execute("SELECT id, source FROM account_coverage WHERE account_key = ?", (key,)).fetchone()
+        existing = db.execute("SELECT id, source FROM account_coverage WHERE account_key = %s", (key,)).fetchone()
         if existing:
             new_source = existing["source"] if existing["source"] in ("performance", "master") else "performance"
             db.execute(
-                """UPDATE account_coverage SET account_name=?, am=?, pillar=?, revenue_category=?,
-                       account_size=?, source=?, is_manual=0, updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                """UPDATE account_coverage SET account_name=%s, am=%s, pillar=%s, revenue_category=%s,
+                       account_size=%s, source=%s, is_manual=false, updated_at=CURRENT_TIMESTAMP::text WHERE id=%s""",
                 (e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], new_source, existing["id"]),
             )
         else:
@@ -2359,7 +2255,7 @@ def _sync_account_coverage(db, accounts):
             db.execute(
                 """INSERT INTO account_coverage
                        (account_key, account_name, am, pillar, revenue_category, account_size, source, status, is_manual)
-                   VALUES (?, ?, ?, ?, ?, ?, 'performance', ?, 0)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, 'performance', %s, false)""",
                 (key, e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], initial_status),
             )
 
@@ -2477,7 +2373,7 @@ def _sync_tracker_only_accounts(db):
             continue
         seen.add(key)
         db.execute(
-            "INSERT INTO account_coverage (account_key, account_name, am, source, is_manual) VALUES (?, ?, ?, 'tracker', 0)",
+            "INSERT INTO account_coverage (account_key, account_name, am, source, is_manual) VALUES (%s, %s, %s, 'tracker', false)",
             (key, name, r["assigned_am"] or ""),
         )
         added = True
@@ -2511,12 +2407,12 @@ def import_master_accounts():
     db = get_db()
     created = updated = 0
     for key, e in accounts.items():
-        existing = db.execute("SELECT id FROM account_coverage WHERE account_key = ?", (key,)).fetchone()
+        existing = db.execute("SELECT id FROM account_coverage WHERE account_key = %s", (key,)).fetchone()
         if existing:
             db.execute(
-                """UPDATE account_coverage SET account_name=?, am=?, pillar=?, revenue_category=?,
-                       account_size=?, account_target=?, source='master', is_manual=0,
-                       updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                """UPDATE account_coverage SET account_name=%s, am=%s, pillar=%s, revenue_category=%s,
+                       account_size=%s, account_target=%s, source='master', is_manual=false,
+                       updated_at=CURRENT_TIMESTAMP::text WHERE id=%s""",
                 (e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], e["target"], existing["id"]),
             )
             updated += 1
@@ -2525,7 +2421,7 @@ def import_master_accounts():
             db.execute(
                 """INSERT INTO account_coverage
                        (account_key, account_name, am, pillar, revenue_category, account_size, account_target, source, status, is_manual)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'master', ?, 0)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, 'master', %s, false)""",
                 (key, e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], e["target"], initial_status),
             )
             created += 1
@@ -2594,13 +2490,13 @@ def create_account_coverage():
         if not am:
             return jsonify({"error": "AM is required"}), 400
     db = get_db()
-    existing = db.execute("SELECT id FROM account_coverage WHERE account_key = ?", (key,)).fetchone()
+    existing = db.execute("SELECT id FROM account_coverage WHERE account_key = %s", (key,)).fetchone()
     if existing:
         return jsonify({"error": "This account is already tracked", "id": existing["id"]}), 409
     pillar = str(data.get("pillar") or "").strip()
     db.execute(
         """INSERT INTO account_coverage (account_key, account_name, am, pillar, source, is_manual, status)
-           VALUES (?, ?, ?, ?, 'manual', 1, 'unreviewed')""",
+           VALUES (%s, %s, %s, %s, 'manual', true, 'unreviewed')""",
         (key, account_name, am, pillar),
     )
     db.commit()
@@ -2612,7 +2508,7 @@ def create_account_coverage():
 def update_account_coverage(cov_id):
     user = g.current_user
     db = get_db()
-    row = db.execute("SELECT * FROM account_coverage WHERE id = ?", (cov_id,)).fetchone()
+    row = db.execute("SELECT * FROM account_coverage WHERE id = %s", (cov_id,)).fetchone()
     if not row:
         return jsonify({"error": "Not found"}), 404
     if user["role"] == "account_manager" and not _perf_am_matches(row["am"], user["full_name"]):
@@ -2624,7 +2520,7 @@ def update_account_coverage(cov_id):
     is_champion = bool(data.get("is_champion", row["is_champion"]))
     notes = str(data.get("notes", row["notes"] or ""))[:2000]
     db.execute(
-        "UPDATE account_coverage SET status=?, is_champion=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        "UPDATE account_coverage SET status=%s, is_champion=%s, notes=%s, updated_at=CURRENT_TIMESTAMP::text WHERE id=%s",
         (status, is_champion, notes, cov_id),
     )
     db.commit()
@@ -2636,14 +2532,14 @@ def update_account_coverage(cov_id):
 def delete_account_coverage(cov_id):
     user = g.current_user
     db = get_db()
-    row = db.execute("SELECT * FROM account_coverage WHERE id = ?", (cov_id,)).fetchone()
+    row = db.execute("SELECT * FROM account_coverage WHERE id = %s", (cov_id,)).fetchone()
     if not row:
         return jsonify({"error": "Not found"}), 404
     if not row["is_manual"]:
         return jsonify({"error": "Imported accounts can't be deleted, only re-tagged"}), 400
     if user["role"] == "account_manager" and not _perf_am_matches(row["am"], user["full_name"]):
         return jsonify({"error": "Not your account"}), 403
-    db.execute("DELETE FROM account_coverage WHERE id = ?", (cov_id,))
+    db.execute("DELETE FROM account_coverage WHERE id = %s", (cov_id,))
     db.commit()
     return jsonify({"ok": True})
 
@@ -2867,7 +2763,7 @@ def export_tracker_xlsx():
     params = []
     am = request.args.get("am")
     if am:
-        query += " WHERE assigned_am = ?"
+        query += " WHERE assigned_am = %s"
         params.append(am)
     query += " ORDER BY assigned_am, deal_name"
     deals = [deal_to_dict(r) for r in db.execute(query, params).fetchall()]
@@ -3212,6 +3108,18 @@ def export_pdf():
     buf.seek(0)
     filename = f"deal_tracker_report_{date.today().isoformat()}.pdf"
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=filename)
+
+
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    """Unauthenticated liveness probe for Docker's healthcheck - confirms the
+    app can actually reach Postgres, not just that the process is up."""
+    try:
+        with _pool.connection(timeout=3) as db:
+            db.execute("SELECT 1")
+        return jsonify({"ok": True}), 200
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
 
 
 # --------------------------------------------------------------------------
