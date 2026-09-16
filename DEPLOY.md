@@ -80,10 +80,16 @@ running app causes `/healthz` to fail, Docker marks the app container
 unhealthy, and `autoheal` restarts it (repeatedly, until Postgres comes back
 - at which point everything stabilizes on its own).
 
+## Document uploads
+
+Attach PDF/PPTX/DOCX/XLSX/images to an opportunity from its detail drawer
+("Attach file"). Files are saved to the `uploads` Docker volume (persists
+across rebuilds) under `uploads/<deal_id>/`, with a `documents` table row
+per file. Only admin or that opportunity's assigned AM can upload/delete;
+anyone who can view the opportunity can download.
+
 ## Not yet done in v2.0
 
-- Document uploads (PDF/PPTX) to the `uploads` volume - the `documents`
-  table exists in the schema, but the upload/download endpoints and the UI
-  in the opportunity detail drawer aren't wired up yet.
-- Frontend chart/table modernization (Chart.js, Tabulator.js) - still the
-  original hand-rolled SVG charts and `<table>` markup from v1.
+- Account Coverage's and AM Workload's own account tables are still the
+  original hand-rolled markup - only the Tracker table was moved to
+  Tabulator.js so far.

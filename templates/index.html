@@ -12,6 +12,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.0/css/tabulator.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.0/js/tabulator.min.js"></script>
 <script>
   tailwind.config = { darkMode: ['selector', '[data-theme="dark"]'] };
 </script>
@@ -71,6 +74,24 @@
   .atab-btn.active, .ctab-btn.active { color: #fff; background: var(--primary); font-weight:500; }
   .calview-btn { color: var(--text-muted); font-size:12px; padding:5px 12px; border-radius:6px; transition: background .15s ease, color .15s ease; }
   .calview-btn:hover { color: var(--text); background: var(--surface-2); }
+
+  /* Tabulator, re-skinned to track this app's own light/dark theme tokens
+     instead of a fixed bundled theme. */
+  .tabulator { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; font-family: inherit; font-size: 13px; }
+  .tabulator .tabulator-header { background: var(--surface-2); border-bottom: 1px solid var(--border); color: var(--text-muted); }
+  .tabulator .tabulator-header .tabulator-col { background: transparent; border-right: none; }
+  .tabulator .tabulator-header .tabulator-col-title { color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 500; }
+  .tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover { background: var(--surface-3); }
+  .tabulator-row { background: var(--surface); color: var(--text); border-bottom: 1px solid var(--border); }
+  .tabulator-row.tabulator-row-even { background: var(--surface); }
+  .tabulator-row:hover { background: var(--surface-2); }
+  .tabulator-row .tabulator-cell { border-right: none; color: var(--text); }
+  .tabulator .tabulator-footer { background: var(--surface-2); border-top: 1px solid var(--border); color: var(--text-muted); }
+  .tabulator .tabulator-footer .tabulator-page { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); border-radius: 6px; }
+  .tabulator .tabulator-footer .tabulator-page.active { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  .tabulator .tabulator-footer .tabulator-page:disabled { opacity: .4; }
+  .tabulator-placeholder { color: var(--text-faint); }
+  .tabulator .tabulator-header .tabulator-col-sorter { color: var(--text-faint); }
   .calview-btn.active { color: #fff; background: var(--primary); font-weight:500; }
   #calKpiAllCard.active, #calKpiOverdueCard.active, #calKpiProgressCard.active, #calKpiDoneCard.active, #calKpiUndatedCard.active,
   .kpi-card.active { outline:2px solid var(--primary); outline-offset:-1px; }
@@ -525,43 +546,7 @@
         <p id="amFocusNote" class="text-[11px] mb-2" style="display:none;color:var(--primary)"><i class="fa-solid fa-user-check mr-1"></i>Showing <b>your</b> opportunities by default. Change the Account Manager filter to see the whole team.</p>
         <p class="text-[11px] mb-2" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Double-click any row to open the full opportunity detail. <b>Rev 2026</b> = revenue realizable in the remaining H2 2026.</p>
 
-        <div class="card elev overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead style="background:var(--surface-2); color:var(--text-muted)">
-                <tr class="text-xs uppercase tracking-wide">
-                  <th class="text-left px-4 py-3 font-medium">Opportunity</th>
-                  <th class="text-left px-4 py-3 font-medium">Customer</th>
-                  <th class="text-left px-4 py-3 font-medium">AM</th>
-                  <th class="text-left px-4 py-3 font-medium">Pillar</th>
-                  <th class="text-right px-4 py-3 font-medium">TCV</th>
-                  <th class="text-right px-4 py-3 font-medium">Rev 2026</th>
-                  <th class="text-left px-4 py-3 font-medium">Stage</th>
-                  <th class="text-left px-4 py-3 font-medium w-36">Progress</th>
-                  <th class="text-left px-4 py-3 font-medium">Qtr</th>
-                  <th class="text-right px-4 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="dealsTableBody"></tbody>
-            </table>
-          </div>
-          <p id="noDealsMsg" class="hidden text-center text-sm py-10" style="color:var(--text-faint)">No opportunities match the current filters.</p>
-        </div>
-
-        <div id="paginationBar" class="flex flex-wrap items-center justify-between gap-3 mt-3 text-sm" style="color:var(--text-muted)">
-          <div class="flex items-center gap-2">
-            <span>Rows per page</span>
-            <select id="pageSizeSelect" class="field px-2 py-1 text-sm"><option>10</option><option>25</option><option>50</option></select>
-            <span id="rowRange" class="ml-2"></span>
-          </div>
-          <div class="flex items-center gap-1">
-            <button id="firstPage" class="px-2.5 py-1 rounded-lg" style="color:var(--text)" title="First page"><i class="fa-solid fa-angles-left"></i></button>
-            <button id="prevPage" class="px-2.5 py-1 rounded-lg" style="color:var(--text)" title="Previous page"><i class="fa-solid fa-angle-left"></i></button>
-            <span id="pageInfo" class="px-2"></span>
-            <button id="nextPage" class="px-2.5 py-1 rounded-lg" style="color:var(--text)" title="Next page"><i class="fa-solid fa-angle-right"></i></button>
-            <button id="lastPage" class="px-2.5 py-1 rounded-lg" style="color:var(--text)" title="Last page"><i class="fa-solid fa-angles-right"></i></button>
-          </div>
-        </div>
+        <div id="dealsTable"></div>
       </section>
 
       <!-- ============ CALENDAR ============ -->
@@ -1725,13 +1710,8 @@ function updateMetrics(){
 
 /* ================= DEALS ================= */
 ['filterAM','filterPillar','filterStage'].forEach(id=>document.getElementById(id).addEventListener('change',loadDeals));
-document.getElementById('searchInput').addEventListener('input',()=>{ currentPage=1; renderDealsTable(); });
-document.getElementById('sortSelect').addEventListener('change',()=>{ currentPage=1; renderDealsTable(); });
-document.getElementById('pageSizeSelect').addEventListener('change',()=>{ currentPage=1; renderDealsTable(); });
-document.getElementById('firstPage').addEventListener('click',()=>{ currentPage=1; renderDealsTable(); });
-document.getElementById('prevPage').addEventListener('click',()=>{ currentPage--; renderDealsTable(); });
-document.getElementById('nextPage').addEventListener('click',()=>{ currentPage++; renderDealsTable(); });
-document.getElementById('lastPage').addEventListener('click',()=>{ currentPage=1e9; renderDealsTable(); });
+document.getElementById('searchInput').addEventListener('input',renderDealsTable);
+document.getElementById('sortSelect').addEventListener('change',renderDealsTable);
 document.getElementById('clearFilters').addEventListener('click',()=>{
   ['filterAM','filterPillar','filterStage'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('searchInput').value=''; loadDeals();
@@ -1769,64 +1749,82 @@ function sortRows(rows){
   return [...rows].sort(cmp[s]||cmp.progress_desc);
 }
 
+let dealsTabulator = null;
+
+function dealsTableColumns(){
+  return [
+    { formatter:"responsiveCollapse", width:30, minWidth:30, hozAlign:"center", resizable:false, headerSort:false },
+    { title:"Opportunity", field:"deal_name", widthGrow:2, responsive:0, formatter:(cell)=>{
+        const d=cell.getRow().getData();
+        return escapeHtml(d.deal_name)+(d.is_blocked?' <i class="fa-solid fa-triangle-exclamation ml-1" style="color:var(--danger)"></i>':'');
+      }, cssClass:"font-medium" },
+    { title:"Customer", field:"customer", widthGrow:1.4, responsive:1, formatter:(cell)=>escapeHtml(cell.getValue()||'') },
+    { title:"AM", field:"assigned_am", width:110, responsive:0, formatter:(cell)=>`<span class="chip" style="color:var(--text-muted)">${escapeHtml((cell.getValue()||'').split(' ')[0])}</span>` },
+    { title:"Pillar", field:"strategic_pillar", widthGrow:1.2, responsive:4, formatter:(cell)=>escapeHtml(cell.getValue()||'') },
+    { title:"TCV", field:"estimated_value", hozAlign:"right", width:130, responsive:2, cssClass:"font-medium", formatter:(cell)=>fmtIDR(cell.getValue()) },
+    { title:"Rev 2026", field:"revenue_2026", hozAlign:"right", width:130, responsive:3, cssClass:"font-medium",
+      formatter:(cell)=>`<span style="color:var(--primary)">${fmtIDR(cell.getValue())}</span>` },
+    { title:"Stage", field:"stage", width:130, responsive:1, formatter:(cell)=>{
+        const s=cell.getValue();
+        return `<span class="stage-dot" style="background:${stageColor(s)}"></span> <span class="text-xs" style="color:var(--text-muted)">${escapeHtml(s)}</span>`;
+      } },
+    { title:"Progress", field:"progress", width:140, headerSort:false, responsive:2, formatter:(cell)=>{
+        const d=cell.getRow().getData();
+        const editable=canEditDeal(d);
+        const wrap=document.createElement('div'); wrap.className='flex items-center gap-2';
+        wrap.innerHTML=`<input type="range" min="0" max="100" value="${d.progress}" class="progress-slider w-20" ${editable?'':'disabled'}>
+          <span class="text-xs" style="color:var(--text-muted)">${d.progress}%</span>`;
+        const slider=wrap.querySelector('input'), label=wrap.querySelector('span');
+        wrap.addEventListener('click', e=>e.stopPropagation());
+        wrap.addEventListener('dblclick', e=>e.stopPropagation());
+        slider.addEventListener('input', ()=>{ label.textContent=slider.value+'%'; });
+        slider.addEventListener('change', async ()=>{
+          try { await api(`/api/deals/${d.id}/progress`,{method:'PUT',body:JSON.stringify({progress:parseInt(slider.value)})}); showToast('Progress updated'); await loadDeals(); }
+          catch(err){ showToast(err.message,true); }
+        });
+        return wrap;
+      } },
+    { title:"Qtr", field:"target_quarter", width:90, responsive:5, formatter:(cell)=>`<span class="text-xs" style="color:var(--text-muted)">${escapeHtml(cell.getValue()||'')}</span>` },
+    { title:"Actions", field:"id", width:100, hozAlign:"right", headerSort:false, responsive:0, formatter:(cell)=>{
+        const d=cell.getRow().getData();
+        const editable=canEditDeal(d);
+        const wrap=document.createElement('div'); wrap.className='text-right whitespace-nowrap';
+        wrap.addEventListener('click', e=>e.stopPropagation());
+        wrap.addEventListener('dblclick', e=>e.stopPropagation());
+        if(editable){
+          wrap.innerHTML=`<button class="edit-btn" style="color:var(--primary)"><i class="fa-solid fa-pen text-xs"></i></button>
+            <button class="del-btn ml-3" style="color:var(--danger)"><i class="fa-solid fa-trash text-xs"></i></button>`;
+          wrap.querySelector('.edit-btn').addEventListener('click',()=>openDealModal(d.id));
+          wrap.querySelector('.del-btn').addEventListener('click',()=>confirmDeleteDeal(d.id));
+        } else if(CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)){
+          wrap.innerHTML=`<button class="tasks-btn" style="color:var(--primary)" title="Team Tasks"><i class="fa-solid fa-list-check text-xs"></i></button>`;
+          wrap.querySelector('.tasks-btn').addEventListener('click',()=>openDealModal(d.id));
+        } else {
+          wrap.innerHTML=`<span class="text-xs" style="color:var(--text-faint)"><i class="fa-solid fa-lock"></i></span>`;
+        }
+        return wrap;
+      } },
+  ];
+}
+
 function renderDealsTable(){
-  const all=sortRows(filteredBySearch());
-  const total=all.length;
-  const pageSize=parseInt(document.getElementById('pageSizeSelect').value)||10;
-  const pages=Math.max(1,Math.ceil(total/pageSize));
-  if(currentPage>pages) currentPage=pages;
-  if(currentPage<1) currentPage=1;
-  const start=(currentPage-1)*pageSize;
-  const rows=all.slice(start,start+pageSize);
-  const tbody=document.getElementById('dealsTableBody'); tbody.innerHTML='';
-  document.getElementById('noDealsMsg').classList.toggle('hidden',total>0);
-  rows.forEach(deal=>{
-    const editable=canEditDeal(deal);
-    const tr=document.createElement('tr'); tr.className='row-click'; tr.style.borderTop='1px solid var(--border)';
-    tr.innerHTML=`
-      <td class="px-4 py-3 font-medium" style="color:var(--text)">${escapeHtml(deal.deal_name)}${deal.is_blocked?' <i class="fa-solid fa-triangle-exclamation ml-1" style="color:var(--danger)"></i>':''}</td>
-      <td class="px-4 py-3" style="color:var(--text-muted)">${escapeHtml(deal.customer)}</td>
-      <td class="px-4 py-3"><span class="chip" style="color:var(--text-muted)">${escapeHtml(deal.assigned_am.split(' ')[0])}</span></td>
-      <td class="px-4 py-3" style="color:var(--text-muted)">${escapeHtml(deal.strategic_pillar)}</td>
-      <td class="px-4 py-3 text-right font-medium" style="color:var(--text)">${fmtIDR(deal.estimated_value)}</td>
-      <td class="px-4 py-3 text-right font-medium" style="color:var(--primary)">${fmtIDR(deal.revenue_2026)}</td>
-      <td class="px-4 py-3"><span class="stage-dot" style="background:${stageColor(deal.stage)}"></span> <span class="text-xs" style="color:var(--text-muted)">${deal.stage}</span></td>
-      <td class="px-4 py-3">
-        <div class="flex items-center gap-2">
-          <input type="range" min="0" max="100" value="${deal.progress}" data-id="${deal.id}" class="progress-slider w-20" ${editable?'':'disabled'} onclick="event.stopPropagation()">
-          <span class="text-xs" style="color:var(--text-muted)">${deal.progress}%</span>
-        </div>
-      </td>
-      <td class="px-4 py-3 text-xs" style="color:var(--text-muted)">${escapeHtml(deal.target_quarter)}</td>
-      <td class="px-4 py-3 text-right whitespace-nowrap">
-        ${editable
-          ? `<button class="edit-btn" data-id="${deal.id}" style="color:var(--primary)" onclick="event.stopPropagation()"><i class="fa-solid fa-pen text-xs"></i></button>
-             <button class="del-btn ml-3" data-id="${deal.id}" style="color:var(--danger)" onclick="event.stopPropagation()"><i class="fa-solid fa-trash text-xs"></i></button>`
-          : CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)
-          ? `<button class="tasks-btn" data-id="${deal.id}" style="color:var(--primary)" onclick="event.stopPropagation()" title="Team Tasks"><i class="fa-solid fa-list-check text-xs"></i></button>`
-          : `<span class="text-xs" style="color:var(--text-faint)"><i class="fa-solid fa-lock"></i></span>`}
-      </td>`;
-    tr.addEventListener('dblclick',()=>openDetail(deal.id));
-    tbody.appendChild(tr);
-  });
-  // Pagination labels
-  document.getElementById('rowRange').textContent = total ? `${start+1}–${Math.min(start+pageSize,total)} of ${total}` : '0 of 0';
-  document.getElementById('pageInfo').textContent = `Page ${currentPage} / ${pages}`;
-  document.getElementById('prevPage').disabled = currentPage<=1;
-  document.getElementById('firstPage').disabled = currentPage<=1;
-  document.getElementById('nextPage').disabled = currentPage>=pages;
-  document.getElementById('lastPage').disabled = currentPage>=pages;
-  ['prevPage','firstPage','nextPage','lastPage'].forEach(id=>{ const b=document.getElementById(id); b.style.opacity=b.disabled?'0.4':'1'; b.style.cursor=b.disabled?'default':'pointer'; });
-  tbody.querySelectorAll('.edit-btn').forEach(b=>b.addEventListener('click',()=>openDealModal(parseInt(b.dataset.id))));
-  tbody.querySelectorAll('.del-btn').forEach(b=>b.addEventListener('click',()=>confirmDeleteDeal(parseInt(b.dataset.id))));
-  tbody.querySelectorAll('.tasks-btn').forEach(b=>b.addEventListener('click',()=>openDealModal(parseInt(b.dataset.id))));
-  tbody.querySelectorAll('.progress-slider').forEach(sl=>{
-    sl.addEventListener('input',e=>{ e.target.nextElementSibling.textContent=e.target.value+'%'; });
-    sl.addEventListener('change',async e=>{
-      try { await api(`/api/deals/${e.target.dataset.id}/progress`,{method:'PUT',body:JSON.stringify({progress:parseInt(e.target.value)})}); showToast('Progress updated'); await loadDeals(); }
-      catch(err){ showToast(err.message,true); }
+  const rows=sortRows(filteredBySearch());
+  if(!dealsTabulator){
+    dealsTabulator = new Tabulator("#dealsTable", {
+      data: rows,
+      layout: "fitColumns",
+      responsiveLayout: "collapse",
+      responsiveLayoutCollapseStartOpen: false,
+      pagination: true,
+      paginationSize: 10,
+      paginationSizeSelector: [10, 25, 50, 100],
+      placeholder: "No opportunities match the current filters.",
+      columns: dealsTableColumns(),
     });
-  });
+    dealsTabulator.on("rowDblClick", (e, row)=>openDetail(row.getData().id));
+  } else {
+    dealsTabulator.setData(rows);
+  }
 }
 
 function confirmDeleteDeal(id){
@@ -1894,12 +1892,64 @@ function openDetail(id){
       <div class="flex justify-between text-xs mb-2" style="color:var(--text-muted)"><span>Timeline Items (action plan)</span><span>${done}/${total} done (${pct}%)</span></div>
       <div class="space-y-1.5">${timelineItems.map(a=>{const done=a.status==='done';return `<div class="flex items-center gap-2 text-sm" style="color:var(--text)"><i class="fa-${done?'solid fa-circle-check':'regular fa-circle'}" style="color:${done?'var(--success)':'var(--text-faint)'}"></i><span class="flex-1 ${done?'line-through':''}" style="${done?'color:var(--text-faint)':''}">${escapeHtml(a.text)}</span>${a.date?`<span class="chip" style="color:${(!done&&a.date<todayStr())?'var(--danger)':'var(--text-muted)'}">${a.date}</span>`:''}</div>`;}).join('')||'<p class="text-xs" style="color:var(--text-faint)">No timeline items yet.</p>'}</div>
     </div>
+    <div class="mb-4">
+      <div class="flex items-center justify-between text-xs mb-2" style="color:var(--text-muted)">
+        <span>Documents</span>
+        ${editable?`<label class="cursor-pointer" style="color:var(--primary)">
+          <input type="file" id="docUploadInput" class="hidden" onchange="uploadDocument(${d.id}, this)">
+          <i class="fa-solid fa-paperclip mr-1"></i>Attach file
+        </label>`:''}
+      </div>
+      <div id="docList" class="space-y-1.5"><p class="text-xs" style="color:var(--text-faint)">Loading…</p></div>
+    </div>
     ${editable?`<button onclick="closeDetail();openDealModal(${d.id})" class="btn-primary w-full text-sm py-2.5 rounded-lg"><i class="fa-solid fa-pen mr-1.5"></i>Edit Opportunity</button>`
       :CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)?`<button onclick="closeDetail();openDealModal(${d.id})" class="btn-primary w-full text-sm py-2.5 rounded-lg"><i class="fa-solid fa-list-check mr-1.5"></i>Team Tasks</button>`
       :`<p class="text-xs text-center" style="color:var(--text-faint)"><i class="fa-solid fa-lock mr-1"></i>${ROLE==='management'?'View-only role':'Assigned to another AM'}</p>`}
   `;
   document.getElementById('detailBackdrop').classList.remove('hidden');
   document.getElementById('detailDrawer').style.transform='translateX(0)';
+  loadDocuments(d.id, editable);
+}
+
+/* ---------- Documents (PDF/PPTX/etc attached to an opportunity) ---------- */
+function fmtFileSize(bytes){
+  if(bytes>=1e6) return (bytes/1e6).toFixed(1)+' MB';
+  if(bytes>=1e3) return (bytes/1e3).toFixed(0)+' KB';
+  return bytes+' B';
+}
+async function loadDocuments(dealId, editable){
+  const el=document.getElementById('docList');
+  if(!el) return;
+  try{
+    const docs=await api(`/api/deals/${dealId}/documents`);
+    el.innerHTML = docs.length ? docs.map(doc=>`
+      <div class="flex items-center gap-2 text-xs card p-2">
+        <i class="fa-solid fa-file-lines" style="color:var(--text-faint)"></i>
+        <a href="/api/documents/${doc.id}/download?token=${encodeURIComponent(TOKEN)}" target="_blank"
+           class="flex-1 truncate" style="color:var(--text)" title="${escapeHtml(doc.filename)}">${escapeHtml(doc.filename)}</a>
+        <span style="color:var(--text-faint)">${fmtFileSize(doc.size_bytes)}</span>
+        ${editable?`<button onclick="deleteDocument(${doc.id}, ${dealId})" style="color:var(--text-faint)" title="Delete"><i class="fa-solid fa-trash"></i></button>`:''}
+      </div>`).join('')
+      : `<p class="text-xs" style="color:var(--text-faint)">No documents attached yet.</p>`;
+  }catch(err){ el.innerHTML = `<p class="text-xs" style="color:var(--danger)">${escapeHtml(err.message)}</p>`; }
+}
+async function uploadDocument(dealId, input){
+  const file=input.files[0]; if(!file) return;
+  const fd=new FormData(); fd.append('file', file);
+  try{
+    const res=await fetch(`/api/deals/${dealId}/documents`, {method:'POST', headers:{'Authorization':'Bearer '+TOKEN}, body:fd});
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||'Upload failed');
+    showToast('Document uploaded');
+    await loadDocuments(dealId, true);
+  }catch(err){ showToast(err.message, true); }
+  input.value='';
+}
+function deleteDocument(docId, dealId){
+  openConfirm('Delete this document?', async ()=>{
+    try{ await api(`/api/documents/${docId}`, {method:'DELETE'}); showToast('Document deleted'); await loadDocuments(dealId, true); }
+    catch(err){ showToast(err.message, true); }
+  });
 }
 function detailStat(label,val){ return `<div class="card p-3"><p class="text-[11px]" style="color:var(--text-muted)">${label}</p><p class="text-sm font-medium mt-0.5" style="color:var(--text)">${val}</p></div>`; }
 function closeDetail(){ document.getElementById('detailBackdrop').classList.add('hidden'); document.getElementById('detailDrawer').style.transform='translateX(100%)'; }
@@ -3358,22 +3408,43 @@ function covPercentile(arr, p){
 
 let covSort = {field:'size', dir:'desc'};
 
-function covDonut(entries, filterField){
-  const total = entries.reduce((s,e)=>s+e[2],0);
-  if(!total) return `<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`;
-  const interactive = !!filterField;
-  const cx=90,cy=90,r=70,sw=26,C=2*Math.PI*r; let off=0,circ='';
-  entries.forEach(([key,label,count,color])=>{
-    if(!count) return;
-    const dash=count/total*C;
-    circ+=`<circle class="${interactive?'clickable cov-chart-seg':''}" data-filter="${filterField||''}" data-value="${key}" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"><title>${label}: ${count}${interactive?' (click to filter)':''}</title></circle>`;
-    off+=dash;
+function resolveColor(c){
+  // Canvas (Chart.js) can't resolve CSS custom properties itself like real
+  // DOM/CSS can - anywhere a color might be a "var(--x)" string reused from
+  // an inline style elsewhere, resolve it to its current computed value first.
+  if(typeof c==='string' && c.startsWith('var(')) return cssVar(c.slice(4,-1).trim()) || c;
+  return c;
+}
+
+function covSetFilter(field, value){
+  if(field==='status') document.getElementById('covFilterStatus').value=value;
+  else if(field==='source') document.getElementById('covFilterSource').value=value;
+  else if(field==='am' && document.getElementById('covFilterAM').style.display!=='none') document.getElementById('covFilterAM').value=value;
+  renderCoverage();
+}
+
+function covDonut(containerId, entries, filterField){
+  const el=document.getElementById(containerId);
+  const shown=entries.filter(e=>e[2]>0);
+  const total=shown.reduce((s,e)=>s+e[2],0);
+  destroyChart(containerId);
+  if(!total){ el.innerHTML=`<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`; return; }
+  const interactive=!!filterField;
+  el.innerHTML='<div class="flex items-center gap-6"><div style="width:140px;height:140px;flex-shrink:0"><canvas></canvas></div><div class="donut-legend space-y-1.5 flex-1 min-w-0"></div></div>';
+  const canvas=el.querySelector('canvas');
+  CHART_INSTANCES[containerId] = new Chart(canvas, {
+    type:'doughnut',
+    data:{ labels: shown.map(e=>e[1]), datasets:[{ data: shown.map(e=>e[2]), backgroundColor: shown.map(e=>resolveColor(e[3])), borderWidth:0 }]},
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'65%',
+      plugins:{ legend:{display:false} },
+      onHover:(evt, els)=>{ evt.native.target.style.cursor = (interactive && els.length) ? 'pointer' : 'default'; },
+      onClick:(evt, elements)=>{ if(interactive && elements.length) covSetFilter(filterField, shown[elements[0].index][0]); }
+    }
   });
-  const tc=cssVar('--chart-text');
-  const legend=entries.filter(e=>e[2]>0).map(([key,label,count,color])=>
-    `<div class="flex items-center gap-1.5 text-xs${interactive?' clickable cov-chart-seg':''}" data-filter="${filterField||''}" data-value="${key}" style="color:var(--text-muted)"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${color}"></span>${label} (${count})</div>`
+  el.querySelector('.donut-legend').innerHTML = shown.map(([key,label,count,color])=>
+    `<div class="flex items-center gap-1.5 text-xs${interactive?' clickable':''}" ${interactive?`onclick="covSetFilter('${filterField}','${key}')"`:''} style="color:var(--text-muted)"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${color}"></span>${escapeHtml(label)} (${count})</div>`
   ).join('');
-  return `<div class="flex items-center gap-6"><svg viewBox="0 0 180 180" style="width:140px;height:140px" class="flex-shrink-0">${circ}<text x="90" y="96" text-anchor="middle" font-size="22" font-weight="700" fill="${tc}">${total}</text></svg><div class="space-y-1.5 flex-1 min-w-0">${legend}</div></div>`;
 }
 
 function covGauge(pct, label, sub, color){
@@ -3490,7 +3561,7 @@ function renderCoverage(){
     covGauge(counts.champion/total*100, 'Champion accounts', `${counts.champion} of ${scoped.length} flagged as champion`, '#0ea5e9') +
     covGauge(attentionCount/total*100, 'Needs attention', `${attentionCount} at risk, low priority or no contact`, 'var(--warning)');
 
-  document.getElementById('covStatusChart').innerHTML = covDonut([
+  covDonut('covStatusChart', [
     ['handled','Engaged',counts.handled,'var(--success)'],
     ['existing_customer',COV_STATUS_LABEL.existing_customer,counts.existing_customer,COV_STATUS_COLOR.existing_customer],
     ['preferred',COV_STATUS_LABEL.preferred,counts.preferred,COV_STATUS_COLOR.preferred],
@@ -3502,7 +3573,7 @@ function renderCoverage(){
     ['not_preferable',COV_STATUS_LABEL.not_preferable,counts.not_preferable,COV_STATUS_COLOR.not_preferable],
   ], 'status');
 
-  document.getElementById('covSourceChart').innerHTML = covDonut([
+  covDonut('covSourceChart', [
     ['official','Given by performance team',officialCount,'var(--primary)'],
     ['new','New (Tracker / manual)',newCount,'var(--warning)'],
   ], 'source');
@@ -3705,7 +3776,7 @@ function renderAmwDetail(){
 
   const counts={existing_customer:0,preferred:0,growth_potential:0,unreviewed:0,at_risk:0,low_priority:0,no_contact:0,not_preferable:0,handled:0};
   x.accounts.forEach(r=>{ if(r.deal_count>0) counts.handled++; else if(counts[r.status]!==undefined) counts[r.status]++; });
-  document.getElementById('amwStatusChart').innerHTML = covDonut([
+  covDonut('amwStatusChart', [
     ['handled','Engaged',counts.handled,'var(--success)'],
     ['existing_customer',COV_STATUS_LABEL.existing_customer,counts.existing_customer,COV_STATUS_COLOR.existing_customer],
     ['preferred',COV_STATUS_LABEL.preferred,counts.preferred,COV_STATUS_COLOR.preferred],
@@ -3807,12 +3878,11 @@ function renderAnalytics(){
   const byQuarter=groupSum(ds,'target_quarter');
   const stageCounts={}; ds.forEach(d=>stageCounts[d.stage]=(stageCounts[d.stage]||0)+1);
 
-  document.getElementById('chartAM').innerHTML=barChart(byAM,'assigned_am','Account Manager');
-  document.getElementById('chartPillar').innerHTML=barChart(byPillar,'strategic_pillar','Pillar');
-  document.getElementById('chartQuarter').innerHTML=barChart(byQuarter,'target_quarter','Quarter');
-  document.getElementById('chartStage').innerHTML=donutChart(stageCounts);
-  document.getElementById('chartTop').innerHTML=topChart(ds);
-  bindChartDrill();
+  chartBar('chartAM', byAM, 'assigned_am');
+  chartBar('chartPillar', byPillar, 'strategic_pillar');
+  chartBar('chartQuarter', byQuarter, 'target_quarter');
+  chartDonut('chartStage', stageCounts);
+  chartTopH('chartTop', ds);
 
   renderAmTargetChart(ds);
   renderFrameworkAnalytics(ds);
@@ -3981,50 +4051,90 @@ function renderAmTargetChart(ds){
     `<b style="color:${teamGap>0?'var(--danger)':'var(--success)'}">${teamGap>0?fmtIDR(teamGap)+' still to find':'fully covered'}</b>`;
 }
 
-function barChart(obj,field,label){
+const CHART_INSTANCES = {};
+function destroyChart(containerId){
+  if(CHART_INSTANCES[containerId]){ CHART_INSTANCES[containerId].destroy(); delete CHART_INSTANCES[containerId]; }
+}
+function ensureCanvas(containerId){
+  const el=document.getElementById(containerId);
+  el.innerHTML='';
+  const canvas=document.createElement('canvas');
+  el.appendChild(canvas);
+  return canvas;
+}
+
+function chartBar(containerId, obj, field){
+  const el=document.getElementById(containerId);
   const entries=Object.entries(obj).sort((a,b)=>b[1]-a[1]);
-  if(!entries.length) return `<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`;
-  const max=Math.max(...entries.map(e=>e[1]),1);
-  const W=460,H=200,gap=14,bw=(W-gap*(entries.length+1))/entries.length;
-  const tc=cssVar('--chart-text');
-  let s='';
-  entries.forEach(([lab,val],i)=>{
-    const h=val/max*130, x=gap+i*(bw+gap), y=H-h-30;
-    s+=`<rect class="cbar clickable" data-field="${field}" data-value="${escapeHtml(lab)}" data-label="${label}" x="${x}" y="${y}" width="${bw}" height="${h}" rx="5" fill="${CHART_COLORS[i%CHART_COLORS.length]}"><title>${escapeHtml(lab)}: ${fmtIDR(val)}</title></rect>`;
-    s+=`<text x="${x+bw/2}" y="${H-14}" font-size="9" fill="${tc}" text-anchor="middle">${escapeHtml(lab.length>13?lab.split(' ')[0]:lab)}</text>`;
-    s+=`<text x="${x+bw/2}" y="${y-5}" font-size="9" fill="${tc}" text-anchor="middle" font-weight="600">${(val/1e9).toFixed(1)}B</text>`;
+  destroyChart(containerId);
+  if(!entries.length){ el.innerHTML=`<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`; return; }
+  el.style.height='220px';
+  const canvas=ensureCanvas(containerId);
+  const tc=cssVar('--chart-text'), grid=cssVar('--chart-grid');
+  CHART_INSTANCES[containerId] = new Chart(canvas, {
+    type:'bar',
+    data:{ labels: entries.map(e=>e[0]), datasets:[{ data: entries.map(e=>e[1]),
+      backgroundColor: entries.map((_,i)=>CHART_COLORS[i%CHART_COLORS.length]), borderRadius:5 }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>fmtIDR(ctx.parsed.y)}} },
+      scales:{
+        x:{ ticks:{color:tc, font:{size:10}}, grid:{display:false} },
+        y:{ ticks:{color:tc, font:{size:9}, callback:(v)=>(v/1e9).toFixed(1)+'B'}, grid:{color:grid} }
+      },
+      onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+      onClick:(evt, elements)=>{ if(elements.length) setDrill(field, entries[elements[0].index][0]); }
+    }
   });
-  return `<svg viewBox="0 0 ${W} ${H}" class="w-full" style="height:200px">${s}</svg>`;
 }
 
-function donutChart(counts){
-  const entries=Object.entries(counts); const total=entries.reduce((s,[,v])=>s+v,0);
-  if(!total) return `<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`;
-  const cx=90,cy=90,r=70,sw=26,C=2*Math.PI*r; let off=0,circ='';
-  entries.forEach(([st,c])=>{ const dash=c/total*C;
-    circ+=`<circle class="cbar clickable" data-field="stage" data-value="${st}" data-label="Stage" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${stageColor(st)}" stroke-width="${sw}" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"><title>${st}: ${c}</title></circle>`; off+=dash; });
-  const tc=cssVar('--chart-text');
-  const legend=entries.map(([st,c])=>`<div class="flex items-center gap-1.5 text-xs" style="color:var(--text-muted)"><span class="w-2.5 h-2.5 rounded-full" style="background:${stageColor(st)}"></span>${st} (${c})</div>`).join('');
-  return `<div class="flex items-center gap-6"><svg viewBox="0 0 180 180" style="width:150px;height:150px" class="flex-shrink-0">${circ}<text x="90" y="96" text-anchor="middle" font-size="22" font-weight="700" fill="${tc}">${total}</text></svg><div class="space-y-1.5">${legend}</div></div>`;
+function chartDonut(containerId, counts){
+  const el=document.getElementById(containerId);
+  const entries=Object.entries(counts);
+  const total=entries.reduce((s,[,v])=>s+v,0);
+  destroyChart(containerId);
+  if(!total){ el.innerHTML=`<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`; return; }
+  el.innerHTML='<div class="flex items-center gap-6"><div style="width:150px;height:150px;flex-shrink:0"><canvas></canvas></div><div class="donut-legend space-y-1.5"></div></div>';
+  const canvas=el.querySelector('canvas');
+  CHART_INSTANCES[containerId] = new Chart(canvas, {
+    type:'doughnut',
+    data:{ labels: entries.map(e=>e[0]), datasets:[{ data: entries.map(e=>e[1]),
+      backgroundColor: entries.map(([st])=>stageColor(st)), borderWidth:0 }]},
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'65%',
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${ctx.parsed}`}} },
+      onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+      onClick:(evt, elements)=>{ if(elements.length) setDrill('stage', entries[elements[0].index][0]); }
+    }
+  });
+  el.querySelector('.donut-legend').innerHTML = entries.map(([st,c])=>
+    `<div class="flex items-center gap-1.5 text-xs" style="color:var(--text-muted)"><span class="w-2.5 h-2.5 rounded-full" style="background:${stageColor(st)}"></span>${escapeHtml(st)} (${c})</div>`
+  ).join('');
 }
 
-function topChart(ds){
+function chartTopH(containerId, ds){
+  const el=document.getElementById(containerId);
   const top=[...ds].sort((a,b)=>b.estimated_value-a.estimated_value).slice(0,8);
-  if(!top.length) return `<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`;
-  const max=Math.max(...top.map(d=>d.estimated_value),1); const tc=cssVar('--chart-text');
-  let s=''; const rh=22;
-  top.forEach((d,i)=>{ const w=d.estimated_value/max*300; const y=i*rh;
-    s+=`<text x="0" y="${y+11}" font-size="9" fill="${tc}">${escapeHtml(d.deal_name.length>26?d.deal_name.slice(0,25)+'…':d.deal_name)}</text>`;
-    s+=`<rect x="180" y="${y+2}" width="${w}" height="14" rx="3" fill="${CHART_COLORS[i%CHART_COLORS.length]}"><title>${escapeHtml(d.deal_name)}: ${fmtIDR(d.estimated_value)}</title></rect>`;
-    s+=`<text x="${180+w+4}" y="${y+12}" font-size="8" fill="${tc}">${(d.estimated_value/1e9).toFixed(1)}B</text>`;
+  destroyChart(containerId);
+  if(!top.length){ el.innerHTML=`<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`; return; }
+  el.style.height=(top.length*34+24)+'px';
+  const canvas=ensureCanvas(containerId);
+  const tc=cssVar('--chart-text'), grid=cssVar('--chart-grid');
+  CHART_INSTANCES[containerId] = new Chart(canvas, {
+    type:'bar',
+    data:{ labels: top.map(d=>d.deal_name.length>30?d.deal_name.slice(0,29)+'…':d.deal_name),
+      datasets:[{ data: top.map(d=>d.estimated_value), backgroundColor: top.map((_,i)=>CHART_COLORS[i%CHART_COLORS.length]), borderRadius:4 }]},
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>fmtIDR(ctx.parsed.x)}} },
+      scales:{
+        x:{ ticks:{color:tc, font:{size:9}, callback:(v)=>(v/1e9).toFixed(1)+'B'}, grid:{color:grid} },
+        y:{ ticks:{color:tc, font:{size:9}}, grid:{display:false} }
+      },
+      onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+      onClick:(evt, elements)=>{ if(elements.length) openDetail(top[elements[0].index].id); }
+    }
   });
-  return `<svg viewBox="0 0 520 ${top.length*rh}" class="w-full" style="height:${top.length*rh}px">${s}</svg>`;
-}
-
-function bindChartDrill(){
-  document.querySelectorAll('.cbar').forEach(el=>el.addEventListener('click',()=>{
-    setDrill(el.dataset.field, el.dataset.value, el.dataset.label);
-  }));
 }
 
 function renderLeaderboard(ds){

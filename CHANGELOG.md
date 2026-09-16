@@ -26,11 +26,23 @@ and the sign-in screen) and via `GET /api/version`.
   Verified against a full copy of real production data (42 deals, 15 users,
   34 login logs) with an exact row-count match and a working login
   afterward.
-- `documents` table added to the schema for the planned PDF/PPTX upload
-  feature (upload/download endpoints and UI not wired up yet).
-### Not yet done
-- Document upload endpoints/UI, and the Chart.js/Tabulator.js frontend
-  modernization - see `DEPLOY.md`.
+- **Document uploads**: attach PDF/PPTX/DOCX/XLSX/images to an opportunity
+  from its detail drawer, stored on the `uploads` Docker volume (survives
+  container rebuilds - verified by restarting the app mid-test and
+  re-downloading). Upload/delete restricted to admin or that opportunity's
+  own AM, same as editing the opportunity itself.
+- **Chart.js** replaces the hand-rolled inline-SVG bar/donut charts across
+  Pipeline Analytics and Account Coverage - same data and the same
+  click-to-drill-down/click-to-filter behavior, now with real tooltips,
+  gridlines, and animation.
+- **Tabulator.js** replaces the hand-built Tracker table and its custom
+  pagination controls - sortable columns, a proper page-size selector, and
+  responsive column collapsing on narrow screens (collapsed fields expand
+  inline per row) instead of the columns just getting squeezed unreadable.
+
+## Known follow-up
+- Account Coverage's and AM Workload's own tables are still the original
+  hand-rolled markup - only the Tracker table was moved to Tabulator so far.
 
 ## [1.9.1] - 2026-09-14
 ### Changed

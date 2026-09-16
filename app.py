@@ -12,6 +12,7 @@ import re
 import secrets
 import urllib.error
 import urllib.request
+import uuid
 from datetime import datetime, date, timedelta, timezone
 from functools import wraps
 
@@ -20,6 +21,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 from flask import Flask, g, jsonify, render_template, request, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
@@ -946,6 +948,106 @@ def delete_deal(deal_id):
     if not can_edit_deal(g.current_user, row):
         return jsonify({"error": "You can only delete opportunities assigned to you"}), 403
     db.execute("DELETE FROM deals WHERE id = %s", (deal_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# Documents (PDF/PPTX/etc attached to an opportunity, stored on local disk)
+# --------------------------------------------------------------------------
+ALLOWED_DOC_EXTENSIONS = {"pdf", "ppt", "pptx", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg"}
+
+
+def doc_to_dict(row):
+    return {
+        "id": row["id"],
+        "deal_id": row["deal_id"],
+        "filename": row["filename"],
+        "content_type": row["content_type"],
+        "size_bytes": row["size_bytes"],
+        "uploaded_by": row["uploaded_by"],
+        "uploaded_at": row["uploaded_at"],
+    }
+
+
+@app.route("/api/deals/<int:deal_id>/documents", methods=["GET"])
+@login_required()
+def list_documents(deal_id):
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM documents WHERE deal_id = %s ORDER BY uploaded_at DESC", (deal_id,)
+    ).fetchall()
+    return jsonify([doc_to_dict(r) for r in rows])
+
+
+@app.route("/api/deals/<int:deal_id>/documents", methods=["POST"])
+@login_required(roles=("admin", "account_manager"))
+def upload_document(deal_id):
+    db = get_db()
+    deal = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
+    if not deal:
+        return jsonify({"error": "Deal not found"}), 404
+    if not can_edit_deal(g.current_user, deal):
+        return jsonify({"error": "You can only add documents to opportunities assigned to you"}), 403
+
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return jsonify({"error": "No file uploaded"}), 400
+    ext = upload.filename.rsplit(".", 1)[-1].lower() if "." in upload.filename else ""
+    if ext not in ALLOWED_DOC_EXTENSIONS:
+        return jsonify({"error": f"File type .{ext} isn't allowed. "
+                                  f"Allowed: {', '.join(sorted(ALLOWED_DOC_EXTENSIONS))}"}), 400
+
+    safe_name = secure_filename(upload.filename) or f"file.{ext}"
+    stored_name = f"{uuid.uuid4().hex}_{safe_name}"
+    deal_dir = os.path.join(UPLOAD_DIR, str(deal_id))
+    os.makedirs(deal_dir, exist_ok=True)
+    stored_path = os.path.join(deal_dir, stored_name)
+    upload.save(stored_path)
+    size_bytes = os.path.getsize(stored_path)
+
+    user = g.current_user
+    cur = db.execute(
+        """INSERT INTO documents (deal_id, filename, stored_path, content_type, size_bytes, uploaded_by)
+           VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+        (deal_id, safe_name, stored_path, upload.content_type or "", size_bytes,
+         user.get("full_name") or user.get("username", "")),
+    )
+    new_id = cur.fetchone()["id"]
+    db.commit()
+    row = db.execute("SELECT * FROM documents WHERE id = %s", (new_id,)).fetchone()
+    return jsonify(doc_to_dict(row)), 201
+
+
+@app.route("/api/documents/<int:doc_id>/download", methods=["GET"])
+@login_required()
+def download_document(doc_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM documents WHERE id = %s", (doc_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Document not found"}), 404
+    return send_file(row["stored_path"], as_attachment=True, download_name=row["filename"])
+
+
+@app.route("/api/documents/<int:doc_id>", methods=["DELETE"])
+@login_required(roles=("admin", "account_manager"))
+def delete_document(doc_id):
+    db = get_db()
+    row = db.execute(
+        """SELECT documents.*, deals.assigned_am FROM documents
+           JOIN deals ON deals.id = documents.deal_id WHERE documents.id = %s""",
+        (doc_id,),
+    ).fetchone()
+    if not row:
+        return jsonify({"error": "Document not found"}), 404
+    user = g.current_user
+    if user["role"] != "admin" and (row["assigned_am"] or "") != (user["full_name"] or ""):
+        return jsonify({"error": "You can only delete documents on opportunities assigned to you"}), 403
+    try:
+        os.remove(row["stored_path"])
+    except OSError:
+        pass  # already gone from disk - still clean up the DB row
+    db.execute("DELETE FROM documents WHERE id = %s", (doc_id,))
     db.commit()
     return jsonify({"ok": True})
 
