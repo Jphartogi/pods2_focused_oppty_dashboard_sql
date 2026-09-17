@@ -6,6 +6,17 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.1.3] - 2026-09-17 (branch: v2.0)
+### Fixed
+- Smoother scrolling: the page has 70+ card-style elements on screen at once
+  (KPI tiles, table wrappers, filter bars), each with a layered blurred
+  box-shadow that the browser had to repaint on every scroll frame. Cards now
+  use CSS `contain: layout paint` (isolates each card's paint from the rest
+  of the page) and a lighter shadow blur radius; the main content area adds
+  momentum scrolling and `overscroll-behavior: contain` so an overscroll at
+  the top/bottom doesn't rubber-band the whole page; the tab-switch fade
+  animation was simplified from an opacity+transform combo to opacity-only.
+
 ## [2.1.2] - 2026-09-17 (branch: v2.0)
 ### Changed
 - The FY Target hero card (gauge + KPI tiles) now follows whichever Account

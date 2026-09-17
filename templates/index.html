@@ -49,10 +49,14 @@
   /* Cards separate from the page purely through the surface/bg tone shift and
      a soft, barely-there shadow - not a hard outline everywhere, so a page
      full of cards reads as one composed layout instead of a pile of boxes. */
-  .card { background: var(--surface); border: 1px solid transparent; border-radius: 16px; box-shadow: 0 1px 2px var(--shadow); }
+  .card { background: var(--surface); border: 1px solid transparent; border-radius: 16px; box-shadow: 0 1px 2px var(--shadow); contain: layout paint; }
   [data-theme="dark"] .card { border-color: var(--border); box-shadow: none; }
   .card.flat { box-shadow: none; background: var(--surface-2); }
-  .elev { box-shadow: 0 1px 2px var(--shadow), 0 6px 20px -8px var(--shadow-2); }
+  /* Lighter blur radius than the original 20px - dozens of these are on screen at
+     once (KPI tiles, table wrappers, filter bars), and a smaller blur is much
+     cheaper for the browser to repaint on every scroll frame while looking
+     essentially identical at normal viewing distance. */
+  .elev { box-shadow: 0 1px 2px var(--shadow), 0 3px 10px -6px var(--shadow-2); }
   [data-theme="dark"] .elev { box-shadow: 0 1px 2px var(--shadow); }
   .nav-link { color: var(--text-muted); border-radius: 10px; margin-right: 12px; }
   .nav-link:hover { background: var(--surface-2); color: var(--text); }
@@ -77,9 +81,12 @@
   ::-webkit-scrollbar { width:10px; height:10px; }
   ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius:8px; border:2px solid var(--surface); }
   input[type=range] { accent-color: var(--primary); }
+  /* Main content scroller: momentum scrolling on touch devices, and contain
+     so an overscroll at the top/bottom doesn't chain into the whole page. */
+  .app-scroll-main { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   .tab-panel { display:none; }
-  .tab-panel.active { display:block; animation: fade .2s ease; }
-  @keyframes fade { from { opacity:0; transform: translateY(4px);} to { opacity:1; transform:none;} }
+  .tab-panel.active { display:block; animation: fade .15s ease; will-change: opacity; }
+  @keyframes fade { from { opacity:0; } to { opacity:1; } }
   .stage-dot { width:8px; height:8px; border-radius:9999px; display:inline-block; }
   .chip { border:1px solid var(--border); background:var(--surface-2); border-radius:9999px; padding:2px 10px; font-size:11px; font-weight:500; }
   .drawer { transition: transform .25s ease; }
@@ -425,7 +432,7 @@
     </aside>
 
     <!-- Main -->
-    <main class="flex-1 min-w-0 overflow-y-auto" style="max-height:calc(100vh - 4rem)">
+    <main class="flex-1 min-w-0 overflow-y-auto app-scroll-main" style="max-height:calc(100vh - 4rem)">
 
       <!-- Metric strip -->
       <div id="metricStripWrap" class="px-6 pt-6">
