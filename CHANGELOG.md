@@ -6,6 +6,19 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.2.0] - 2026-09-17 (branch: v2.0)
+### Changed
+- **Management View redesigned as an executive report**: a proper page header
+  ("Executive Summary" / "Management View") replaces the old thin filter
+  chip bar; the status line is now a bold RAG-colored banner with an icon
+  badge instead of a plain sentence; the 6 financial KPIs use the same
+  icon-badge tile style as the FY target hero card instead of flat text
+  cards; and Account Manager Performance now leads with a ranked,
+  color-coded attainment-% bar chart (click a bar to filter to that AM) ahead
+  of the detailed per-AM rows - the "one chart that tells the story" pattern
+  from consulting-style reporting. Blockers / Action points / AM performance
+  section headers also got colored icon badges instead of plain icons.
+
 ## [2.1.3] - 2026-09-17 (branch: v2.0)
 ### Fixed
 - Smoother scrolling: the page has 70+ card-style elements on screen at once

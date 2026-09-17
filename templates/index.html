@@ -248,6 +248,19 @@
     .metric-hero-grid { grid-template-columns:1fr; justify-items:center; }
     .metric-tiles { grid-template-columns:1fr; width:100%; }
   }
+  /* --- Management View: executive-report styling (banner + KPI band + section badges) --- */
+  .mg-kpi-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; }
+  @media (max-width:1100px) { .mg-kpi-grid { grid-template-columns:repeat(3,1fr); } }
+  @media (max-width:560px) { .mg-kpi-grid { grid-template-columns:repeat(2,1fr); } }
+  .exec-banner { border-radius:18px; padding:20px 24px; display:flex; align-items:center; gap:16px; position:relative; overflow:hidden; }
+  .exec-banner::before { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--banner-accent, var(--primary)); }
+  .exec-banner-icon { width:46px; height:46px; border-radius:9999px; display:flex; align-items:center; justify-content:center; font-size:19px; background:color-mix(in srgb, var(--banner-accent) 16%, transparent); color:var(--banner-accent); flex-shrink:0; }
+  .exec-banner-title { font-size:15.5px; font-weight:700; letter-spacing:-0.01em; color:var(--text); }
+  .exec-banner-sub { font-size:12.5px; color:var(--text-muted); margin-top:3px; line-height:1.5; }
+  .section-icon-badge { width:30px; height:30px; border-radius:9999px; display:flex; align-items:center; justify-content:center; font-size:12.5px; flex-shrink:0; background:color-mix(in srgb, var(--badge-accent, var(--primary)) 16%, transparent); color:var(--badge-accent, var(--primary)); }
+  .widget > summary { transition: background .12s ease; border-radius:16px; }
+  .widget[open] > summary { border-radius:16px 16px 0 0; }
+  .widget > summary:hover { background: var(--surface-2); }
   /* --- compact stat cards: KPI strips across Analytics / Management, AWS-console style
      (a colored accent bar + small-caps label + large tabular value) instead of plain text --- */
   .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:13px 16px 13px 18px; position:relative; overflow:hidden; box-shadow:0 1px 2px var(--shadow); transition: box-shadow .18s ease, transform .18s ease; }
@@ -470,30 +483,37 @@
 
       <!-- ============ MANAGEMENT VIEW ============ -->
       <section id="tab-management" class="tab-panel px-8 py-7">
-        <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
-          <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-briefcase mr-1" style="color:var(--primary)"></i>Executive briefing</span>
-          <select id="mgmtFilterAM" class="field text-sm px-3 py-1.5"><option value="">All Account Managers</option></select>
-          <div class="flex-1"></div>
-          <span class="text-[11px]" style="color:var(--text-faint)">Double-click any item to open the full opportunity</span>
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <p class="section-label mb-1">Executive Summary</p>
+            <p class="page-title">Management View</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <div class="select-ico">
+              <i class="fa-solid fa-user-tie"></i>
+              <select id="mgmtFilterAM" class="field-ico text-sm py-2"><option value="">All Account Managers</option></select>
+            </div>
+            <span class="text-[11px]" style="color:var(--text-faint)"><i class="fa-solid fa-arrow-pointer mr-1"></i>Double-click any item to open the full opportunity</span>
+          </div>
         </div>
+
+        <!-- At-a-glance status banner: the one line management needs before digging in -->
+        <div id="mgHeadline" class="card elev exec-banner mb-4"></div>
 
         <!-- Financial summary -->
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-          <div class="stat-card" style="--stat-accent:var(--text-muted)"><p class="stat-label">FY2026 Target</p><p id="mgTarget" class="stat-value">–</p></div>
-          <div class="stat-card" style="--stat-accent:var(--success)"><p class="stat-label">Achieved YTD</p><p id="mgAchieved" class="stat-value">–</p></div>
-          <div class="stat-card" style="--stat-accent:#12b5cb"><p class="stat-label">Recurring</p><p id="mgRecurring" class="stat-value">–</p></div>
-          <div class="stat-card" style="--stat-accent:var(--primary)"><p class="stat-label">2026 Pipeline</p><p id="mgPipeline" class="stat-value">–</p></div>
-          <div class="stat-card" style="--stat-accent:var(--danger)"><p class="stat-label">Remaining Gap</p><p id="mgGap" class="stat-value">–</p></div>
-          <div class="stat-card" style="--stat-accent:var(--text-muted)"><p class="stat-label">Framework Health</p><p id="mgFramework" class="stat-value">–</p></div>
+        <div class="mg-kpi-grid mb-4">
+          <div class="metric-tile" style="--tile-accent:var(--text-muted)"><div class="metric-tile-icon"><i class="fa-solid fa-bullseye"></i></div><div class="min-w-0"><p class="metric-tile-label">FY2026 Target</p><p id="mgTarget" class="metric-tile-value">–</p></div></div>
+          <div class="metric-tile" style="--tile-accent:var(--success)"><div class="metric-tile-icon"><i class="fa-solid fa-circle-check"></i></div><div class="min-w-0"><p class="metric-tile-label">Achieved YTD</p><p id="mgAchieved" class="metric-tile-value">–</p></div></div>
+          <div class="metric-tile" style="--tile-accent:#12b5cb"><div class="metric-tile-icon"><i class="fa-solid fa-arrows-rotate"></i></div><div class="min-w-0"><p class="metric-tile-label">Recurring</p><p id="mgRecurring" class="metric-tile-value">–</p></div></div>
+          <div class="metric-tile" style="--tile-accent:var(--primary)"><div class="metric-tile-icon"><i class="fa-solid fa-layer-group"></i></div><div class="min-w-0"><p class="metric-tile-label">2026 Pipeline</p><p id="mgPipeline" class="metric-tile-value">–</p></div></div>
+          <div class="metric-tile" style="--tile-accent:var(--danger)"><div class="metric-tile-icon"><i class="fa-solid fa-arrow-trend-down"></i></div><div class="min-w-0"><p class="metric-tile-label">Remaining Gap</p><p id="mgGap" class="metric-tile-value">–</p></div></div>
+          <div class="metric-tile" style="--tile-accent:var(--text-muted)"><div class="metric-tile-icon"><i class="fa-solid fa-list-check"></i></div><div class="min-w-0"><p class="metric-tile-label">Framework Health</p><p id="mgFramework" class="metric-tile-value">–</p></div></div>
         </div>
-
-        <!-- At-a-glance status line: expand only what needs attention -->
-        <div id="mgHeadline" class="card elev p-4 mb-4"></div>
 
         <details class="widget card elev mb-3" id="mgBlockersWidget">
           <summary class="p-4 flex items-center gap-3">
             <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
-            <i class="fa-solid fa-triangle-exclamation" style="color:var(--danger)"></i>
+            <div class="section-icon-badge" style="--badge-accent:var(--danger)"><i class="fa-solid fa-triangle-exclamation"></i></div>
             <span class="text-sm font-medium" style="color:var(--text)">Blockers</span>
             <span id="mgBlockerSummary" class="text-xs" style="color:var(--text-muted)"></span>
             <span class="flex-1"></span>
@@ -505,7 +525,7 @@
         <details class="widget card elev mb-3" id="mgActionsWidget">
           <summary class="p-4 flex items-center gap-3">
             <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
-            <i class="fa-solid fa-list-check" style="color:var(--primary)"></i>
+            <div class="section-icon-badge" style="--badge-accent:var(--primary)"><i class="fa-solid fa-list-check"></i></div>
             <span class="text-sm font-medium" style="color:var(--text)">Action points</span>
             <span id="mgActionSummary" class="text-xs" style="color:var(--text-muted)"></span>
             <span class="flex-1"></span>
@@ -517,13 +537,14 @@
         <details class="widget card elev mb-3" id="mgAmPerfWidget" open>
           <summary class="p-4 flex items-center gap-3">
             <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
-            <i class="fa-solid fa-user-tie" style="color:var(--primary)"></i>
+            <div class="section-icon-badge" style="--badge-accent:var(--primary)"><i class="fa-solid fa-user-tie"></i></div>
             <span class="text-sm font-medium" style="color:var(--text)">Account Manager performance</span>
             <span id="mgAmPerfSummary" class="text-xs" style="color:var(--text-muted)"></span>
             <span class="flex-1"></span>
             <span id="mgAmPerfCount" class="chip" style="color:var(--text-muted)">0</span>
           </summary>
           <div class="px-4 pb-4">
+            <div id="mgAmChart" class="mb-4"></div>
             <div id="mgAmPerf" class="space-y-2 mb-4"></div>
             <div class="rounded-lg p-3" style="background:var(--surface-2)">
               <p class="text-xs font-medium mb-2" style="color:var(--text-muted)"><i class="fa-solid fa-lightbulb mr-1.5" style="color:var(--warning)"></i>Insight — why is the gap not covered?</p>
@@ -3011,6 +3032,7 @@ function renderManagement(){
     return {am, amTarget, covered, amGap, pct, amBlocked};
   });
   const behind = amPerf.filter(x=>x.pct!==null && x.pct<100);
+  renderMgAmChart(amPerf);
   document.getElementById('mgAmPerfCount').textContent=amPerf.length;
   document.getElementById('mgAmPerfSummary').innerHTML = amPerf.length
     ? (behind.length ? `<span style="color:var(--warning)">${behind.length}/${amPerf.length} behind target</span>` : `<span style="color:var(--success)">Everyone covering their target</span>`)
@@ -3055,21 +3077,53 @@ function renderManagement(){
   if(blocked.length) attention.push(`<b style="color:var(--danger)">${blocked.length} blocker(s)</b> holding ${fmtIDR(blockedValue)}`);
   if(overdueCount) attention.push(`<b style="color:var(--danger)">${overdueCount} overdue action(s)</b>`);
   if(behind.length) attention.push(`<b style="color:var(--warning)">${behind.length} AM(s)</b> behind target`);
-  document.getElementById('mgHeadline').innerHTML = attention.length
-    ? `<div class="flex items-start gap-3">
-         <i class="fa-solid fa-circle-exclamation mt-0.5" style="color:var(--danger)"></i>
-         <div><p class="text-sm font-medium" style="color:var(--text)">Needs your attention</p>
-         <p class="text-xs mt-0.5" style="color:var(--text-muted)">${attention.join(' &nbsp;·&nbsp; ')}. Expand a section below for the detail.</p></div>
-       </div>`
-    : `<div class="flex items-start gap-3">
-         <i class="fa-solid fa-circle-check mt-0.5" style="color:var(--success)"></i>
-         <div><p class="text-sm font-medium" style="color:var(--text)">All clear</p>
-         <p class="text-xs mt-0.5" style="color:var(--text-muted)">No blockers, nothing overdue, and every AM with a target is covering it. Gap to target ${fmtIDR(gap)}.</p></div>
-       </div>`;
+  const mgHeadlineEl=document.getElementById('mgHeadline');
+  mgHeadlineEl.style.setProperty('--banner-accent', attention.length ? 'var(--danger)' : 'var(--success)');
+  mgHeadlineEl.innerHTML = attention.length
+    ? `<div class="exec-banner-icon"><i class="fa-solid fa-circle-exclamation"></i></div>
+       <div><p class="exec-banner-title">Needs your attention</p>
+       <p class="exec-banner-sub">${attention.join(' &nbsp;·&nbsp; ')}. Expand a section below for the detail.</p></div>`
+    : `<div class="exec-banner-icon"><i class="fa-solid fa-circle-check"></i></div>
+       <div><p class="exec-banner-title">All clear</p>
+       <p class="exec-banner-sub">No blockers, nothing overdue, and every AM with a target is covering it. Gap to target ${fmtIDR(gap)}.</p></div>`;
 
   document.querySelectorAll('#tab-management .mg-row').forEach(r=>{
     r.addEventListener('dblclick',()=>openDetail(parseInt(r.dataset.deal)));
     r.addEventListener('click',()=>openDetail(parseInt(r.dataset.deal)));
+  });
+}
+
+// Ranked attainment-% bar, RAG-colored - the "one chart that tells the story"
+// ahead of the per-AM detail rows, the way a consulting deck leads with the visual.
+function renderMgAmChart(amPerf){
+  const containerId='mgAmChart';
+  const el=document.getElementById(containerId);
+  const ranked=amPerf.filter(x=>x.pct!==null).sort((a,b)=>b.pct-a.pct);
+  destroyChart(containerId);
+  if(!ranked.length){ el.innerHTML=`<p class="text-xs py-6 text-center" style="color:var(--text-faint)">No Account Manager targets on file yet.</p>`; return; }
+  el.style.height=(ranked.length*34+30)+'px';
+  const canvas=ensureCanvas(containerId);
+  const tc=cssVar('--chart-text'), grid=cssVar('--chart-grid');
+  const colorFor=p=>p>=100?cssVar('--success'):p>=60?cssVar('--warning'):cssVar('--danger');
+  CHART_INSTANCES[containerId] = new Chart(canvas, {
+    type:'bar',
+    data:{ labels: ranked.map(x=>x.am), datasets:[{ data: ranked.map(x=>x.pct),
+      backgroundColor: ranked.map(x=>colorFor(x.pct)), borderRadius:5, barThickness:16 }]},
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>`${ctx.parsed.x}% of target`}} },
+      scales:{
+        x:{ ticks:{color:tc, font:{size:9}, callback:(v)=>v+'%'}, grid:{color:grid} },
+        y:{ ticks:{color:tc, font:{size:10}}, grid:{display:false} }
+      },
+      onHover:(evt, els)=>{ evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+      onClick:(evt, elements)=>{
+        if(!elements.length) return;
+        const sel=document.getElementById('mgmtFilterAM');
+        sel.value=ranked[elements[0].index].am;
+        sel.dispatchEvent(new Event('change'));
+      }
+    }
   });
 }
 
