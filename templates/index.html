@@ -61,6 +61,18 @@
   .btn-primary:hover { background: var(--primary-hover); }
   .field { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 10px; }
   .field:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+  /* --- fresher icon-prefixed filter/sort controls (Tracker toolbar) --- */
+  .select-ico { position:relative; }
+  .select-ico > i { position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:11px; color:var(--text-faint); pointer-events:none; transition:color .15s ease; z-index:1; }
+  .select-ico:focus-within > i { color:var(--primary); }
+  .field-ico { background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:10px; padding-left:30px; transition:border-color .15s ease, box-shadow .15s ease, background .15s ease; }
+  .field-ico:hover { border-color:var(--text-faint); }
+  .field-ico:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+  select.field-ico { appearance:none; -webkit-appearance:none; cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b929c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 11px center; padding-right:28px; }
+  .tracker-toolbar { border-radius:16px; }
+  .toolbar-divider { width:1px; height:22px; background:var(--border); }
   .modal-overlay { background: rgba(15,20,30,.5); }
   ::-webkit-scrollbar { width:10px; height:10px; }
   ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius:8px; border:2px solid var(--surface); }
@@ -206,6 +218,29 @@
   }
   /* --- fresh, dynamic metric cards (top KPI strip) --- */
   .metric-card { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:16px 18px; display:flex; align-items:center; gap:14px; position:relative; overflow:hidden; transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease; }
+  /* --- FY target hero card: a Chart.js radial gauge + 3 KPI tiles, replacing the old
+     4-card-plus-flat-bar layout with a single composed "revenue dashboard" style card --- */
+  .metric-hero { border-radius:20px; padding:24px 26px; }
+  .metric-hero-grid { display:grid; grid-template-columns:168px 1fr; gap:28px; align-items:center; }
+  .metric-gauge-col { display:flex; flex-direction:column; align-items:center; text-align:center; }
+  .metric-gauge-wrap { position:relative; width:150px; height:150px; }
+  .metric-gauge-wrap canvas { width:150px !important; height:150px !important; }
+  #coverageGaugeChart { width:150px; height:150px; }
+  .metric-gauge-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
+  .metric-gauge-pct { font-size:27px; font-weight:700; letter-spacing:-0.02em; color:var(--text); font-variant-numeric:tabular-nums; }
+  .metric-gauge-caption { font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); margin-top:1px; }
+  .metric-gauge-title { font-size:11.5px; color:var(--text-muted); margin-top:12px; }
+  .metric-gauge-target { font-size:17px; font-weight:600; letter-spacing:-0.01em; color:var(--text); margin-top:1px; font-variant-numeric:tabular-nums; }
+  .metric-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .metric-tile { display:flex; align-items:center; gap:12px; background:var(--surface-2); border-radius:14px; padding:15px 16px; position:relative; overflow:hidden; }
+  .metric-tile::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--tile-accent,var(--primary)); }
+  .metric-tile-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:14px; background:color-mix(in srgb, var(--tile-accent) 16%, transparent); color:var(--tile-accent); flex-shrink:0; }
+  .metric-tile-label { font-size:10.5px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--text-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .metric-tile-value { font-size:19px; font-weight:600; letter-spacing:-0.01em; margin-top:2px; color:var(--text); font-variant-numeric:tabular-nums; }
+  @media (max-width:880px) {
+    .metric-hero-grid { grid-template-columns:1fr; justify-items:center; }
+    .metric-tiles { grid-template-columns:1fr; width:100%; }
+  }
   /* --- compact stat cards: KPI strips across Analytics / Management, AWS-console style
      (a colored accent bar + small-caps label + large tabular value) instead of plain text --- */
   .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:13px 16px 13px 18px; position:relative; overflow:hidden; box-shadow:0 1px 2px var(--shadow); transition: box-shadow .18s ease, transform .18s ease; }
@@ -394,47 +429,35 @@
 
       <!-- Metric strip -->
       <div id="metricStripWrap" class="px-6 pt-6">
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div class="metric-card" style="--metric-accent:var(--primary);--metric-soft:var(--primary-soft)">
-            <div class="metric-icon"><i class="fa-solid fa-bullseye"></i></div>
-            <div class="min-w-0">
-              <p class="metric-label" id="metricTargetLabel">Full-Year 2026 Target</p>
-              <p id="metricTarget" class="metric-value">–</p>
+        <div class="card elev metric-hero">
+          <div class="metric-hero-grid">
+            <div class="metric-gauge-col">
+              <div class="metric-gauge-wrap">
+                <div id="coverageGaugeChart"></div>
+                <div class="metric-gauge-center">
+                  <p id="coveragePct" class="metric-gauge-pct">–</p>
+                  <p class="metric-gauge-caption">covered</p>
+                </div>
+              </div>
+              <p class="metric-gauge-title"><i class="fa-solid fa-bullseye mr-1" style="color:var(--primary)"></i><span id="metricTargetLabel">Full-Year 2026 Target</span></p>
+              <p id="metricTarget" class="metric-gauge-target">–</p>
+            </div>
+            <div class="metric-tiles">
+              <div class="metric-tile" style="--tile-accent:var(--success)">
+                <div class="metric-tile-icon"><i class="fa-solid fa-circle-check"></i></div>
+                <div class="min-w-0"><p class="metric-tile-label">Achieved (YTD)</p><p id="metricAchieved" class="metric-tile-value">–</p></div>
+              </div>
+              <div class="metric-tile" style="--tile-accent:#12b5cb">
+                <div class="metric-tile-icon"><i class="fa-solid fa-layer-group"></i></div>
+                <div class="min-w-0"><p class="metric-tile-label">2026 Pipeline + Recurring</p><p id="metricPipeline" class="metric-tile-value">–</p></div>
+              </div>
+              <div class="metric-tile" style="--tile-accent:var(--danger)">
+                <div class="metric-tile-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
+                <div class="min-w-0"><p class="metric-tile-label">Remaining Gap</p><p id="metricGap" class="metric-tile-value">–</p></div>
+              </div>
             </div>
           </div>
-          <div class="metric-card" style="--metric-accent:var(--success);--metric-soft:color-mix(in srgb, var(--success) 16%, transparent)">
-            <div class="metric-icon"><i class="fa-solid fa-circle-check"></i></div>
-            <div class="min-w-0">
-              <p class="metric-label">Achieved (YTD)</p>
-              <p id="metricAchieved" class="metric-value" style="color:var(--success)">–</p>
-            </div>
-          </div>
-          <div class="metric-card" style="--metric-accent:#12b5cb;--metric-soft:rgba(18,181,203,.16)">
-            <div class="metric-icon"><i class="fa-solid fa-layer-group"></i></div>
-            <div class="min-w-0">
-              <p class="metric-label">2026 Pipeline + Recurring</p>
-              <p id="metricPipeline" class="metric-value" style="color:#12b5cb">–</p>
-            </div>
-          </div>
-          <div class="metric-card" style="--metric-accent:var(--danger);--metric-soft:var(--danger-soft)">
-            <div class="metric-icon"><i class="fa-solid fa-arrow-trend-down"></i></div>
-            <div class="min-w-0">
-              <p class="metric-label">Remaining Gap</p>
-              <p id="metricGap" class="metric-value" style="color:var(--danger)">–</p>
-            </div>
-          </div>
-        </div>
-        <div class="card elev p-5 mt-4" style="border-radius:18px">
-          <div class="flex items-center justify-between mb-3">
-            <p class="text-sm font-medium" style="color:var(--text)"><i class="fa-solid fa-gauge-high mr-1.5" style="color:var(--primary)"></i>Coverage toward full-year 2026 target</p>
-            <p id="coveragePct" class="text-sm font-semibold" style="color:var(--primary)"></p>
-          </div>
-          <div class="w-full rounded-full overflow-hidden flex" style="height:16px;background:var(--surface-3)">
-            <div id="covAchieved" class="cov-seg" style="width:0%;background:var(--success)" title="Achieved"></div>
-            <div id="covRecurring" class="cov-seg" style="width:0%;background:#12b5cb" title="Recurring"></div>
-            <div id="covPipeline" class="cov-seg" style="width:0%;background:var(--primary)" title="2026 Pipeline"></div>
-          </div>
-          <div id="coverageLegend" class="flex flex-wrap gap-2 mt-3"></div>
+          <div id="coverageLegend" class="flex flex-wrap gap-2 mt-4"></div>
         </div>
       </div>
 
@@ -577,26 +600,39 @@
 
       <!-- ============ TRACKER ============ -->
       <section id="tab-tracker" class="tab-panel active px-8 py-7">
-        <div class="flex flex-wrap items-center gap-2 mb-4">
-          <div class="relative">
-            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs" style="color:var(--text-faint)"></i>
-            <input id="searchInput" type="text" placeholder="Search opportunity or customer..." class="field pl-8 pr-3 py-2 text-sm w-64">
+        <div class="card elev tracker-toolbar px-4 py-3 mb-4 flex flex-wrap items-center gap-2.5">
+          <div class="select-ico">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="searchInput" type="text" placeholder="Search opportunity or customer..." class="field-ico py-2 pr-3 text-sm w-64">
           </div>
-          <select id="filterAM" class="field text-sm px-3 py-2"><option value="">All Account Managers</option></select>
-          <select id="filterPillar" class="field text-sm px-3 py-2"><option value="">All Pillars</option></select>
-          <select id="filterStage" class="field text-sm px-3 py-2"><option value="">All Stages</option></select>
-          <button id="clearFilters" class="text-sm px-3 py-2 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
+          <span class="toolbar-divider"></span>
+          <div class="select-ico">
+            <i class="fa-solid fa-user"></i>
+            <select id="filterAM" class="field-ico text-sm py-2"><option value="">All Account Managers</option></select>
+          </div>
+          <div class="select-ico">
+            <i class="fa-solid fa-layer-group"></i>
+            <select id="filterPillar" class="field-ico text-sm py-2"><option value="">All Pillars</option></select>
+          </div>
+          <div class="select-ico">
+            <i class="fa-solid fa-flag"></i>
+            <select id="filterStage" class="field-ico text-sm py-2"><option value="">All Stages</option></select>
+          </div>
+          <button id="clearFilters" class="text-sm px-2.5 py-2 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
           <div class="flex-1"></div>
-          <select id="sortSelect" class="field text-sm px-3 py-2" title="Sort opportunities">
-            <option value="progress_desc">Sort: Progress (High → Low)</option>
-            <option value="progress_asc">Progress (Low → High)</option>
-            <option value="value_desc">TCV (High → Low)</option>
-            <option value="value_asc">TCV (Low → High)</option>
-            <option value="rev_desc">Rev 2026 (High → Low)</option>
-            <option value="rev_asc">Rev 2026 (Low → High)</option>
-            <option value="name_asc">Name (A → Z)</option>
-          </select>
-          <button id="exportPdfBtn" class="text-sm card px-4 py-2 transition" style="color:var(--text)" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='var(--surface)'"><i class="fa-solid fa-file-pdf mr-1.5" style="color:var(--danger)"></i>Export PDF</button>
+          <div class="select-ico">
+            <i class="fa-solid fa-arrow-down-wide-short"></i>
+            <select id="sortSelect" class="field-ico text-sm py-2" title="Sort opportunities">
+              <option value="progress_desc">Sort: Progress (High → Low)</option>
+              <option value="progress_asc">Progress (Low → High)</option>
+              <option value="value_desc">TCV (High → Low)</option>
+              <option value="value_asc">TCV (Low → High)</option>
+              <option value="rev_desc">Rev 2026 (High → Low)</option>
+              <option value="rev_asc">Rev 2026 (Low → High)</option>
+              <option value="name_asc">Name (A → Z)</option>
+            </select>
+          </div>
+          <button id="exportPdfBtn" class="text-sm px-4 py-2 rounded-lg transition" style="color:var(--text);border:1px solid var(--border)" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'"><i class="fa-solid fa-file-pdf mr-1.5" style="color:var(--danger)"></i>Export PDF</button>
           <button id="addDealBtn" class="btn-primary text-sm px-4 py-2 rounded-lg transition"><i class="fa-solid fa-plus mr-1.5"></i>Add Opportunity</button>
         </div>
 
@@ -1824,16 +1860,33 @@ function updateMetrics(){
   document.getElementById('metricAchieved').textContent=fmtIDR(achieved);
   document.getElementById('metricPipeline').textContent=fmtIDR(pipeline2026+recurring);
   document.getElementById('metricGap').textContent=fmtIDR(gap);
-  // Stacked coverage bar
-  const pct=v=>target>0?Math.max(0,Math.min(100,v/target*100)):0;
-  document.getElementById('covAchieved').style.width=pct(achieved)+'%';
-  document.getElementById('covRecurring').style.width=pct(recurring)+'%';
-  document.getElementById('covPipeline').style.width=pct(pipeline2026)+'%';
-  document.getElementById('coveragePct').textContent=target>0?`${Math.round(covered/target*100)}% covered`:'';
+  document.getElementById('coveragePct').textContent=target>0?`${Math.round(covered/target*100)}%`:'–';
+  renderCoverageGauge(achieved, recurring, pipeline2026, gap);
   document.getElementById('coverageLegend').innerHTML=[
     ['var(--success)','Achieved',achieved],['#12b5cb','Recurring',recurring],
     ['var(--primary)','2026 Pipeline',pipeline2026],['var(--text-faint)','Remaining gap',gap]
   ].map(([c,l,v])=>`<span class="cov-pill"><span class="w-2 h-2 rounded-full" style="background:${c}"></span>${l}: <b style="color:var(--text)">${fmtIDR(v)}</b></span>`).join('');
+}
+
+function renderCoverageGauge(achieved, recurring, pipeline2026, gap){
+  const containerId='coverageGaugeChart';
+  destroyChart(containerId);
+  const canvas=ensureCanvas(containerId);
+  const total=achieved+recurring+pipeline2026+gap;
+  const data = total>0 ? [achieved, recurring, pipeline2026, gap] : [1];
+  const colors = total>0 ? [cssVar('--success'), '#12b5cb', cssVar('--primary'), cssVar('--surface-3')] : [cssVar('--surface-3')];
+  CHART_INSTANCES[containerId] = new Chart(canvas, {
+    type:'doughnut',
+    data:{ datasets:[{ data, backgroundColor:colors, borderWidth:0, borderRadius:4, spacing:2 }] },
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'76%', rotation:-90, circumference:360,
+      animation:{ animateRotate:true, duration:600 },
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(ctx)=>{
+        const labels=['Achieved','Recurring','2026 Pipeline','Remaining gap'];
+        return `${labels[ctx.dataIndex]||''}: ${fmtIDR(ctx.parsed)}`;
+      } } } }
+    }
+  });
 }
 
 /* ================= DEALS ================= */

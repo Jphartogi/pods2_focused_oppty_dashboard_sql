@@ -6,6 +6,18 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.1.1] - 2026-09-17 (branch: v2.0)
+### Changed
+- **Tracker toolbar** (search / Account Manager / Pillar / Stage / Sort) redone as
+  a single card-framed bar with icon-prefixed fields, a custom chevron on every
+  select, and a focus ring on click - replacing the plain unstyled row of
+  native inputs.
+- **FY Target strip** replaced with a single "hero" card: a Chart.js radial
+  gauge showing % of full-year target covered (Achieved / Recurring / 2026
+  Pipeline / Remaining gap as its ring segments, with a matching legend)
+  alongside three KPI tiles - a Stripe/AWS-console-style composed summary
+  instead of four flat cards stacked above a plain progress bar.
+
 ## [2.1.0] - 2026-09-17 (branch: v2.0)
 ### Added
 - **Notifications**: a bell icon in the top bar (badge = open item count) lists,
