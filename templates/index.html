@@ -20,40 +20,48 @@
 </script>
 <style>
   :root {
-    --bg:#f4f5f7; --surface:#ffffff; --surface-2:#f0f2f5; --surface-3:#e5e8ed;
-    --border:#e2e5e9; --text:#16191f; --text-muted:#545b64; --text-faint:#828a94;
+    --bg:#f2f3f5; --surface:#ffffff; --surface-2:#f8f9fb; --surface-3:#eef0f3;
+    --border:#eceef1; --text:#16191f; --text-muted:#545b64; --text-faint:#8b929c;
     --primary:#0972d3; --primary-hover:#075fb0; --primary-soft:#eaf3fd; --on-primary:#ffffff;
     --nav-active-bg:#eaf3fd; --nav-active-text:#075fb0;
     --navy:#16222c; --navy-2:#1f2e3d;
     --success:#037f51; --warning:#8a5900; --danger:#cc1b1b; --danger-soft:#fbe9e7;
-    --shadow:rgba(22,25,31,.10); --shadow-2:rgba(22,25,31,.22);
-    --chart-grid:#e5e8ed; --chart-text:#545b64;
+    --shadow:rgba(15,20,30,.05); --shadow-2:rgba(15,20,30,.13);
+    --chart-grid:#eceef1; --chart-text:#545b64;
   }
   [data-theme="dark"] {
-    --bg:#0f1b2a; --surface:#152230; --surface-2:#1c2c3d; --surface-3:#26384c;
-    --border:#324459; --text:#e9edf1; --text-muted:#9aa7b6; --text-faint:#748094;
+    --bg:#0d1826; --surface:#141f2d; --surface-2:#1a2836; --surface-3:#243547;
+    --border:#22303f; --text:#e9edf1; --text-muted:#9aa7b6; --text-faint:#6d7a8c;
     --primary:#539fe5; --primary-hover:#7cb9f0; --primary-soft:#1b3350; --on-primary:#0f1b2a;
     --nav-active-bg:#1b3350; --nav-active-text:#7cb9f0;
     --navy:#0a141f; --navy-2:#111f2e;
     --success:#4fd39e; --warning:#e0a336; --danger:#f27272; --danger-soft:#3a2321;
-    --shadow:rgba(0,0,0,.35); --shadow-2:rgba(0,0,0,.55);
-    --chart-grid:#26384c; --chart-text:#9aa7b6;
+    --shadow:rgba(0,0,0,.28); --shadow-2:rgba(0,0,0,.5);
+    --chart-grid:#22303f; --chart-text:#9aa7b6;
   }
   html, body { background: var(--bg); color: var(--text); }
   body { font-family:'Inter','Amazon Ember','Helvetica Neue',Roboto,Arial,sans-serif; -webkit-font-smoothing: antialiased; letter-spacing:-0.003em; }
   h1,h2,.metric-value { letter-spacing:-0.02em; }
+  .page-title { font-size:22px; font-weight:600; letter-spacing:-0.02em; color:var(--text); }
+  .section-label { font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); }
   /* numbers line up in tables */
   .tabular { font-variant-numeric: tabular-nums; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
-  .elev { box-shadow: 0 1px 2px 0 var(--shadow), 0 1px 3px 1px var(--shadow); }
-  .nav-link { color: var(--text-muted); border-radius: 0 24px 24px 0; margin-right: 12px; }
+  /* Cards separate from the page purely through the surface/bg tone shift and
+     a soft, barely-there shadow - not a hard outline everywhere, so a page
+     full of cards reads as one composed layout instead of a pile of boxes. */
+  .card { background: var(--surface); border: 1px solid transparent; border-radius: 16px; box-shadow: 0 1px 2px var(--shadow); }
+  [data-theme="dark"] .card { border-color: var(--border); box-shadow: none; }
+  .card.flat { box-shadow: none; background: var(--surface-2); }
+  .elev { box-shadow: 0 1px 2px var(--shadow), 0 6px 20px -8px var(--shadow-2); }
+  [data-theme="dark"] .elev { box-shadow: 0 1px 2px var(--shadow); }
+  .nav-link { color: var(--text-muted); border-radius: 10px; margin-right: 12px; }
   .nav-link:hover { background: var(--surface-2); color: var(--text); }
   .nav-link.active { background: var(--nav-active-bg); color: var(--nav-active-text); font-weight: 500; }
-  .btn-primary { background: var(--primary); color: var(--on-primary); }
+  .btn-primary { background: var(--primary); color: var(--on-primary); border-radius:10px; }
   .btn-primary:hover { background: var(--primary-hover); }
-  .field { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 8px; }
+  .field { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 10px; }
   .field:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
-  .modal-overlay { background: rgba(32,33,36,.6); }
+  .modal-overlay { background: rgba(15,20,30,.5); }
   ::-webkit-scrollbar { width:10px; height:10px; }
   ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius:8px; border:2px solid var(--surface); }
   input[type=range] { accent-color: var(--primary); }
@@ -61,7 +69,7 @@
   .tab-panel.active { display:block; animation: fade .2s ease; }
   @keyframes fade { from { opacity:0; transform: translateY(4px);} to { opacity:1; transform:none;} }
   .stage-dot { width:8px; height:8px; border-radius:9999px; display:inline-block; }
-  .chip { border:1px solid var(--border); border-radius:9999px; padding:2px 10px; font-size:11px; font-weight:500; }
+  .chip { border:1px solid var(--border); background:var(--surface-2); border-radius:9999px; padding:2px 10px; font-size:11px; font-weight:500; }
   .drawer { transition: transform .25s ease; }
   .row-click { cursor:pointer; }
   .row-click:hover { background: var(--surface-2); }
@@ -109,7 +117,7 @@
   .proof-num { width:22px; height:22px; border-radius:9999px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; }
   /* --- light motion: cards lift slightly, panels fade in --- */
   .card { transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease; }
-  .card.elev:hover { box-shadow: 0 1px 3px var(--shadow), 0 4px 12px var(--shadow); }
+  .card.elev:hover { box-shadow: 0 2px 4px var(--shadow), 0 10px 24px -8px var(--shadow-2); }
   .btn-primary, .nav-link, .chip, button { transition: background .15s ease, color .15s ease, opacity .15s ease; }
   @keyframes riseIn { from { opacity:0; transform: translateY(6px);} to { opacity:1; transform:none;} }
   .tab-panel.active { animation: riseIn .22s ease both; }
@@ -382,7 +390,7 @@
       </div>
 
       <!-- ============ MANAGEMENT VIEW ============ -->
-      <section id="tab-management" class="tab-panel px-6 py-5">
+      <section id="tab-management" class="tab-panel px-8 py-7">
         <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
           <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-briefcase mr-1" style="color:var(--primary)"></i>Executive briefing</span>
           <select id="mgmtFilterAM" class="field text-sm px-3 py-1.5"><option value="">All Account Managers</option></select>
@@ -447,7 +455,7 @@
       </section>
 
       <!-- ============ WEEKLY FOLLOW-UPS (admin + management) ============ -->
-      <section id="tab-weeklymeeting" class="tab-panel px-6 py-5">
+      <section id="tab-weeklymeeting" class="tab-panel px-8 py-7">
         <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
           <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-people-arrows mr-1" style="color:var(--primary)"></i>Weekly Meeting prep</span>
           <select id="wmTeamFilter" class="field text-sm px-3 py-1.5">
@@ -501,7 +509,7 @@
       </section>
 
       <!-- ============ MY TEAM TASKS (solution / project / product) ============ -->
-      <section id="tab-myteamtasks" class="tab-panel px-6 py-5">
+      <section id="tab-myteamtasks" class="tab-panel px-8 py-7">
         <div class="card elev px-4 py-3 mb-4">
           <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-list-check mr-1" style="color:var(--primary)"></i>Your team's follow-ups across every opportunity</span>
         </div>
@@ -519,7 +527,7 @@
       </section>
 
       <!-- ============ TRACKER ============ -->
-      <section id="tab-tracker" class="tab-panel active px-6 py-5">
+      <section id="tab-tracker" class="tab-panel active px-8 py-7">
         <div class="flex flex-wrap items-center gap-2 mb-4">
           <div class="relative">
             <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs" style="color:var(--text-faint)"></i>
@@ -550,7 +558,7 @@
       </section>
 
       <!-- ============ CALENDAR ============ -->
-      <section id="tab-calendar" class="tab-panel px-6 py-5">
+      <section id="tab-calendar" class="tab-panel px-8 py-7">
         <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
           <button id="calPrev" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-left"></i></button>
           <button id="calToday" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)">Today</button>
@@ -609,7 +617,7 @@
       </div>
 
       <!-- ============ ANALYTICS ============ -->
-      <section id="tab-analytics" class="tab-panel px-6 py-5">
+      <section id="tab-analytics" class="tab-panel px-8 py-7">
         <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
           <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-filter mr-1" style="color:var(--primary)"></i>Filter analytics</span>
           <select id="aFilterAM" class="field text-sm px-3 py-1.5"><option value="">All AMs</option></select>
@@ -742,7 +750,7 @@
       </section>
 
       <!-- ============ ACCOUNT COVERAGE ============ -->
-      <section id="tab-coverage" class="tab-panel px-6 py-5">
+      <section id="tab-coverage" class="tab-panel px-8 py-7">
         <div class="flex flex-wrap items-center gap-1.5 mb-4 card elev p-1.5" style="width:fit-content">
           <button data-ctab="coverage" class="ctab-btn active">Account Coverage</button>
           <button data-ctab="workload" class="ctab-btn">AM Workload</button>
@@ -911,7 +919,7 @@
       </section>
 
       <!-- ============ SETTINGS ============ -->
-      <section id="tab-settings" class="tab-panel px-6 py-5">
+      <section id="tab-settings" class="tab-panel px-8 py-7">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div class="card elev p-5 lg:col-span-2">
             <p class="text-sm font-medium mb-1">Full-Year 2026 Target &amp; Progress</p>
@@ -1006,7 +1014,7 @@
       </section>
 
       <!-- ============ LOGIN LOGS (admin only) ============ -->
-      <section id="tab-loginlogs" class="tab-panel px-6 py-5">
+      <section id="tab-loginlogs" class="tab-panel px-8 py-7">
         <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
           <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-user-clock mr-1" style="color:var(--primary)"></i>Sign-in history</span>
           <span id="loginLogsCount" class="chip" style="color:var(--text-muted)">0 logs</span>
@@ -1037,7 +1045,7 @@
       </section>
 
       <!-- ============ PERFORMANCE (actuals from the monthly ACH workbook) ============ -->
-      <section id="tab-performance" class="tab-panel px-6 py-5">
+      <section id="tab-performance" class="tab-panel px-8 py-7">
         <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
           <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-gauge-high mr-1" style="color:var(--primary)"></i>Actual performance</span>
           <span id="perfSnapshot" class="chip" style="color:var(--text-muted)">no data</span>
@@ -1153,7 +1161,7 @@
       </section>
 
       <!-- ============ CONFIGURATION ============ -->
-      <section id="tab-configuration" class="tab-panel px-6 py-5">
+      <section id="tab-configuration" class="tab-panel px-8 py-7">
         <p class="text-xs mb-4" style="color:var(--text-muted)">Manage the lists that drive the dropdowns across the app. Renaming an item here does not rewrite existing opportunities — update those from the Tracker if needed.</p>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1822,6 +1830,13 @@ function renderDealsTable(){
       columns: dealsTableColumns(),
     });
     dealsTabulator.on("rowDblClick", (e, row)=>openDetail(row.getData().id));
+    // Tabulator can measure its container before layout has fully settled on
+    // first paint (e.g. right after login), computing column widths against
+    // an incorrect size and collapsing almost everything. A redraw once the
+    // browser has actually finished laying out the page fixes it.
+    dealsTabulator.on("tableBuilt", ()=>{
+      requestAnimationFrame(()=>requestAnimationFrame(()=>dealsTabulator.redraw(true)));
+    });
   } else {
     dealsTabulator.setData(rows);
   }
