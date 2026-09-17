@@ -6,6 +6,24 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.1.0] - 2026-09-17 (branch: v2.0)
+### Added
+- **Notifications**: a bell icon in the top bar (badge = open item count) lists,
+  per signed-in user, their own overdue/soon-due Team Tasks, any task that
+  `@mentions` their full name in its text or note, and - for account managers -
+  their own opportunities' target PO/revenue dates coming up. Clicking an item
+  jumps straight to the opportunity or the task on the Weekly Meeting board and
+  flashes it. Computed live via `GET /api/notifications`, polled every 60s.
+### Changed
+- The FY Target / Achieved / 2026 Pipeline+Recurring / Gap strip now only shows
+  on Tracker, Calendar and Management (where it's actually relevant) instead of
+  on every tab.
+- Every plain KPI/stat card across Analytics, Management, Weekly Meeting, My
+  Team Tasks, Calendar, Performance and AM Workload now uses a shared
+  `.stat-card` treatment (colored accent bar, small-caps label, larger tabular
+  value) instead of a flat `<p>`/`<p>` pair, for a more consistent, AWS
+  console-style analytics look.
+
 ## [2.0.0] - 2026-09-16 (branch: v2.0, in progress)
 ### Changed
 - **Postgres instead of SQLite.** Schema and all ~140 raw-SQL call sites

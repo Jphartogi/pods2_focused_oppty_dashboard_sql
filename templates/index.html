@@ -149,6 +149,37 @@
   .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 10px -2px var(--shadow-2); }
   #searchTriggerBtn { transition: border-color .15s ease, background .15s ease; cursor:pointer; }
   #searchTriggerBtn:hover { border-color: var(--primary); background: var(--surface); }
+  /* --- notifications bell + dropdown ---
+     The panel lives inside header.app-topbar, which redeclares --surface/--text/etc
+     to its own dark-chrome palette (see header.app-topbar above) so the header itself
+     always reads dark regardless of theme. Without resetting those tokens back to the
+     page's real light/dark palette here, the dropdown would inherit the chrome's navy
+     colors instead of a normal card surface. */
+  #notifPanel {
+    --bg:#f2f3f5; --surface:#ffffff; --surface-2:#f8f9fb; --surface-3:#eef0f3;
+    --border:#eceef1; --text:#16191f; --text-muted:#545b64; --text-faint:#8b929c;
+    --primary:#0972d3; --primary-hover:#075fb0; --primary-soft:#eaf3fd; --on-primary:#ffffff;
+    --success:#037f51; --warning:#8a5900; --danger:#cc1b1b; --danger-soft:#fbe9e7;
+    --shadow:rgba(15,20,30,.05); --shadow-2:rgba(15,20,30,.13);
+  }
+  [data-theme="dark"] #notifPanel {
+    --bg:#0d1826; --surface:#141f2d; --surface-2:#1a2836; --surface-3:#243547;
+    --border:#22303f; --text:#e9edf1; --text-muted:#9aa7b6; --text-faint:#6d7a8c;
+    --primary:#539fe5; --primary-hover:#7cb9f0; --primary-soft:#1b3350; --on-primary:#0f1b2a;
+    --success:#4fd39e; --warning:#e0a336; --danger:#f27272; --danger-soft:#3a2321;
+    --shadow:rgba(0,0,0,.28); --shadow-2:rgba(0,0,0,.5);
+  }
+  .notif-badge { position:absolute; top:2px; right:2px; min-width:16px; height:16px; padding:0 4px; border-radius:9999px; background:var(--danger); color:#fff; font-size:9.5px; font-weight:700; line-height:16px; text-align:center; }
+  .notif-panel { position:absolute; top:calc(100% + 10px); right:0; width:360px; max-height:70vh; display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow:0 4px 10px var(--shadow), 0 16px 36px -12px var(--shadow-2); z-index:60; overflow:hidden; }
+  .notif-panel-head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+  .notif-panel-list { overflow-y:auto; }
+  .notif-row { display:flex; gap:10px; padding:11px 16px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .12s ease; }
+  .notif-row:last-child { border-bottom:none; }
+  .notif-row:hover { background:var(--surface-2); }
+  .notif-dot { width:8px; height:8px; border-radius:9999px; margin-top:5px; flex-shrink:0; }
+  .notif-empty { padding:28px 16px; text-align:center; color:var(--text-faint); font-size:12.5px; }
+  @keyframes flashHighlight { 0%,100% { background:var(--surface-2); } 35% { background:var(--primary-soft); } }
+  .flash-highlight { animation: flashHighlight 1.6s ease; }
   /* --- command palette (feature search) --- */
   #cmdResults .cmd-row { cursor:pointer; transition: background .1s ease; }
   #cmdResults .cmd-row:hover, #cmdResults .cmd-row.active { background: var(--surface-2); }
@@ -175,6 +206,14 @@
   }
   /* --- fresh, dynamic metric cards (top KPI strip) --- */
   .metric-card { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:16px 18px; display:flex; align-items:center; gap:14px; position:relative; overflow:hidden; transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease; }
+  /* --- compact stat cards: KPI strips across Analytics / Management, AWS-console style
+     (a colored accent bar + small-caps label + large tabular value) instead of plain text --- */
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:13px 16px 13px 18px; position:relative; overflow:hidden; box-shadow:0 1px 2px var(--shadow); transition: box-shadow .18s ease, transform .18s ease; }
+  [data-theme="dark"] .stat-card { box-shadow:none; }
+  .stat-card:hover { box-shadow:0 4px 12px -3px var(--shadow-2); transform:translateY(-1px); }
+  .stat-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--stat-accent, var(--primary)); }
+  .stat-label { font-size:10.5px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--text-faint); }
+  .stat-value { font-size:19px; font-weight:600; letter-spacing:-0.01em; margin-top:3px; font-variant-numeric:tabular-nums; color:var(--stat-accent, var(--text)); }
   .metric-card::before { content:''; position:absolute; inset:0 0 auto 0; height:3px; background:linear-gradient(90deg,var(--metric-accent),transparent 85%); }
   .metric-card:hover { transform:translateY(-3px); box-shadow:0 10px 24px -8px var(--shadow-2); border-color:var(--metric-accent); }
   .metric-icon { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; background:var(--metric-soft); color:var(--metric-accent); }
@@ -278,6 +317,16 @@
     <button id="searchTriggerBtnMobile" type="button" class="icon-btn lg:hidden" title="Search (Ctrl+K)"><i class="fa-solid fa-magnifying-glass"></i></button>
     <button id="quickConfigBtn" title="Configuration" class="icon-btn" style="display:none"><i class="fa-solid fa-list-check"></i></button>
     <button id="quickSettingsBtn" title="Settings" class="icon-btn" style="display:none"><i class="fa-solid fa-gear"></i></button>
+    <div class="relative">
+      <button id="notifBtn" title="Notifications" class="icon-btn relative"><i class="fa-solid fa-bell"></i><span id="notifBadge" class="notif-badge hidden">0</span></button>
+      <div id="notifPanel" class="notif-panel hidden">
+        <div class="notif-panel-head">
+          <span class="text-sm font-medium" style="color:var(--text)">Notifications</span>
+          <span id="notifPanelCount" class="text-[11px]" style="color:var(--text-faint)"></span>
+        </div>
+        <div id="notifPanelList" class="notif-panel-list"></div>
+      </div>
+    </div>
     <button id="themeToggle" title="Toggle theme" class="icon-btn"><i id="themeIcon" class="fa-solid fa-moon"></i></button>
     <div class="flex items-center gap-2 pl-1" style="border-left:1px solid var(--border)">
       <div class="text-right hidden sm:block pl-2">
@@ -400,12 +449,12 @@
 
         <!-- Financial summary -->
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">FY2026 Target</p><p id="mgTarget" class="text-lg font-medium mt-1">–</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Achieved YTD</p><p id="mgAchieved" class="text-lg font-medium mt-1" style="color:var(--success)">–</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Recurring</p><p id="mgRecurring" class="text-lg font-medium mt-1" style="color:#12b5cb">–</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">2026 Pipeline</p><p id="mgPipeline" class="text-lg font-medium mt-1" style="color:var(--primary)">–</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Remaining Gap</p><p id="mgGap" class="text-lg font-medium mt-1" style="color:var(--danger)">–</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Framework Health</p><p id="mgFramework" class="text-lg font-medium mt-1">–</p></div>
+          <div class="stat-card" style="--stat-accent:var(--text-muted)"><p class="stat-label">FY2026 Target</p><p id="mgTarget" class="stat-value">–</p></div>
+          <div class="stat-card" style="--stat-accent:var(--success)"><p class="stat-label">Achieved YTD</p><p id="mgAchieved" class="stat-value">–</p></div>
+          <div class="stat-card" style="--stat-accent:#12b5cb"><p class="stat-label">Recurring</p><p id="mgRecurring" class="stat-value">–</p></div>
+          <div class="stat-card" style="--stat-accent:var(--primary)"><p class="stat-label">2026 Pipeline</p><p id="mgPipeline" class="stat-value">–</p></div>
+          <div class="stat-card" style="--stat-accent:var(--danger)"><p class="stat-label">Remaining Gap</p><p id="mgGap" class="stat-value">–</p></div>
+          <div class="stat-card" style="--stat-accent:var(--text-muted)"><p class="stat-label">Framework Health</p><p id="mgFramework" class="stat-value">–</p></div>
         </div>
 
         <!-- At-a-glance status line: expand only what needs attention -->
@@ -487,10 +536,10 @@
           </div>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <div id="wmKpiBlockedCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-ban mr-1"></i>Blocked</p><p id="wmKpiBlocked" class="text-xl font-medium mt-1" style="color:var(--danger)">0</p></div>
-          <div id="wmKpiDiscussCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-comments mr-1"></i>Needs discussion</p><p id="wmKpiDiscuss" class="text-xl font-medium mt-1" style="color:var(--warning)">0</p></div>
-          <div id="wmKpiProgressCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">In progress</p><p id="wmKpiProgress" class="text-xl font-medium mt-1" style="color:var(--primary)">0</p></div>
-          <div id="wmKpiDoneCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">Done</p><p id="wmKpiDone" class="text-xl font-medium mt-1" style="color:var(--success)">0</p></div>
+          <div id="wmKpiBlockedCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--danger)"><p class="stat-label"><i class="fa-solid fa-ban mr-1"></i>Blocked</p><p id="wmKpiBlocked" class="stat-value">0</p></div>
+          <div id="wmKpiDiscussCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--warning)"><p class="stat-label"><i class="fa-solid fa-comments mr-1"></i>Needs discussion</p><p id="wmKpiDiscuss" class="stat-value">0</p></div>
+          <div id="wmKpiProgressCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--primary)"><p class="stat-label">In progress</p><p id="wmKpiProgress" class="stat-value">0</p></div>
+          <div id="wmKpiDoneCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--success)"><p class="stat-label">Done</p><p id="wmKpiDone" class="stat-value">0</p></div>
         </div>
         <p id="wmFilterNote" class="text-[11px] mb-3" style="color:var(--primary);display:none"><i class="fa-solid fa-filter mr-1"></i><span id="wmFilterNoteText"></span> — <button id="wmFilterClear" type="button" class="underline">clear</button></p>
         <div class="card elev p-5">
@@ -515,10 +564,10 @@
         </div>
         <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Update the status and note as you work — sales sees this instantly. You can't edit anything else on these opportunities. Click a KPI to filter.</p>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <div id="mtKpiPendingCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">Pending</p><p id="mtKpiPending" class="text-xl font-medium mt-1" style="color:var(--primary)">0</p></div>
-          <div id="mtKpiBlockedCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-ban mr-1"></i>Blocked</p><p id="mtKpiBlocked" class="text-xl font-medium mt-1" style="color:var(--danger)">0</p></div>
-          <div id="mtKpiDiscussCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-comments mr-1"></i>Needs discussion</p><p id="mtKpiDiscuss" class="text-xl font-medium mt-1" style="color:var(--warning)">0</p></div>
-          <div id="mtKpiDoneCard" class="card elev p-3 clickable kpi-card"><p class="text-[11px]" style="color:var(--text-muted)">Done</p><p id="mtKpiDone" class="text-xl font-medium mt-1" style="color:var(--success)">0</p></div>
+          <div id="mtKpiPendingCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--primary)"><p class="stat-label">Pending</p><p id="mtKpiPending" class="stat-value">0</p></div>
+          <div id="mtKpiBlockedCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--danger)"><p class="stat-label"><i class="fa-solid fa-ban mr-1"></i>Blocked</p><p id="mtKpiBlocked" class="stat-value">0</p></div>
+          <div id="mtKpiDiscussCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--warning)"><p class="stat-label"><i class="fa-solid fa-comments mr-1"></i>Needs discussion</p><p id="mtKpiDiscuss" class="stat-value">0</p></div>
+          <div id="mtKpiDoneCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--success)"><p class="stat-label">Done</p><p id="mtKpiDone" class="stat-value">0</p></div>
         </div>
         <p id="mtFilterNote" class="text-[11px] mb-3" style="color:var(--primary);display:none"><i class="fa-solid fa-filter mr-1"></i><span id="mtFilterNoteText"></span> — <button id="mtFilterClear" type="button" class="underline">clear</button></p>
         <div class="card elev p-5">
@@ -574,11 +623,11 @@
           <label class="flex items-center gap-1.5 text-xs ml-2" style="color:var(--text-muted)"><input id="calHideDone" type="checkbox"> Hide completed</label>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-          <div id="calKpiAllCard" class="card elev p-3 clickable"><p class="text-[11px]" style="color:var(--text-muted)">Scheduled actions</p><p id="calKpiTotal" class="text-xl font-medium mt-1">0</p></div>
-          <div id="calKpiOverdueCard" class="card elev p-3 clickable"><p class="text-[11px]" style="color:var(--text-muted)"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Overdue</p><p id="calKpiOverdue" class="text-xl font-medium mt-1" style="color:var(--danger)">0</p></div>
-          <div id="calKpiProgressCard" class="card elev p-3 clickable"><p class="text-[11px]" style="color:var(--text-muted)">In progress</p><p id="calKpiProgress" class="text-xl font-medium mt-1" style="color:var(--primary)">0</p></div>
-          <div id="calKpiDoneCard" class="card elev p-3 clickable"><p class="text-[11px]" style="color:var(--text-muted)">Done</p><p id="calKpiDone" class="text-xl font-medium mt-1" style="color:var(--success)">0</p></div>
-          <div id="calKpiUndatedCard" class="card elev p-3 clickable"><p class="text-[11px]" style="color:var(--text-muted)">No date set</p><p id="calKpiUndated" class="text-xl font-medium mt-1" style="color:var(--text-muted)">0</p></div>
+          <div id="calKpiAllCard" class="stat-card clickable" style="--stat-accent:var(--text-muted)"><p class="stat-label">Scheduled actions</p><p id="calKpiTotal" class="stat-value">0</p></div>
+          <div id="calKpiOverdueCard" class="stat-card clickable" style="--stat-accent:var(--danger)"><p class="stat-label"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Overdue</p><p id="calKpiOverdue" class="stat-value">0</p></div>
+          <div id="calKpiProgressCard" class="stat-card clickable" style="--stat-accent:var(--primary)"><p class="stat-label">In progress</p><p id="calKpiProgress" class="stat-value">0</p></div>
+          <div id="calKpiDoneCard" class="stat-card clickable" style="--stat-accent:var(--success)"><p class="stat-label">Done</p><p id="calKpiDone" class="stat-value">0</p></div>
+          <div id="calKpiUndatedCard" class="stat-card clickable" style="--stat-accent:var(--text-muted)"><p class="stat-label">No date set</p><p id="calKpiUndated" class="stat-value">0</p></div>
         </div>
         <p id="calFilterNote" class="text-[11px] mb-3" style="color:var(--primary);display:none"><i class="fa-solid fa-filter mr-1"></i><span id="calFilterNoteText"></span> — <button id="calFilterClear" type="button" class="underline">clear</button></p>
         <div class="card elev p-4 mb-4">
@@ -641,13 +690,13 @@
         </div>
 
         <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Opportunities</p><p id="kpiCount" class="text-xl font-medium mt-1">0</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Pipeline (TCV)</p><p id="kpiValue" class="text-xl font-medium mt-1">–</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">2026 Rev</p><p id="kpiRev2026" class="text-xl font-medium mt-1" style="color:var(--primary)">–</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Weighted</p><p id="kpiWeighted" class="text-xl font-medium mt-1">–</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Avg Deal</p><p id="kpiAvg" class="text-xl font-medium mt-1">–</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Closed Won</p><p id="kpiClosed" class="text-xl font-medium mt-1" style="color:var(--success)">–</p></div>
-          <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Blocked</p><p id="kpiBlocked" class="text-xl font-medium mt-1" style="color:var(--danger)">0</p></div>
+          <div class="stat-card" style="--stat-accent:var(--text-muted)"><p class="stat-label">Opportunities</p><p id="kpiCount" class="stat-value">0</p></div>
+          <div class="stat-card" style="--stat-accent:var(--text)"><p class="stat-label">Pipeline (TCV)</p><p id="kpiValue" class="stat-value">–</p></div>
+          <div class="stat-card" style="--stat-accent:var(--primary)"><p class="stat-label">2026 Rev</p><p id="kpiRev2026" class="stat-value">–</p></div>
+          <div class="stat-card" style="--stat-accent:#12b5cb"><p class="stat-label">Weighted</p><p id="kpiWeighted" class="stat-value">–</p></div>
+          <div class="stat-card" style="--stat-accent:var(--text-muted)"><p class="stat-label">Avg Deal</p><p id="kpiAvg" class="stat-value">–</p></div>
+          <div class="stat-card" style="--stat-accent:var(--success)"><p class="stat-label">Closed Won</p><p id="kpiClosed" class="stat-value">–</p></div>
+          <div class="stat-card" style="--stat-accent:var(--danger)"><p class="stat-label">Blocked</p><p id="kpiBlocked" class="stat-value">0</p></div>
         </div>
 
         <div id="atab-gap" class="atab-pane">
@@ -1065,13 +1114,13 @@
         <div id="perfBody" style="display:none">
           <!-- Team scorecard -->
           <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
-            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Target FY26</p><p id="pfTarget" class="text-lg font-semibold mt-1 tabular">–</p></div>
-            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Actual YTD</p><p id="pfActual" class="text-lg font-semibold mt-1 tabular" style="color:var(--success)">–</p></div>
-            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">MRC (rest of yr)</p><p id="pfMrc" class="text-lg font-semibold mt-1 tabular" style="color:#12b5cb">–</p></div>
-            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">PO on Hand</p><p id="pfPo" class="text-lg font-semibold mt-1 tabular">–</p></div>
-            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Total Forecast</p><p id="pfForecast" class="text-lg font-semibold mt-1 tabular" style="color:var(--primary)">–</p></div>
-            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Gap to Target</p><p id="pfGap" class="text-lg font-semibold mt-1 tabular" style="color:var(--danger)">–</p></div>
-            <div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">Attainment</p><p id="pfAttain" class="text-lg font-semibold mt-1 tabular">–</p></div>
+            <div class="stat-card" style="--stat-accent:var(--text-muted)"><p class="stat-label">Target FY26</p><p id="pfTarget" class="stat-value tabular">–</p></div>
+            <div class="stat-card" style="--stat-accent:var(--success)"><p class="stat-label">Actual YTD</p><p id="pfActual" class="stat-value tabular">–</p></div>
+            <div class="stat-card" style="--stat-accent:#12b5cb"><p class="stat-label">MRC (rest of yr)</p><p id="pfMrc" class="stat-value tabular">–</p></div>
+            <div class="stat-card" style="--stat-accent:var(--text-muted)"><p class="stat-label">PO on Hand</p><p id="pfPo" class="stat-value tabular">–</p></div>
+            <div class="stat-card" style="--stat-accent:var(--primary)"><p class="stat-label">Total Forecast</p><p id="pfForecast" class="stat-value tabular">–</p></div>
+            <div class="stat-card" style="--stat-accent:var(--danger)"><p class="stat-label">Gap to Target</p><p id="pfGap" class="stat-value tabular">–</p></div>
+            <div class="stat-card" style="--stat-accent:var(--text-muted)"><p class="stat-label">Attainment</p><p id="pfAttain" class="stat-value tabular">–</p></div>
           </div>
 
           <!-- Pipeline coverage vs required -->
@@ -1312,7 +1361,7 @@
         <div id="teamTasksBody">
           <div id="teamTasksList" class="space-y-2 mb-3"></div>
           <div class="rounded-lg p-2.5" style="border:1px dashed var(--border)">
-            <input id="newTaskText" type="text" placeholder="What does the team need to do..." class="field w-full px-3 py-2 text-sm mb-2">
+            <input id="newTaskText" type="text" placeholder="What does the team need to do... (type @Full Name to notify someone)" class="field w-full px-3 py-2 text-sm mb-2">
             <div class="flex flex-wrap gap-2 items-center">
               <select id="newTaskTeam" class="field px-3 py-2 text-sm" style="width:120px">
                 <option value="solution">Solution</option>
@@ -1390,6 +1439,7 @@ let TOKEN = localStorage.getItem('dt_token');
 let ROLE = localStorage.getItem('dt_role');
 let USERNAME = localStorage.getItem('dt_username');
 let FULLNAME = localStorage.getItem('dt_fullname');
+let NOTIFICATIONS = [], notifPollTimer = null;
 let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[], squads:[], stages:[], am_targets:{}, am_achievements:{}, am_recurring:{}, current_achievement:0, recurring_revenue:0, max_login_logs:100 }, USERS = [], AMS = [], ASSIGNABLE_USERS = [];
 let COVERAGE = [];
 let timelineItemsDraft = [], confirmCallback = null, analyticsFilters = {};
@@ -1622,6 +1672,9 @@ async function enterApp(){
   if(ROLE==='admin') await loadUsers();
   // Management lands on the executive briefing; everyone else on the tracker
   switchTab(ROLE==='management' ? 'management' : CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE) ? 'myteamtasks' : 'tracker');
+  loadNotifications();
+  if(notifPollTimer) clearInterval(notifPollTimer);
+  notifPollTimer = setInterval(loadNotifications, 60000);
 }
 
 /* ================= TABS ================= */
@@ -1634,8 +1687,10 @@ function switchTab(tab){
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
-  // My Team Tasks and Weekly Meeting are focused worklists - the FY target / gap / coverage strip is noise there.
-  document.getElementById('metricStripWrap').style.display = (tab==='myteamtasks'||tab==='weeklymeeting'||tab==='coverage') ? 'none' : '';
+  // The FY target / achieved / pipeline / gap strip only matters where it's actually
+  // read against day-to-day work (Tracker, Calendar) or the exec summary (Management) -
+  // every other tab is a focused worklist or its own analytics page, where it's noise.
+  document.getElementById('metricStripWrap').style.display = ['tracker','calendar','management'].includes(tab) ? '' : 'none';
   refreshNavGroups(tab);
   if(tab==='analytics'){ switchAnalyticsTab('gap'); renderAnalytics(); }
   if(tab==='settings') renderSettings();
@@ -1647,6 +1702,71 @@ function switchTab(tab){
   if(tab==='coverage'){ renderCoverage(); renderAmWorkload(); }
   if(tab==='weeklymeeting') renderWeeklyMeeting();
   if(tab==='myteamtasks') renderMyTeamTasks();
+}
+
+/* ================= NOTIFICATIONS ================= */
+const NOTIF_META = {
+  overdue: { color:'var(--danger)', icon:'fa-triangle-exclamation' },
+  due_soon: { color:'var(--warning)', icon:'fa-clock' },
+  mention: { color:'var(--primary)', icon:'fa-at' },
+};
+function notifDueLabel(n){
+  if(n.days===null||n.days===undefined) return n.mentioned ? 'Mentioned you' : '';
+  if(n.days<0) return `${Math.abs(n.days)}d overdue`;
+  if(n.days===0) return 'Due today';
+  return `Due in ${n.days}d`;
+}
+async function loadNotifications(){
+  try { NOTIFICATIONS = await api('/api/notifications'); } catch(e){ return; }
+  const badge=document.getElementById('notifBadge');
+  const urgent=NOTIFICATIONS.filter(n=>n.type!=='mention'||n.mentioned).length;
+  if(urgent>0){ badge.textContent = urgent>99?'99+':String(urgent); badge.classList.remove('hidden'); }
+  else badge.classList.add('hidden');
+  if(!document.getElementById('notifPanel').classList.contains('hidden')) renderNotifPanel();
+}
+function renderNotifPanel(){
+  document.getElementById('notifPanelCount').textContent = NOTIFICATIONS.length ? `${NOTIFICATIONS.length} item${NOTIFICATIONS.length===1?'':'s'}` : '';
+  document.getElementById('notifPanelList').innerHTML = NOTIFICATIONS.length ? NOTIFICATIONS.map((n,idx)=>{
+    const m=NOTIF_META[n.type]||NOTIF_META.mention;
+    return `<div class="notif-row" data-idx="${idx}">
+      <span class="notif-dot" style="background:${m.color}"></span>
+      <div class="min-w-0 flex-1">
+        <p class="text-xs font-medium truncate" style="color:var(--text)"><i class="fa-solid ${m.icon} mr-1" style="color:${m.color}"></i>${escapeHtml(n.title)}</p>
+        <p class="text-[11px] truncate mt-0.5" style="color:var(--text-muted)">${escapeHtml(n.deal_name||'')}${n.customer?' &middot; '+escapeHtml(n.customer):''}</p>
+        <p class="text-[10.5px] mt-0.5" style="color:${m.color}">${escapeHtml(notifDueLabel(n))}${n.mentioned&&n.type!=='mention'?' &middot; mentioned you':''}</p>
+      </div>
+    </div>`;
+  }).join('') : `<div class="notif-empty"><i class="fa-regular fa-circle-check text-lg mb-1.5" style="display:block"></i>You're all caught up.</div>`;
+  document.querySelectorAll('#notifPanelList .notif-row').forEach(row=>row.addEventListener('click',()=>goToNotification(parseInt(row.dataset.idx))));
+}
+document.getElementById('notifBtn').addEventListener('click',(e)=>{
+  e.stopPropagation();
+  const panel=document.getElementById('notifPanel');
+  const willOpen=panel.classList.contains('hidden');
+  panel.classList.toggle('hidden');
+  if(willOpen) renderNotifPanel();
+});
+document.addEventListener('click',(e)=>{
+  const panel=document.getElementById('notifPanel');
+  if(!panel.classList.contains('hidden') && !panel.contains(e.target) && e.target.id!=='notifBtn' && !document.getElementById('notifBtn').contains(e.target)){
+    panel.classList.add('hidden');
+  }
+});
+async function goToNotification(idx){
+  const n=NOTIFICATIONS[idx]; if(!n) return;
+  document.getElementById('notifPanel').classList.add('hidden');
+  if(!n.task_id){
+    try{ ALL_DEALS=await api('/api/deals'); }catch(e){}
+    switchTab('tracker');
+    setTimeout(()=>openDetail(n.deal_id),80);
+    return;
+  }
+  wmExpandedThreads.add('open:'+n.deal_id);
+  switchTab('weeklymeeting');
+  setTimeout(()=>{
+    const el=document.getElementById('task-row-'+n.task_id);
+    if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('flash-highlight'); setTimeout(()=>el.classList.remove('flash-highlight'),1700); }
+  },250);
 }
 
 /* ================= CONFIG / AMS ================= */
@@ -2372,7 +2492,7 @@ async function renderWeeklyMeeting(){
     const sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
     const overdue=t.due && t.status!=='done' && t.due<today;
     const editable=canEditTask(t);
-    return `<div class="px-3 py-2.5">
+    return `<div class="px-3 py-2.5" id="task-row-${t.id}">
       <div class="flex items-center gap-2 mb-1 flex-wrap">
         ${taskFromToChips(t)}
         <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
@@ -3787,7 +3907,7 @@ function renderAmwDetail(){
     ['Engaged (has opportunity)', x.engaged, 'var(--success)'],
     ['Champion', x.champion, '#0ea5e9'],
     ['Needs attention', x.attention, 'var(--warning)'],
-  ].map(([label,val,c])=>`<div class="card elev p-3"><p class="text-[11px]" style="color:var(--text-muted)">${label}</p><p class="text-xl font-medium mt-1" style="color:${c}">${val}</p></div>`).join('');
+  ].map(([label,val,c])=>`<div class="stat-card" style="--stat-accent:${c}"><p class="stat-label">${label}</p><p class="stat-value">${val}</p></div>`).join('');
 
   const counts={existing_customer:0,preferred:0,growth_potential:0,unreviewed:0,at_risk:0,low_priority:0,no_contact:0,not_preferable:0,handled:0};
   x.accounts.forEach(r=>{ if(r.deal_count>0) counts.handled++; else if(counts[r.status]!==undefined) counts[r.status]++; });

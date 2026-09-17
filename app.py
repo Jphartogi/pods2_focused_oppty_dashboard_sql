@@ -26,7 +26,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -1342,6 +1342,110 @@ def list_tasks():
     query += " ORDER BY t.updated_at DESC"
     rows = db.execute(query, params).fetchall()
     return jsonify([task_to_dict(r) for r in rows])
+
+
+NOTIFY_WINDOW_DAYS = 3
+NOTIFY_SEVERITY_RANK = {"overdue": 0, "due_soon": 1, "mention": 2}
+
+
+def _days_until(value):
+    """Parse a `YYYY-MM-DD`-ish text date column and return days-from-today, or
+    None if unset/unparseable (never surfaced as a notification either way)."""
+    if not value:
+        return None
+    try:
+        return (date.fromisoformat(str(value)[:10]) - date.today()).days
+    except ValueError:
+        return None
+
+
+@app.route("/api/notifications", methods=["GET"])
+@login_required()
+def get_notifications():
+    """Per-user notifications: tasks assigned to me (or @mentioning me) that are
+    overdue or due soon, plus - for account managers - their own opportunities'
+    target PO/revenue dates coming up. Computed fresh on every call rather than
+    stored, since it's cheap and always exactly reflects current data."""
+    db = get_db()
+    user = g.current_user
+    full_name = (user.get("full_name") or "").strip()
+    if not full_name:
+        return jsonify([])
+
+    notifications = []
+    mention_needle = f"@{full_name}".lower()
+
+    rows = db.execute(
+        """SELECT t.*, d.deal_name, d.customer
+           FROM deal_tasks t JOIN deals d ON d.id = t.deal_id
+           WHERE t.status != 'done'
+             AND (t.assigned_to = %s OR t.text ILIKE %s OR t.note ILIKE %s)""",
+        (full_name, f"%{mention_needle}%", f"%{mention_needle}%"),
+    ).fetchall()
+    for r in rows:
+        mine = (r["assigned_to"] or "") == full_name
+        mentioned = mention_needle in (r["text"] or "").lower() or mention_needle in (r["note"] or "").lower()
+        delta = _days_until(r["due"]) if mine else None
+
+        severity = None
+        if delta is not None:
+            if delta < 0:
+                severity = "overdue"
+            elif delta <= NOTIFY_WINDOW_DAYS:
+                severity = "due_soon"
+        if severity is None and mentioned:
+            severity = "mention"
+        if severity is None:
+            continue
+
+        notifications.append({
+            "id": f"task-{r['id']}",
+            "type": severity,
+            "task_id": r["id"],
+            "deal_id": r["deal_id"],
+            "title": r["text"],
+            "deal_name": r["deal_name"],
+            "customer": r["customer"] or "",
+            "due": r["due"] or "",
+            "days": delta,
+            "mentioned": mentioned,
+        })
+
+    if user["role"] == "account_manager":
+        deal_rows = db.execute(
+            "SELECT id, deal_name, customer, expected_po_date, expected_revenue_date "
+            "FROM deals WHERE assigned_am = %s",
+            (full_name,),
+        ).fetchall()
+        for dr in deal_rows:
+            for field, label in (
+                ("expected_po_date", "Target PO date approaching"),
+                ("expected_revenue_date", "Target revenue date approaching"),
+            ):
+                delta = _days_until(dr[field])
+                if delta is None:
+                    continue
+                if delta < 0:
+                    severity = "overdue"
+                elif delta <= NOTIFY_WINDOW_DAYS:
+                    severity = "due_soon"
+                else:
+                    continue
+                notifications.append({
+                    "id": f"deal-{dr['id']}-{field}",
+                    "type": severity,
+                    "task_id": None,
+                    "deal_id": dr["id"],
+                    "title": label,
+                    "deal_name": dr["deal_name"],
+                    "customer": dr["customer"] or "",
+                    "due": dr[field] or "",
+                    "days": delta,
+                    "mentioned": False,
+                })
+
+    notifications.sort(key=lambda n: (NOTIFY_SEVERITY_RANK.get(n["type"], 9), n["days"] if n["days"] is not None else 999))
+    return jsonify(notifications[:50])
 
 
 # --------------------------------------------------------------------------
