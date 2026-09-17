@@ -6,6 +6,15 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.1.2] - 2026-09-17 (branch: v2.0)
+### Changed
+- The FY Target hero card (gauge + KPI tiles) now follows whichever Account
+  Manager filter is active on Tracker, Calendar or Management - pick an AM
+  there and the Target, Achieved, Pipeline+Recurring, Gap and gauge all
+  re-scope to that person, the same way Management's own summary row already
+  did. Clearing the filter (or switching to a tab with no AM picked) goes
+  back to the whole-team totals.
+
 ## [2.1.1] - 2026-09-17 (branch: v2.0)
 ### Changed
 - **Tracker toolbar** (search / Account Manager / Pillar / Stage / Sort) redone as

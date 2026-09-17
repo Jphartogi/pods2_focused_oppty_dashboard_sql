@@ -1727,6 +1727,7 @@ function switchTab(tab){
   // read against day-to-day work (Tracker, Calendar) or the exec summary (Management) -
   // every other tab is a focused worklist or its own analytics page, where it's noise.
   document.getElementById('metricStripWrap').style.display = ['tracker','calendar','management'].includes(tab) ? '' : 'none';
+  if(['tracker','calendar','management'].includes(tab)) updateMetrics();
   refreshNavGroups(tab);
   if(tab==='analytics'){ switchAnalyticsTab('gap'); renderAnalytics(); }
   if(tab==='settings') renderSettings();
@@ -1842,20 +1843,30 @@ function populateSelectors(){
   syncAnalyticsFilterSelects();
 }
 
+// Which Account Manager filter is relevant right now depends on which tab the
+// metric strip is actually showing on top of (Tracker / Calendar / Management
+// each have their own independent AM filter select).
+function selectedAMForMetrics(){
+  if(document.getElementById('tab-tracker').classList.contains('active')) return document.getElementById('filterAM').value;
+  if(document.getElementById('tab-calendar').classList.contains('active')) return document.getElementById('calFilterAM').value;
+  if(document.getElementById('tab-management').classList.contains('active')) return document.getElementById('mgmtFilterAM').value;
+  return '';
+}
 function updateMetrics(){
-  // An Account Manager with a target on file sees their own number so they know if
-  // they personally are covered or not; everyone else (admin/management/exec) sees
-  // the whole-team Full-Year target as before.
-  const isAM = ROLE==='account_manager' && (CONFIG.am_targets||{})[FULLNAME];
-  const target=isAM ? (CONFIG.am_targets||{})[FULLNAME]||0 : (CONFIG.target_amount||0);
-  const achieved=isAM ? (CONFIG.am_achievements||{})[FULLNAME]||0 : (CONFIG.current_achievement||0);
-  const recurring=isAM ? (CONFIG.am_recurring||{})[FULLNAME]||0 : (CONFIG.recurring_revenue||0);
+  // Picking a specific AM in the active tab's own filter scopes the whole strip to
+  // them (target, achieved, pipeline, gap, gauge) instead of the whole-team totals -
+  // same behaviour an Account Manager already got automatically for their own name.
+  const am = selectedAMForMetrics() || (ROLE==='account_manager' ? FULLNAME : '');
+  const isAM = !!am;
+  const target=isAM ? (CONFIG.am_targets||{})[am]||0 : (CONFIG.target_amount||0);
+  const achieved=isAM ? (CONFIG.am_achievements||{})[am]||0 : (CONFIG.current_achievement||0);
+  const recurring=isAM ? (CONFIG.am_recurring||{})[am]||0 : (CONFIG.recurring_revenue||0);
   const pool=(ALL_DEALS&&ALL_DEALS.length?ALL_DEALS:DEALS);
-  const scopedPool = isAM ? pool.filter(d=>d.assigned_am===FULLNAME) : pool;
+  const scopedPool = isAM ? pool.filter(d=>d.assigned_am===am) : pool;
   const pipeline2026=scopedPool.reduce((s,d)=>s+(d.revenue_2026||0),0);
   const covered=achieved+recurring+pipeline2026;
   const gap=Math.max(target-covered,0);
-  document.getElementById('metricTargetLabel').textContent = isAM ? 'Your FY 2026 Target' : 'Full-Year 2026 Target';
+  document.getElementById('metricTargetLabel').textContent = !isAM ? 'Full-Year 2026 Target' : (am===FULLNAME ? 'Your FY 2026 Target' : `${am} — FY 2026 Target`);
   document.getElementById('metricTarget').textContent=fmtIDR(target);
   document.getElementById('metricAchieved').textContent=fmtIDR(achieved);
   document.getElementById('metricPipeline').textContent=fmtIDR(pipeline2026+recurring);
@@ -2905,7 +2916,7 @@ document.getElementById('confirmCancelBtn').addEventListener('click',()=>closeMo
 document.getElementById('confirmOkBtn').addEventListener('click',async()=>{ if(confirmCallback) await confirmCallback(); closeModal('confirmModal'); });
 
 /* ================= MANAGEMENT VIEW (admin + management only) ================= */
-document.getElementById('mgmtFilterAM').addEventListener('change',renderManagement);
+document.getElementById('mgmtFilterAM').addEventListener('change',()=>{ renderManagement(); updateMetrics(); });
 function renderManagement(){
   const amFilter=document.getElementById('mgmtFilterAM').value;
   const deals=(ALL_DEALS||[]).filter(d=>!amFilter||d.assigned_am===amFilter);
@@ -3381,7 +3392,7 @@ document.querySelectorAll('.calview-btn').forEach(b=>b.addEventListener('click',
 document.getElementById('calPrev').addEventListener('click',()=>{ calMonth = calView==='week' ? addDays(calMonth,-7) : new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1); renderCalendar(); });
 document.getElementById('calNext').addEventListener('click',()=>{ calMonth = calView==='week' ? addDays(calMonth,7) : new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1); renderCalendar(); });
 document.getElementById('calToday').addEventListener('click',()=>{ calMonth=new Date(); renderCalendar(); });
-document.getElementById('calFilterAM').addEventListener('change',renderCalendar);
+document.getElementById('calFilterAM').addEventListener('change',()=>{ renderCalendar(); updateMetrics(); });
 document.getElementById('calHideDone').addEventListener('change',renderCalendar);
 document.getElementById('calFilterClear').addEventListener('click',()=>{ calStatusFilter=null; renderCalendar(); });
 [['calKpiAllCard',null],['calKpiOverdueCard','overdue'],['calKpiProgressCard','in_progress'],['calKpiDoneCard','done'],['calKpiUndatedCard','no_date']].forEach(([id,key])=>{
