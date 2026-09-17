@@ -318,8 +318,23 @@ def init_db():
     v2.0 starts from a clean Postgres schema - no SQLite-era ALTER TABLE
     migration history to carry forward, since this is a brand new database
     populated once via migrate_from_sqlite.py rather than incrementally
-    evolved release over release."""
+    evolved release over release.
+
+    Gunicorn boots multiple worker processes, each importing this module and
+    calling init_db() independently - without serializing them, concurrent
+    `CREATE TABLE IF NOT EXISTS` calls from separate sessions can race on a
+    brand-new database (Postgres's own catalog isn't safe against that on
+    its own) and one worker crashes with a UniqueViolation on pg_type. An
+    advisory lock makes every worker but one simply wait its turn instead."""
     with _pool.connection() as db:
+        db.execute("SELECT pg_advisory_lock(84177235)")
+        try:
+            _init_schema_and_seed(db)
+        finally:
+            db.execute("SELECT pg_advisory_unlock(84177235)")
+
+
+def _init_schema_and_seed(db):
         db.execute(
             """
             CREATE TABLE IF NOT EXISTS deals (
