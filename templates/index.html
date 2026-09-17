@@ -261,6 +261,13 @@
   .widget > summary { transition: background .12s ease; border-radius:16px; }
   .widget[open] > summary { border-radius:16px 16px 0 0; }
   .widget > summary:hover { background: var(--surface-2); }
+  /* One card holding several <details> sections, divided by hairlines instead of
+     each being its own separate floating card - reads as one continuous report
+     instead of a stack of disconnected boxes. */
+  .exec-detail-panel { padding:0; overflow:hidden; }
+  .exec-detail-section { border-bottom: 1px solid var(--border); }
+  .exec-detail-section:last-child { border-bottom: none; }
+  .exec-detail-section > summary { border-radius: 0 !important; }
   /* --- compact stat cards: KPI strips across Analytics / Management, AWS-console style
      (a colored accent bar + small-caps label + large tabular value) instead of plain text --- */
   .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:13px 16px 13px 18px; position:relative; overflow:hidden; box-shadow:0 1px 2px var(--shadow); transition: box-shadow .18s ease, transform .18s ease; }
@@ -510,48 +517,53 @@
           <div class="metric-tile" style="--tile-accent:var(--text-muted)"><div class="metric-tile-icon"><i class="fa-solid fa-list-check"></i></div><div class="min-w-0"><p class="metric-tile-label">Framework Health</p><p id="mgFramework" class="metric-tile-value">–</p></div></div>
         </div>
 
-        <details class="widget card elev mb-3" id="mgBlockersWidget">
-          <summary class="p-4 flex items-center gap-3">
-            <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
-            <div class="section-icon-badge" style="--badge-accent:var(--danger)"><i class="fa-solid fa-triangle-exclamation"></i></div>
-            <span class="text-sm font-medium" style="color:var(--text)">Blockers</span>
-            <span id="mgBlockerSummary" class="text-xs" style="color:var(--text-muted)"></span>
-            <span class="flex-1"></span>
-            <span id="mgBlockerCount" class="chip" style="color:var(--text-muted)">0</span>
-          </summary>
-          <div class="px-4 pb-4"><div id="mgBlockers" class="space-y-2"></div></div>
-        </details>
+        <!-- One continuous report panel: Blockers / Action points / AM performance read as
+             sections of a single analysis instead of three separate floating cards. -->
+        <p class="section-label mb-2">Deep Dive</p>
+        <div class="card elev exec-detail-panel mb-4">
+          <details class="widget exec-detail-section" id="mgBlockersWidget">
+            <summary class="p-4 flex items-center gap-3">
+              <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
+              <div class="section-icon-badge" style="--badge-accent:var(--danger)"><i class="fa-solid fa-triangle-exclamation"></i></div>
+              <span class="text-sm font-medium" style="color:var(--text)">Blockers</span>
+              <span id="mgBlockerSummary" class="text-xs" style="color:var(--text-muted)"></span>
+              <span class="flex-1"></span>
+              <span id="mgBlockerCount" class="chip" style="color:var(--text-muted)">0</span>
+            </summary>
+            <div class="px-4 pb-4"><div id="mgBlockers" class="space-y-2"></div></div>
+          </details>
 
-        <details class="widget card elev mb-3" id="mgActionsWidget">
-          <summary class="p-4 flex items-center gap-3">
-            <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
-            <div class="section-icon-badge" style="--badge-accent:var(--primary)"><i class="fa-solid fa-list-check"></i></div>
-            <span class="text-sm font-medium" style="color:var(--text)">Action points</span>
-            <span id="mgActionSummary" class="text-xs" style="color:var(--text-muted)"></span>
-            <span class="flex-1"></span>
-            <span id="mgActionCount" class="chip" style="color:var(--text-muted)">0</span>
-          </summary>
-          <div class="px-4 pb-4"><div id="mgActions" class="space-y-2"></div></div>
-        </details>
+          <details class="widget exec-detail-section" id="mgActionsWidget">
+            <summary class="p-4 flex items-center gap-3">
+              <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
+              <div class="section-icon-badge" style="--badge-accent:var(--primary)"><i class="fa-solid fa-list-check"></i></div>
+              <span class="text-sm font-medium" style="color:var(--text)">Action points</span>
+              <span id="mgActionSummary" class="text-xs" style="color:var(--text-muted)"></span>
+              <span class="flex-1"></span>
+              <span id="mgActionCount" class="chip" style="color:var(--text-muted)">0</span>
+            </summary>
+            <div class="px-4 pb-4"><div id="mgActions" class="space-y-2"></div></div>
+          </details>
 
-        <details class="widget card elev mb-3" id="mgAmPerfWidget" open>
-          <summary class="p-4 flex items-center gap-3">
-            <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
-            <div class="section-icon-badge" style="--badge-accent:var(--primary)"><i class="fa-solid fa-user-tie"></i></div>
-            <span class="text-sm font-medium" style="color:var(--text)">Account Manager performance</span>
-            <span id="mgAmPerfSummary" class="text-xs" style="color:var(--text-muted)"></span>
-            <span class="flex-1"></span>
-            <span id="mgAmPerfCount" class="chip" style="color:var(--text-muted)">0</span>
-          </summary>
-          <div class="px-4 pb-4">
-            <div id="mgAmChart" class="mb-4"></div>
-            <div id="mgAmPerf" class="space-y-2 mb-4"></div>
-            <div class="rounded-lg p-3" style="background:var(--surface-2)">
-              <p class="text-xs font-medium mb-2" style="color:var(--text-muted)"><i class="fa-solid fa-lightbulb mr-1.5" style="color:var(--warning)"></i>Insight — why is the gap not covered?</p>
-              <div id="mgGapInsights" class="space-y-1.5"></div>
+          <details class="widget exec-detail-section" id="mgAmPerfWidget" open>
+            <summary class="p-4 flex items-center gap-3">
+              <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
+              <div class="section-icon-badge" style="--badge-accent:var(--primary)"><i class="fa-solid fa-user-tie"></i></div>
+              <span class="text-sm font-medium" style="color:var(--text)">Account Manager performance</span>
+              <span id="mgAmPerfSummary" class="text-xs" style="color:var(--text-muted)"></span>
+              <span class="flex-1"></span>
+              <span id="mgAmPerfCount" class="chip" style="color:var(--text-muted)">0</span>
+            </summary>
+            <div class="px-4 pb-4">
+              <div id="mgAmChart" class="mb-4"></div>
+              <div id="mgAmPerf" class="space-y-2 mb-4"></div>
+              <div class="rounded-lg p-3" style="background:var(--surface-2)">
+                <p class="text-xs font-medium mb-2" style="color:var(--text-muted)"><i class="fa-solid fa-lightbulb mr-1.5" style="color:var(--warning)"></i>Insight — why is the gap not covered?</p>
+                <div id="mgGapInsights" class="space-y-1.5"></div>
+              </div>
             </div>
-          </div>
-        </details>
+          </details>
+        </div>
       </section>
 
       <!-- ============ WEEKLY FOLLOW-UPS (admin + management) ============ -->

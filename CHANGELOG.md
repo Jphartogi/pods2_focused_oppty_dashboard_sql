@@ -6,6 +6,14 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.2.1] - 2026-09-17 (branch: v2.0)
+### Changed
+- Management View's Blockers / Action points / Account Manager performance
+  no longer read as three separate floating cards - they're now sections of
+  one continuous "Deep Dive" report panel, divided by hairlines instead of
+  each having its own border/shadow, so the page reads as one piece of
+  analysis rather than a stack of disconnected boxes.
+
 ## [2.2.0] - 2026-09-17 (branch: v2.0)
 ### Changed
 - **Management View redesigned as an executive report**: a proper page header
