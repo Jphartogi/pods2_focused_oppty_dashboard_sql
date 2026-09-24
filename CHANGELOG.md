@@ -6,6 +6,14 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.3.2] - 2026-09-24 (branch: v2.0)
+### Fixed
+- **Sync from v1.9** failed with `column "id" does not exist` whenever v1.9's
+  `deal_sync_map` table had any rows (created by using Engine 1 Sync) -
+  that table's primary key is `local_deal_id`, not `id` like every other
+  synced table, but the upsert always assumed `id`. Fixed by looking up each
+  table's real primary key column instead of hardcoding it.
+
 ## [2.3.1] - 2026-09-24 (branch: v2.0)
 ### Changed
 - **Sync from v1.9 now runs entirely over the web** - no more downloading

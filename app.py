@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.3.1"
+APP_VERSION = "2.3.2"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -1741,24 +1741,30 @@ V1_SYNC_BOOL_COLUMNS = {
     "deals": {"is_blocked"},
     "account_coverage": {"is_manual", "is_champion"},
 }
+# Every synced table's primary key is a plain SERIAL "id" - except deal_sync_map,
+# which is keyed off the deal it maps (no id column, no sequence to bump).
+V1_SYNC_PK = {
+    "deal_sync_map": "local_deal_id",
+}
 
 
 def _sync_table_upsert(db, sconn, table):
     bool_cols = V1_SYNC_BOOL_COLUMNS.get(table, set())
+    pk = V1_SYNC_PK.get(table, "id")
     src_rows = sconn.execute(f"SELECT * FROM {table}").fetchall()
     if not src_rows:
         return 0
     cols = src_rows[0].keys()
-    non_id_cols = [c for c in cols if c != "id"]
+    non_pk_cols = [c for c in cols if c != pk]
     col_list = ", ".join(cols)
     placeholders = ", ".join(["%s"] * len(cols))
-    update_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in non_id_cols)
+    update_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in non_pk_cols)
     sql = (f"INSERT INTO {table} ({col_list}) VALUES ({placeholders}) "
-           f"ON CONFLICT (id) DO UPDATE SET {update_clause}")
+           f"ON CONFLICT ({pk}) DO UPDATE SET {update_clause}")
     for r in src_rows:
         values = [bool(r[c]) if c in bool_cols else r[c] for c in cols]
         db.execute(sql, values)
-    if "id" in cols:
+    if pk == "id" and "id" in cols:
         db.execute(
             f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
             f"GREATEST((SELECT MAX(id) FROM {table}), 1))"
