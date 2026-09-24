@@ -52,11 +52,14 @@ the live file, until you've confirmed the row counts and a login work.
 
 The initial migration above is one-time and destructive (it truncates first,
 since it targets a brand-new database). While v1.9 keeps running as the live
-system in parallel, use **Settings → Sync from v1.9** (admin only) instead:
-download `db.sqlite3` from v1.9's Files tab and upload it there. It upserts
+system in parallel, use **Settings → Sync from v1.9** (admin only) instead -
+enter v1.9's URL and an admin login there once, then click "Sync from v1.9"
+whenever you want the latest data; no file to download or upload. It upserts
 by id - refreshing anything that exists in both (v1.9's version wins) while
 leaving alone anything created only in v2.0 - so it's safe to run as often as
-needed right up to the final cutover, when v1.9 gets retired for good.
+needed right up to the final cutover, when v1.9 gets retired for good. This
+needs v1.9 running 1.9.2 or later (adds the `GET /api/admin/export_db`
+endpoint this pulls from).
 
 ## Day-to-day operations
 

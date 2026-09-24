@@ -6,6 +6,16 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.3.1] - 2026-09-24 (branch: v2.0)
+### Changed
+- **Sync from v1.9 now runs entirely over the web** - no more downloading
+  `db.sqlite3` from v1.9's Files tab and re-uploading it here. Settings ->
+  Sync from v1.9 now takes a URL, username and password (same pattern as
+  Engine 1 Sync): it logs into v1.9 with those credentials, downloads its
+  current database over a new admin-only endpoint there
+  (`GET /api/admin/export_db`, added in v1.9 1.9.2), and runs the same
+  upsert-by-id sync as before. One click, no file handling.
+
 ## [2.3.0] - 2026-09-24 (branch: v2.0)
 ### Added
 - **Sync from v1.9** (Settings, admin only): repeatedly pull the legacy

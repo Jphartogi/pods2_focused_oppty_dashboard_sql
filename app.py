@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.3.1"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -468,6 +468,10 @@ def _init_schema_and_seed(db):
                 engine1_username TEXT DEFAULT '',
                 engine1_password TEXT DEFAULT '',
                 engine1_last_sync TEXT DEFAULT '',
+                v1_sync_url TEXT DEFAULT '',
+                v1_sync_username TEXT DEFAULT '',
+                v1_sync_password TEXT DEFAULT '',
+                v1_sync_last_run TEXT DEFAULT '',
                 updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
             );
 
@@ -476,6 +480,18 @@ def _init_schema_and_seed(db):
                 engine1_deal_id INTEGER NOT NULL,
                 synced_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
             );
+            """
+        )
+
+        # Additive, idempotent migration for columns added after this database was first
+        # created - CREATE TABLE IF NOT EXISTS above is a no-op on an existing table, so
+        # a genuinely new column needs an explicit ALTER TABLE. Safe to run on every boot.
+        db.execute(
+            """
+            ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_url TEXT DEFAULT '';
+            ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_username TEXT DEFAULT '';
+            ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_password TEXT DEFAULT '';
+            ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_last_run TEXT DEFAULT '';
             """
         )
 
@@ -1766,25 +1782,102 @@ def sync_from_v1_sqlite(db, sqlite_path):
         sconn.close()
 
 
+def _v1sync_config(row):
+    return {
+        "url": (row["v1_sync_url"] if "v1_sync_url" in row.keys() else "") or "",
+        "username": (row["v1_sync_username"] if "v1_sync_username" in row.keys() else "") or "",
+        "password": (row["v1_sync_password"] if "v1_sync_password" in row.keys() else "") or "",
+        "last_run": (row["v1_sync_last_run"] if "v1_sync_last_run" in row.keys() else "") or "",
+    }
+
+
+@app.route("/api/config/v1sync", methods=["GET"])
+@login_required(roles=("admin",))
+def get_v1sync_config():
+    db = get_db()
+    row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    cfg = _v1sync_config(row)
+    return jsonify({
+        "url": cfg["url"],
+        "username": cfg["username"],
+        "password_set": bool(cfg["password"]),
+        "last_run": cfg["last_run"],
+    })
+
+
+@app.route("/api/config/v1sync", methods=["PUT"])
+@login_required(roles=("admin",))
+def update_v1sync_config():
+    data = request.get_json(force=True) or {}
+    db = get_db()
+    row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    current = _v1sync_config(row)
+    url = str(data.get("url", current["url"]) or "").strip().rstrip("/")
+    username = str(data.get("username", current["username"]) or "").strip()
+    password = str(data["password"]) if data.get("password") else current["password"]
+    db.execute(
+        "UPDATE config SET v1_sync_url = %s, v1_sync_username = %s, v1_sync_password = %s WHERE id = %s",
+        (url, username, password, row["id"]),
+    )
+    db.commit()
+    return jsonify({"ok": True, "url": url, "username": username, "password_set": bool(password)})
+
+
+def _http_get_bytes(url, token=None, timeout=60):
+    """Raw binary GET (unlike _engine1_request, which expects a JSON body) -
+    used to download v1.9's db.sqlite3 straight into memory."""
+    req = urllib.request.Request(url, method="GET")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read()
+    except urllib.error.URLError as exc:
+        raise ConnectionError(str(exc.reason)) from exc
+
+
 @app.route("/api/admin/sync_v1", methods=["POST"])
 @login_required(roles=("admin",))
 def sync_v1():
-    upload = request.files.get("file")
-    if not upload or not upload.filename:
-        return jsonify({"error": "No file uploaded"}), 400
-    if not upload.filename.lower().endswith((".sqlite3", ".sqlite", ".db")):
-        return jsonify({"error": "Expected the v1.9 app's db.sqlite3 file"}), 400
-
     db = get_db()
+    row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    cfg = _v1sync_config(row)
+    if not cfg["url"] or not cfg["username"] or not cfg["password"]:
+        return jsonify({"error": "Set the v1.9 URL, username and password first"}), 400
+
+    try:
+        status, body = _engine1_request(
+            "POST", f"{cfg['url']}/api/login",
+            payload={"username": cfg["username"], "password": cfg["password"]},
+        )
+    except ConnectionError as exc:
+        return jsonify({"error": f"Could not reach v1.9 at {cfg['url']}: {exc}"}), 502
+    if status != 200 or not body.get("token"):
+        return jsonify({"error": f"v1.9 login failed: {body.get('error', 'invalid credentials')}"}), 400
+    token = body["token"]
+
+    try:
+        status, content = _http_get_bytes(f"{cfg['url']}/api/admin/export_db", token=token, timeout=60)
+    except ConnectionError as exc:
+        return jsonify({"error": f"Could not reach v1.9 at {cfg['url']}: {exc}"}), 502
+    if status != 200:
+        try:
+            err = json.loads(content.decode("utf-8"))["error"]
+        except Exception:
+            err = f"HTTP {status}"
+        return jsonify({"error": f"v1.9 export failed: {err}"}), 400
+
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".sqlite3") as tmp:
-            upload.save(tmp)
+            tmp.write(content)
             tmp_path = tmp.name
         try:
             sqlite3.connect(tmp_path).execute("SELECT 1 FROM deals LIMIT 1")
         except sqlite3.DatabaseError as exc:
-            return jsonify({"error": f"Not a readable v1.9 database: {exc}"}), 400
+            return jsonify({"error": f"v1.9 did not return a readable database: {exc}"}), 400
 
         db.execute("SELECT pg_advisory_lock(84177236)")
         try:
@@ -1796,6 +1889,9 @@ def sync_v1():
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+    db.execute("UPDATE config SET v1_sync_last_run = %s WHERE id = %s", (jakarta_now_str(), row["id"]))
+    db.commit()
 
     return jsonify({"ok": True, "summary": summary, "synced_at": jakarta_now_str()})
 
