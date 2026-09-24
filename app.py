@@ -22,7 +22,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "1.9.1"
+APP_VERSION = "1.9.2"
 
 # Keep the database next to app.py so it persists in a predictable location
 # regardless of the host's working directory (Render, PythonAnywhere, Docker, etc.).
@@ -1709,6 +1709,22 @@ def export_engine1_xlsx():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True, download_name=filename,
     )
+
+
+# --------------------------------------------------------------------------
+# Export the raw database (ADMIN only)
+#
+# Lets v2.0's "Sync from v1.9" feature pull this app's current data straight
+# over the network - logs in here with its own admin credentials (stored in
+# its own Settings) the same way it talks to Engine 1, then downloads this
+# file - instead of an admin manually downloading it from the Files tab and
+# re-uploading it on the other end.
+# --------------------------------------------------------------------------
+@app.route("/api/admin/export_db", methods=["GET"])
+@login_required(roles=("admin",))
+def export_db():
+    return send_file(DB_PATH, as_attachment=True, download_name="db.sqlite3",
+                      mimetype="application/octet-stream")
 
 
 # --------------------------------------------------------------------------

@@ -6,6 +6,14 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [1.9.2] - 2026-09-24
+### Added
+- `GET /api/admin/export_db` (admin only): returns the raw `db.sqlite3` file.
+  Lets the v2.0 dashboard (Postgres-backed rewrite, deployed separately)
+  pull this app's current data directly over the network for its "Sync from
+  v1.9" feature, instead of an admin manually downloading and re-uploading
+  the file each time.
+
 ## [1.9.1] - 2026-09-14
 ### Changed
 - AM Workload folded into the Account Coverage page as a second tab inside
