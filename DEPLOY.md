@@ -48,6 +48,16 @@ docker compose exec -e DATABASE_URL="postgresql://$POSTGRES_USER:$POSTGRES_PASSW
 Always test this against a **copy** of the real `db.sqlite3` first, never
 the live file, until you've confirmed the row counts and a login work.
 
+## Keeping v2.0 up to date while v1.9 is still live
+
+The initial migration above is one-time and destructive (it truncates first,
+since it targets a brand-new database). While v1.9 keeps running as the live
+system in parallel, use **Settings → Sync from v1.9** (admin only) instead:
+download `db.sqlite3` from v1.9's Files tab and upload it there. It upserts
+by id - refreshing anything that exists in both (v1.9's version wins) while
+leaving alone anything created only in v2.0 - so it's safe to run as often as
+needed right up to the final cutover, when v1.9 gets retired for good.
+
 ## Day-to-day operations
 
 ```bash

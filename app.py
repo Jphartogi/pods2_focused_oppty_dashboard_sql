@@ -10,6 +10,8 @@ import json
 import os
 import re
 import secrets
+import sqlite3
+import tempfile
 import urllib.error
 import urllib.request
 import uuid
@@ -26,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.2.1"
+APP_VERSION = "2.3.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -1700,6 +1702,102 @@ def _deal_to_engine1_payload(d):
         "expected_po_date": d["expected_po_date"],
         "expected_revenue_date": d["expected_revenue_date"],
     }
+
+
+
+# --------------------------------------------------------------------------
+# Sync from legacy v1.9 (SQLite, PythonAnywhere) - admin only
+#
+# v1.9 stays the live system for real day-to-day work until it's fully
+# retired (planned Oct/Nov 2026); this lets an admin repeatedly pull its
+# latest state into v2.0 in the meantime without wiping out anything already
+# created directly in v2.0. Unlike the one-time migrate_from_sqlite.py
+# (which TRUNCATEs first, for a brand-new database), this UPSERTs by id:
+# a row that exists in v1.9 is inserted or refreshed here; a row that only
+# exists in v2.0 is left alone. On a matching id, v1.9's version wins - it's
+# still the source of truth for this transition period.
+# --------------------------------------------------------------------------
+V1_SYNC_TABLES = [
+    "users", "deals", "deal_tasks", "login_logs",
+    "performance", "account_coverage", "config", "deal_sync_map",
+]
+V1_SYNC_BOOL_COLUMNS = {
+    "deals": {"is_blocked"},
+    "account_coverage": {"is_manual", "is_champion"},
+}
+
+
+def _sync_table_upsert(db, sconn, table):
+    bool_cols = V1_SYNC_BOOL_COLUMNS.get(table, set())
+    src_rows = sconn.execute(f"SELECT * FROM {table}").fetchall()
+    if not src_rows:
+        return 0
+    cols = src_rows[0].keys()
+    non_id_cols = [c for c in cols if c != "id"]
+    col_list = ", ".join(cols)
+    placeholders = ", ".join(["%s"] * len(cols))
+    update_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in non_id_cols)
+    sql = (f"INSERT INTO {table} ({col_list}) VALUES ({placeholders}) "
+           f"ON CONFLICT (id) DO UPDATE SET {update_clause}")
+    for r in src_rows:
+        values = [bool(r[c]) if c in bool_cols else r[c] for c in cols]
+        db.execute(sql, values)
+    if "id" in cols:
+        db.execute(
+            f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+            f"GREATEST((SELECT MAX(id) FROM {table}), 1))"
+        )
+    return len(src_rows)
+
+
+def sync_from_v1_sqlite(db, sqlite_path):
+    sconn = sqlite3.connect(sqlite_path)
+    sconn.row_factory = sqlite3.Row
+    try:
+        summary = {}
+        for table in V1_SYNC_TABLES:
+            summary[table] = _sync_table_upsert(db, sconn, table)
+        db.commit()
+        return summary
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        sconn.close()
+
+
+@app.route("/api/admin/sync_v1", methods=["POST"])
+@login_required(roles=("admin",))
+def sync_v1():
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return jsonify({"error": "No file uploaded"}), 400
+    if not upload.filename.lower().endswith((".sqlite3", ".sqlite", ".db")):
+        return jsonify({"error": "Expected the v1.9 app's db.sqlite3 file"}), 400
+
+    db = get_db()
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".sqlite3") as tmp:
+            upload.save(tmp)
+            tmp_path = tmp.name
+        try:
+            sqlite3.connect(tmp_path).execute("SELECT 1 FROM deals LIMIT 1")
+        except sqlite3.DatabaseError as exc:
+            return jsonify({"error": f"Not a readable v1.9 database: {exc}"}), 400
+
+        db.execute("SELECT pg_advisory_lock(84177236)")
+        try:
+            summary = sync_from_v1_sqlite(db, tmp_path)
+        finally:
+            db.execute("SELECT pg_advisory_unlock(84177236)")
+    except Exception as exc:
+        return jsonify({"error": f"Sync failed: {exc}"}), 400
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+    return jsonify({"ok": True, "summary": summary, "synced_at": jakarta_now_str()})
 
 
 @app.route("/api/sync/engine1", methods=["POST"])

@@ -1109,6 +1109,24 @@
           </div>
 
           <div class="card elev p-5 lg:col-span-2">
+            <p class="text-sm font-medium mb-1"><i class="fa-solid fa-clock-rotate-left mr-1.5" style="color:var(--primary)"></i>Sync from v1.9 (PythonAnywhere)</p>
+            <p class="text-[11px] mb-4" style="color:var(--text-faint)">
+              While v1.9 (jphartogi.pythonanywhere.com) is still the live day-to-day system, use this to pull its
+              latest data into v2.0. It's safe to run repeatedly: opportunities, tasks, users, login history,
+              performance snapshots, account coverage and config are matched by id — a record already in v2.0 that
+              doesn't exist in v1.9 (e.g. something added here directly) is left untouched, but <b>a record that
+              exists in both is overwritten with v1.9's version</b>, since v1.9 remains the source of truth until
+              the final cutover. Get the file from v1.9's <b>Files</b> tab → <code>db.sqlite3</code> → Download.
+            </p>
+            <div class="flex flex-wrap items-center gap-3">
+              <input id="syncV1File" type="file" accept=".sqlite3,.sqlite,.db" class="text-xs" style="color:var(--text-muted)">
+              <button id="syncV1Btn" class="btn-primary text-sm px-4 py-2 rounded-lg"><i class="fa-solid fa-arrows-rotate mr-1.5"></i>Sync from v1.9</button>
+              <span id="syncV1LastRun" class="text-[11px]" style="color:var(--text-faint)"></span>
+            </div>
+            <p id="syncV1Result" class="text-xs mt-3" style="color:var(--text-muted)"></p>
+          </div>
+
+          <div class="card elev p-5 lg:col-span-2">
             <p class="text-sm font-medium mb-1"><i class="fa-solid fa-arrows-rotate mr-1.5" style="color:var(--primary)"></i>Engine 1 Sync</p>
             <p class="text-[11px] mb-4" style="color:var(--text-faint)">Push every opportunity here into Engine 1's PODS 2 (engine1.pythonanywhere.com) over its own API — creates new ones and updates ones already synced, so re-running it is always safe. Uses a login on Engine 1 for an account scoped to PODS 2 (or with rights over it); the password is stored here but never shown back.</p>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
@@ -3144,6 +3162,24 @@ let PERF=null;
 async function loadPerformance(){ try{ PERF=await api('/api/performance'); }catch(e){ PERF={available:false}; } }
 document.getElementById('perfFilterAM').addEventListener('change',renderPerformance);
 document.getElementById('pfChurnBasis').addEventListener('change',renderPerformance);
+document.getElementById('syncV1Btn').addEventListener('click',()=>{
+  const f=document.getElementById('syncV1File').files[0];
+  if(!f){ showToast('Choose v1.9\'s db.sqlite3 first',true); return; }
+  openConfirm(`Sync from "${f.name}"? Records matching an existing v1.9 id will be overwritten with v1.9's version; anything only in v2.0 is left untouched. This cannot be undone.`, async()=>{
+    try{
+      const fd=new FormData(); fd.append('file',f);
+      const res=await fetch('/api/admin/sync_v1',{method:'POST',headers:{'Authorization':'Bearer '+TOKEN},body:fd});
+      const data=await res.json();
+      if(!res.ok) throw new Error(data.error||'Sync failed');
+      const lines=Object.entries(data.summary).map(([t,n])=>`${t}: ${n}`).join(', ');
+      document.getElementById('syncV1Result').textContent=`Synced — ${lines}`;
+      document.getElementById('syncV1LastRun').textContent=`Last run: ${data.synced_at} WIB`;
+      showToast('Synced from v1.9');
+      document.getElementById('syncV1File').value='';
+      await loadConfig(); await loadAMs(); await loadDeals(); if(ROLE==='admin') await loadUsers();
+    }catch(err){ showToast(err.message,true); }
+  });
+});
 document.getElementById('perfImportBtn').addEventListener('click',()=>{
   const f=document.getElementById('perfFile').files[0];
   if(!f){ showToast('Choose the monthly .xlsx first',true); return; }

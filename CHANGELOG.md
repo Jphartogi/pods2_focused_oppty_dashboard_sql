@@ -6,6 +6,22 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.3.0] - 2026-09-24 (branch: v2.0)
+### Added
+- **Sync from v1.9** (Settings, admin only): repeatedly pull the legacy
+  v1.9 app's (jphartogi.pythonanywhere.com) latest `db.sqlite3` into v2.0
+  while v1.9 is still the live day-to-day system. Unlike the one-time
+  `migrate_from_sqlite.py` used for the initial cutover (which truncates
+  first, for a brand-new database), this upserts by id: a record present in
+  v1.9 is inserted or refreshed here, but a record that only exists in
+  v2.0 (created directly here) is left untouched. On a matching id, v1.9's
+  version wins, since it remains the source of truth until the final
+  migration (planned Oct/Nov 2026). Covers users, deals, deal tasks, login
+  logs, performance snapshots, account coverage, config and the Engine 1
+  sync map. Safe to run repeatedly - verified idempotent (re-running with
+  the same file produces the same result) and that unmatched v2.0-only rows
+  are never touched.
+
 ## [2.2.1] - 2026-09-17 (branch: v2.0)
 ### Changed
 - Management View's Blockers / Action points / Account Manager performance
