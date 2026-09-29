@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.4.3"
+APP_VERSION = "2.4.4"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -2499,6 +2499,12 @@ def parse_performance_workbook(wb):
             account = acc_sheet.cell(row=r, column=7).value
             if not account:
                 continue
+            # This sheet carries every Business Engine 1 pod's accounts (Head 1/2/3),
+            # not just PODS 2's (Head 2) - without this filter, Account Coverage gets
+            # polluted with other teams' accounts and AMs.
+            pods_val = str(acc_sheet.cell(row=r, column=9).value or "")
+            if not _HEAD2_RE.search(pods_val):
+                continue
             months = {}
             for c, label in month_cols:
                 months[label] = _num(acc_sheet.cell(row=r, column=c).value)
@@ -2625,9 +2631,9 @@ def import_performance():
     # keep the last 12 snapshots
     db.execute("""DELETE FROM performance WHERE id NOT IN
                   (SELECT id FROM performance ORDER BY id DESC LIMIT 12)""")
-    _sync_account_coverage(db, accounts)
+    removed = _sync_account_coverage(db, accounts)
     db.commit()
-    return jsonify({"ok": True, "am_count": len(am_rows), "account_rows": len(accounts)})
+    return jsonify({"ok": True, "am_count": len(am_rows), "account_rows": len(accounts), "removed": removed})
 
 
 def normalize_account_name(name):
@@ -2640,11 +2646,16 @@ def normalize_account_name(name):
 
 
 def _sync_account_coverage(db, accounts):
-    """Upsert the monthly ACH import's account list into account_coverage,
-    refreshing the import-sourced fields (AM, pillar, size) while leaving any
-    status/champion/notes an AM already set untouched. A row already sourced
-    from the (richer) master import keeps that source; only a tracker/manual
-    row gets upgraded to 'performance' by this."""
+    """Sync the monthly ACH import's account list into account_coverage:
+    upsert every account this import produced, refreshing the import-sourced
+    fields (AM, pillar, size) while leaving any status/champion/notes an AM
+    already set untouched, and remove any account_coverage row that was
+    previously created by *this same import path* (source='performance')
+    but isn't in the current file - e.g. it belonged to another pod that a
+    parsing bug used to let through, or it simply dropped off this month's
+    workbook. A row sourced from the (richer) master import, added manually,
+    or picked up from the Tracker is never touched here, regardless of
+    whether it's in this file."""
     agg = {}
     for a in accounts:
         name = str(a.get("account") or "").strip()
@@ -2679,6 +2690,18 @@ def _sync_account_coverage(db, accounts):
                    VALUES (%s, %s, %s, %s, %s, %s, 'performance', %s, false)""",
                 (key, e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], initial_status),
             )
+
+    # Only ever prune rows this same import path created - never master/manual/tracker
+    # rows - and only when this import actually produced accounts, so a parsing hiccup
+    # that returns zero rows can't wipe out everything that's already there.
+    if not agg:
+        return 0
+    current_keys = list(agg.keys())
+    cur = db.execute(
+        "DELETE FROM account_coverage WHERE source = 'performance' AND NOT (account_key = ANY(%s))",
+        (current_keys,),
+    )
+    return cur.rowcount
 
 
 _HEAD2_RE = re.compile(r"head\s*2\b", re.I)
@@ -2846,8 +2869,20 @@ def import_master_accounts():
                 (key, e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], e["target"], initial_status),
             )
             created += 1
+
+    # Prune master-sourced accounts that dropped out of this file (e.g. reassigned to
+    # another pod, or removed from the master list) - never touches master rows for a
+    # different reason (master is the richest source here), nor tracker/manual rows.
+    removed = 0
+    if accounts:
+        current_keys = list(accounts.keys())
+        cur = db.execute(
+            "DELETE FROM account_coverage WHERE source = 'master' AND NOT (account_key = ANY(%s))",
+            (current_keys,),
+        )
+        removed = cur.rowcount
     db.commit()
-    return jsonify({"ok": True, "created": created, "updated": updated, "total": len(accounts)})
+    return jsonify({"ok": True, "created": created, "updated": updated, "removed": removed, "total": len(accounts)})
 
 
 def _deals_by_account_key(db):

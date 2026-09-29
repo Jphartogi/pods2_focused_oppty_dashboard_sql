@@ -3245,8 +3245,10 @@ document.getElementById('perfImportBtn').addEventListener('click',()=>{
       const res=await fetch('/api/performance/import',{method:'POST',headers:{'Authorization':'Bearer '+TOKEN},body:fd});
       const data=await res.json();
       if(!res.ok) throw new Error(data.error||'Import failed');
-      showToast(`Imported ${data.am_count} AMs, ${data.account_rows} account rows`);
+      showToast(`Imported ${data.am_count} AMs, ${data.account_rows} account rows`
+        + (data.removed ? ` — removed ${data.removed} stale account(s) no longer in this file` : ''));
       await loadPerformance(); renderPerformance();
+      if(document.getElementById('tab-coverage').classList.contains('active')){ renderCoverage(); renderAmWorkload(); }
     }catch(err){ showToast(err.message,true); }
   });
 });
@@ -3719,10 +3721,11 @@ document.getElementById('covMasterImportBtn').addEventListener('click',()=>{
       const res=await fetch('/api/account_coverage/import_master',{method:'POST',headers:{'Authorization':'Bearer '+TOKEN},body:fd});
       const data=await res.json();
       if(!res.ok) throw new Error(data.error||'Import failed');
-      document.getElementById('covMasterImportResult').textContent=`${data.total} accounts (${data.created} new, ${data.updated} refreshed).`;
+      document.getElementById('covMasterImportResult').textContent=`${data.total} accounts (${data.created} new, ${data.updated} refreshed`
+        + (data.removed ? `, ${data.removed} removed` : '') + `).`;
       document.getElementById('covMasterImportFile').value='';
-      showToast(`Imported ${data.total} accounts`);
-      await loadAccountCoverage(); renderCoverage();
+      showToast(`Imported ${data.total} accounts`+(data.removed?` — removed ${data.removed} stale account(s)`:''));
+      await loadAccountCoverage(); renderCoverage(); renderAmWorkload();
     }catch(err){ showToast(err.message,true); }
   });
 });

@@ -6,6 +6,34 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.4.4] - 2026-09-29 (branch: v2.0)
+### Fixed
+- **Account Coverage was importing other pods' accounts and AMs.** The
+  Performance workbook's "byAccount (BP)" sheet carries every Business
+  Engine 1 pod's accounts (Head 1/2/3), not just PODS 2's (Head 2) - the
+  Master Account import already filtered to Head 2 only, but the Performance
+  import never did, so every monthly upload silently pulled in ~350 accounts
+  and a dozen AM names belonging to other teams (confirmed against a real
+  production workbook: 565 total rows, only 214 actually Head 2). Fixed by
+  applying the same Head-2 filter used elsewhere.
+### Added
+- Both the Performance and Master Account imports now **remove stale rows
+  no longer in the uploaded file** (scoped to rows they created themselves -
+  `source='performance'` or `source='master'` respectively - never touching
+  manually-added or Tracker-derived accounts), so re-uploading a corrected
+  file cleans up anything wrongly imported before, instead of only ever
+  adding/updating. This is what makes the fix above actually clean up
+  already-polluted production data once re-run, without needing a manual
+  delete option (imported rows intentionally can't be deleted by hand, to
+  prevent accidental data loss - re-import is the sanctioned way to correct
+  them).
+
+Verified against the real "PODS 2 - Up to August 2026.xlsx": import now
+reports 214 account rows (down from 565), only the 6 real PODS 2 AM names
+appear anywhere in Account Coverage, and a manually-seeded stray row
+mimicking the existing production pollution was correctly removed on
+import.
+
 ## [2.4.3] - 2026-09-29 (branch: v2.0)
 ### Changed
 - **Tracker filter bar polish, pre-launch pass**:
