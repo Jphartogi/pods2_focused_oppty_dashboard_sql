@@ -117,26 +117,32 @@ DNS has propagated.
    allows `tcp:443` from `0.0.0.0/0` - the same way `http-server` was added
    for port 80. The VM needs the `https-server` network tag, and a firewall
    rule targeting it for `tcp:443`.
-3. Request the certificate (one-off; replace the email with a real one you
-   want renewal-failure notices sent to):
+3. Request the certificate (one-off). The `certbot` service's `entrypoint`
+   is a permanent renewal-loop script, so a plain `docker compose run
+   certbot certonly ...` gets its arguments silently swallowed by that loop
+   instead - override `--entrypoint` on the command line to bypass it for
+   this one request:
    ```bash
-   docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
-     -d pods2.jphartogi.com --email you@example.com --agree-tos --no-eff-email
+   docker compose run --rm --entrypoint "certbot certonly --webroot -w /var/www/certbot -d pods2.jphartogi.com --email you@example.com --agree-tos --no-eff-email" certbot
    ```
    This writes the certificate into the `certbot-conf` volume. If it fails,
    double-check DNS and that port 80 is actually reachable from the public
    internet first - Certbot's error message says exactly what it tried and
    what came back.
-4. Switch nginx over to serve HTTPS (this step edits `nginx.conf` to add a
-   `443 ssl` server block referencing the certificate that now exists, and
-   redirects plain HTTP to HTTPS) - ask Claude to do this once step 3 has
-   succeeded, or apply it by hand and `docker compose up -d --build`.
+4. Pull the SSL-enabled nginx config (adds the `443 ssl` server block and
+   redirects plain HTTP to HTTPS) and redeploy:
+   ```bash
+   git pull && docker compose up -d --build
+   ```
 5. Verify: `https://pods2.jphartogi.com` should load with a valid padlock,
    and `http://pods2.jphartogi.com` should redirect to it.
 
 The `certbot` container then renews automatically (it wakes up every 12h and
 calls `certbot renew`, which is a no-op until the cert is within 30 days of
-expiring) - no further action needed after the initial request.
+expiring) - no further action needed after the initial request. Since the
+renewed certificate lands in the same `certbot-conf` volume nginx already
+reads from, nginx just needs a reload to pick it up - `docker compose exec
+nginx nginx -s reload` (or restart the container) after a renewal.
 
 ## Not yet done in v2.0
 

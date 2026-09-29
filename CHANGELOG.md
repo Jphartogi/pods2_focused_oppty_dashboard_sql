@@ -6,6 +6,21 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.4.1] - 2026-09-29 (branch: v2.0)
+### Added
+- **HTTPS is live**: nginx now serves `https://pods2.jphartogi.com` (TLS
+  1.2/1.3, HTTP/2) using the Let's Encrypt certificate obtained in 2.4.0,
+  and redirects all plain HTTP traffic to HTTPS (the ACME challenge path
+  stays on HTTP for renewals, per Let's Encrypt's requirement). Port 443 is
+  now published in `docker-compose.yml`, and nginx mounts the certificate
+  volume read-only.
+
+Verified locally end-to-end with a dummy self-signed certificate at the same
+path Let's Encrypt uses: HTTP redirects to HTTPS, HTTPS serves the real app
+(login, API, page content) over TLS 1.3/HTTP2, the ACME challenge path still
+resolves on port 80, and the container healthcheck (which curls plain HTTP)
+still passes correctly despite the redirect.
+
 ## [2.4.0] - 2026-09-29 (branch: v2.0)
 ### Added
 - **HTTPS groundwork**: nginx now recognizes `pods2.jphartogi.com` and serves
