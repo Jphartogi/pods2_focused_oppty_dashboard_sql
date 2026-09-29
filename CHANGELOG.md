@@ -6,6 +6,27 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.5.4] - 2026-09-29 (branch: v2.0)
+### Added
+- **Renaming a user now cascades everywhere their name is stored.** Two AMs
+  (seeded long ago with short names, "Dimas"/"Ashari") had their real full
+  names ("Dimas Aradzna Himawan Nugroho"/"Ashari Asrar") show up separately
+  through the Master Account import, fragmenting one real person into two
+  apparent identities across Account Coverage, deals, and targets. A
+  person's full name is denormalized as plain text into a deal's
+  `assigned_am`, a task's `assigned_to`, an `account_coverage` row's `am`,
+  and the AM-keyed JSON figures in `config` (targets/achievements/
+  recurring) rather than being a live reference - renaming the user via
+  Settings -> User Management -> Edit now updates all of those too, so
+  correcting a name re-merges everything under the one correct name instead
+  of leaving the old name's data orphaned.
+
+Verified: renamed a user with an assigned deal, a Tracker-derived coverage
+row, a Master-imported coverage row for a different account, and a config
+target keyed by the old name - all four updated to the new name in one
+action, the renamed user's login and deal filtering still worked
+afterward, and re-saving with an unchanged name is a safe no-op.
+
 ## [2.5.3] - 2026-09-29 (branch: v2.0)
 ### Fixed
 - **Master Account import still left old cross-pod accounts behind** if the

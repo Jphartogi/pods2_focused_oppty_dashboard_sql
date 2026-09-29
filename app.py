@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.5.3"
+APP_VERSION = "2.5.4"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -1531,6 +1531,36 @@ def update_user(user_id):
         "UPDATE users SET role = %s, full_name = %s, password = %s WHERE id = %s",
         (role, full_name, password_hash, user_id),
     )
+
+    # full_name is denormalized as plain text into every place that references this
+    # person (a deal's assigned_am, a task's assigned_to, an account_coverage row's
+    # am, and the AM-keyed JSON figures in config) rather than a live foreign key -
+    # renaming the user alone would silently orphan all of that from them. Cascade
+    # the rename everywhere it's stored, so e.g. correcting a short seed name like
+    # "Dimas" to a real full name re-merges with any data already keyed by the
+    # correct name instead of leaving two fragmented identities for one person.
+    old_name = (row["full_name"] or "").strip()
+    new_name = (full_name or "").strip()
+    if old_name and new_name and old_name != new_name:
+        db.execute("UPDATE deals SET assigned_am = %s WHERE assigned_am = %s", (new_name, old_name))
+        db.execute("UPDATE deal_tasks SET assigned_to = %s WHERE assigned_to = %s", (new_name, old_name))
+        db.execute("UPDATE account_coverage SET am = %s WHERE am = %s", (new_name, old_name))
+        cfg_row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+        if cfg_row:
+            cols = {}
+            changed = False
+            for col in ("am_targets", "am_achievements", "am_recurring"):
+                d = json.loads(cfg_row[col] or "{}")
+                if old_name in d:
+                    d[new_name] = d.pop(old_name)
+                    changed = True
+                cols[col] = json.dumps(d)
+            if changed:
+                db.execute(
+                    "UPDATE config SET am_targets=%s, am_achievements=%s, am_recurring=%s WHERE id=%s",
+                    (cols["am_targets"], cols["am_achievements"], cols["am_recurring"], cfg_row["id"]),
+                )
+
     db.commit()
     row = db.execute(
         "SELECT id, username, role, full_name, created_at FROM users WHERE id = %s",
