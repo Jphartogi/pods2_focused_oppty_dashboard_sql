@@ -20,6 +20,11 @@
 </script>
 <style>
   :root {
+    /* Tells the browser to render native widgets (a <select>'s own dropdown
+       popup, scrollbars, date pickers, etc.) in the matching light/dark
+       palette instead of always defaulting to a plain white/light one that
+       looks broken against a dark-themed page. */
+    color-scheme: light;
     --bg:#f2f3f5; --surface:#ffffff; --surface-2:#f8f9fb; --surface-3:#eef0f3;
     --border:#eceef1; --text:#16191f; --text-muted:#545b64; --text-faint:#8b929c;
     --primary:#0972d3; --primary-hover:#075fb0; --primary-soft:#eaf3fd; --on-primary:#ffffff;
@@ -30,6 +35,7 @@
     --chart-grid:#eceef1; --chart-text:#545b64;
   }
   [data-theme="dark"] {
+    color-scheme: dark;
     --bg:#0d1826; --surface:#141f2d; --surface-2:#1a2836; --surface-3:#243547;
     --border:#22303f; --text:#e9edf1; --text-muted:#9aa7b6; --text-faint:#6d7a8c;
     --primary:#539fe5; --primary-hover:#7cb9f0; --primary-soft:#1b3350; --on-primary:#0f1b2a;
@@ -72,6 +78,10 @@
   .field-ico { background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:10px; padding-left:30px; transition:border-color .15s ease, box-shadow .15s ease, background .15s ease; }
   .field-ico:hover { border-color:var(--text-faint); }
   .field-ico:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+  /* A filter that isn't at its default ("All ...", empty search) gets a visible
+     accent so it's obvious at a glance which filters are actually narrowing the list. */
+  .field-ico.has-value { border-color:var(--primary); background:var(--primary-soft); color:var(--primary); font-weight:500; }
+  .select-ico:has(.field-ico.has-value) > i { color:var(--primary); }
   select.field-ico { appearance:none; -webkit-appearance:none; cursor:pointer;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b929c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat:no-repeat; background-position:right 11px center; padding-right:28px; }
@@ -710,9 +720,11 @@
           <div id="calDowRow" class="grid grid-cols-7 gap-1 mb-1"></div>
           <div id="calGrid" class="grid grid-cols-7 gap-1"></div>
         </div>
-        <div class="card elev p-5">
-          <p class="text-sm font-medium mb-1"><i class="fa-solid fa-list-ul mr-1.5" style="color:var(--primary)"></i>Action plan list</p>
-          <p class="text-xs mb-3" style="color:var(--text-muted)">Actions for the current filter. Click any row to see the item — then open its opportunity if you need to.</p>
+        <!-- Undated items can't appear anywhere on the grid above, so this only shows up for
+             that one case ("No date set") - every other view is fully covered by the grid itself. -->
+        <div id="calListWrap" class="card elev p-5" style="display:none">
+          <p class="text-sm font-medium mb-1"><i class="fa-solid fa-calendar-xmark mr-1.5" style="color:var(--primary)"></i>Actions without a date</p>
+          <p class="text-xs mb-3" style="color:var(--text-muted)">These can't show on the grid above since they have no date set. Click a row to see it — then open its opportunity if you need to.</p>
           <div id="calList" class="space-y-2"></div>
         </div>
       </section>
@@ -1974,8 +1986,14 @@ function renderCoverageGauge(achieved, recurring, pipeline2026, gap){
 }
 
 /* ================= DEALS ================= */
+function markTrackerFilterState(){
+  ['filterAM','filterPillar','filterStage','searchInput'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.classList.toggle('has-value', !!el.value);
+  });
+}
 ['filterAM','filterPillar','filterStage'].forEach(id=>document.getElementById(id).addEventListener('change',loadDeals));
-document.getElementById('searchInput').addEventListener('input',renderDealsTable);
+document.getElementById('searchInput').addEventListener('input',()=>{ markTrackerFilterState(); renderDealsTable(); });
 document.getElementById('sortSelect').addEventListener('change',renderDealsTable);
 document.getElementById('clearFilters').addEventListener('click',()=>{
   ['filterAM','filterPillar','filterStage'].forEach(id=>document.getElementById(id).value='');
@@ -1983,6 +2001,7 @@ document.getElementById('clearFilters').addEventListener('click',()=>{
 });
 
 async function loadDeals(){
+  markTrackerFilterState();
   const p=new URLSearchParams();
   const am=document.getElementById('filterAM').value; if(am)p.set('am',am);
   const pl=document.getElementById('filterPillar').value; if(pl)p.set('pillar',pl);
@@ -3625,9 +3644,11 @@ function renderCalendar(){
       ${items}${more}</div>`;
   }).join('');
 
-  // List below the grid: dated items (or undated ones, if that's the active filter)
-  const el=document.getElementById('calList');
+  // Undated items can't appear on the grid above, so they get a small list of their own -
+  // shown only when that's the active filter; every other view is fully covered by the grid.
+  document.getElementById('calListWrap').style.display = calStatusFilter==='no_date' ? '' : 'none';
   if(calStatusFilter==='no_date'){
+    const el=document.getElementById('calList');
     el.innerHTML = visibleUndated.map(a=>{
       const idx=all.indexOf(a);
       return `<div class="cal-item clickable flex items-center gap-3 rounded-lg px-3 py-2" data-idx="${idx}" style="background:var(--surface-2)">
@@ -3637,21 +3658,6 @@ function renderCalendar(){
         <span class="chip" style="color:var(--text-muted)">${escapeHtml((a.am||'').split(' ')[0])}</span>
       </div>`;
     }).join('')||`<p class="text-xs" style="color:var(--text-faint)">Nothing without a date.</p>`;
-  } else {
-    const sorted=visibleDated.slice().sort((a,b)=>a.start.localeCompare(b.start)).slice(0,40);
-    el.innerHTML=sorted.map(a=>{
-      const idx=all.indexOf(a);
-      const overdue=!a.done&&a.end<today;
-      const em=ENTRY_STATUS_META[a.status]||ENTRY_STATUS_META.not_started;
-      const range=a.start!==a.end?`${a.start} → ${a.end}`:a.start;
-      return `<div class="cal-item clickable flex items-center gap-3 rounded-lg px-3 py-2" data-idx="${idx}" style="background:var(--surface-2)">
-        <span class="chip" style="color:${overdue?'var(--danger)':'var(--text-muted)'};border-color:${overdue?'var(--danger)':'var(--border)'};min-width:170px;text-align:center">${overdue?'⚠ ':''}${range}</span>
-        <span class="chip" style="color:${em.color};background:${em.bg}">${em.label}</span>
-        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(a.action)}</span>
-        <span class="text-xs" style="color:var(--text-muted)">${escapeHtml(a.dealName)}</span>
-        <span class="chip" style="color:var(--text-muted)">${escapeHtml((a.am||'').split(' ')[0])}</span>
-      </div>`;
-    }).join('')||`<p class="text-xs" style="color:var(--text-faint)">Nothing to show for this filter.</p>`;
   }
 
   document.querySelectorAll('.cal-item').forEach(n=>n.addEventListener('click',()=>openCalItem(parseInt(n.dataset.idx))));

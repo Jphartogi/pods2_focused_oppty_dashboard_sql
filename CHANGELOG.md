@@ -6,6 +6,23 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.4.3] - 2026-09-29 (branch: v2.0)
+### Changed
+- **Tracker filter bar polish, pre-launch pass**:
+  - Native dropdown popups (Account Manager, Pillar, Stage, and every other
+    `<select>` in the app) now render in the matching light/dark palette
+    instead of a plain white list that looked jarring in dark mode - browsers
+    do this automatically once told the page supports both via CSS
+    `color-scheme`.
+  - A filter that isn't at its default ("All ...", empty search) now gets a
+    visible primary-colored highlight, so it's obvious at a glance which
+    filters are actually narrowing the Tracker list.
+- **Calendar's "Action plan list"**: removed as a permanent fixture - it was
+  a plain-text duplicate of what the grid above it already shows. It still
+  appears, retitled "Actions without a date", but only when the "No date
+  set" KPI is selected, since those items are the one thing the grid
+  genuinely can't display.
+
 ## [2.4.2] - 2026-09-29 (branch: v2.0)
 ### Fixed
 - **Performance workbook import read every AM summary column one off from
