@@ -664,10 +664,24 @@
 
       <!-- ============ TRACKER ============ -->
       <section id="tab-tracker" class="tab-panel active px-8 py-7">
+        <!-- Page header: title + primary actions - kept apart from the filter bar below
+             so filtering/sorting controls aren't sharing a row with page-level actions. -->
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <p class="section-label mb-1">Sales Pipeline</p>
+            <p class="page-title">Tracker</p>
+          </div>
+          <div class="flex items-center gap-2.5">
+            <button id="exportPdfBtn" class="text-sm px-4 py-2.5 rounded-lg transition" style="color:var(--text);border:1px solid var(--border)" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'"><i class="fa-solid fa-file-pdf mr-1.5" style="color:var(--danger)"></i>Export PDF</button>
+            <button id="addDealBtn" class="btn-primary text-sm px-4 py-2.5 rounded-lg transition"><i class="fa-solid fa-plus mr-1.5"></i>Add Opportunity</button>
+          </div>
+        </div>
+
+        <!-- Filter bar: filtering/sorting only, nothing else -->
         <div class="card elev tracker-toolbar px-4 py-3 mb-4 flex flex-wrap items-center gap-2.5">
-          <div class="select-ico">
+          <div class="select-ico" style="flex:1 1 220px;min-width:180px">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <input id="searchInput" type="text" placeholder="Search opportunity or customer..." class="field-ico py-2 pr-3 text-sm w-64">
+            <input id="searchInput" type="text" placeholder="Search opportunity or customer..." class="field-ico py-2 pr-3 text-sm w-full">
           </div>
           <span class="toolbar-divider"></span>
           <div class="select-ico">
@@ -682,8 +696,6 @@
             <i class="fa-solid fa-flag"></i>
             <select id="filterStage" class="field-ico text-sm py-2"><option value="">All Stages</option></select>
           </div>
-          <button id="clearFilters" class="text-sm px-2.5 py-2 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
-          <div class="flex-1"></div>
           <div class="select-ico">
             <i class="fa-solid fa-arrow-down-wide-short"></i>
             <select id="sortSelect" class="field-ico text-sm py-2" title="Sort opportunities">
@@ -696,8 +708,7 @@
               <option value="name_asc">Name (A → Z)</option>
             </select>
           </div>
-          <button id="exportPdfBtn" class="text-sm px-4 py-2 rounded-lg transition" style="color:var(--text);border:1px solid var(--border)" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'"><i class="fa-solid fa-file-pdf mr-1.5" style="color:var(--danger)"></i>Export PDF</button>
-          <button id="addDealBtn" class="btn-primary text-sm px-4 py-2 rounded-lg transition"><i class="fa-solid fa-plus mr-1.5"></i>Add Opportunity</button>
+          <button id="clearFilters" class="text-sm px-2.5 py-2 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
         </div>
 
         <p id="amFocusNote" class="text-[11px] mb-2" style="display:none;color:var(--primary)"><i class="fa-solid fa-user-check mr-1"></i>Showing <b>your</b> opportunities by default. Change the Account Manager filter to see the whole team.</p>

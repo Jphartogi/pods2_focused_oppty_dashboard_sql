@@ -6,6 +6,15 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.5.2] - 2026-09-29 (branch: v2.0)
+### Changed
+- **Tracker page header restructured**: "Export PDF" and "Add Opportunity"
+  moved out of the filter bar into a proper page header (an eyebrow label +
+  "Tracker" title, with the two actions aligned top-right) - the filter bar
+  below now only holds filtering/sorting controls (search, AM, Pillar,
+  Stage, Sort, Clear) on their own row, instead of 8 mixed controls
+  competing for space on one crowded line.
+
 ## [2.5.1] - 2026-09-29 (branch: v2.0)
 ### Fixed
 - **Account Coverage kept showing stale/cross-pod data in the browser even
