@@ -6,6 +6,15 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.4.0] - 2026-09-29 (branch: v2.0)
+### Added
+- **HTTPS groundwork**: nginx now recognizes `pods2.jphartogi.com` and serves
+  Let's Encrypt's ACME HTTP-01 challenge path from a shared volume; a new
+  `certbot` container (image `certbot/certbot`) handles certificate requests
+  and renews automatically twice a day once a certificate exists. This phase
+  is purely additive - no SSL is switched on yet, so it's safe to deploy on
+  its own; see DEPLOY.md for the certificate request + SSL cutover steps.
+
 ## [2.3.2] - 2026-09-24 (branch: v2.0)
 ### Fixed
 - **Sync from v1.9** failed with `column "id" does not exist` whenever v1.9's

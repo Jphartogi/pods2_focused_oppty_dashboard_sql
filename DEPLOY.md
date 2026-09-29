@@ -101,6 +101,43 @@ across rebuilds) under `uploads/<deal_id>/`, with a `documents` table row
 per file. Only admin or that opportunity's assigned AM can upload/delete;
 anyone who can view the opportunity can download.
 
+## HTTPS (Let's Encrypt)
+
+Requires the domain's DNS to already point at this VM (`dig +short
+pods2.jphartogi.com` should print the VM's IP) - Let's Encrypt verifies
+ownership by reaching the domain over plain HTTP, so this won't work until
+DNS has propagated.
+
+1. Deploy the ACME-challenge-ready config (safe on its own, no SSL yet):
+   ```bash
+   git pull && docker compose up -d --build
+   ```
+2. In the GCP Console, open the VM's firewall rules (or Compute Engine ->
+   VM instances -> edit the instance's network tags) and make sure a rule
+   allows `tcp:443` from `0.0.0.0/0` - the same way `http-server` was added
+   for port 80. The VM needs the `https-server` network tag, and a firewall
+   rule targeting it for `tcp:443`.
+3. Request the certificate (one-off; replace the email with a real one you
+   want renewal-failure notices sent to):
+   ```bash
+   docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
+     -d pods2.jphartogi.com --email you@example.com --agree-tos --no-eff-email
+   ```
+   This writes the certificate into the `certbot-conf` volume. If it fails,
+   double-check DNS and that port 80 is actually reachable from the public
+   internet first - Certbot's error message says exactly what it tried and
+   what came back.
+4. Switch nginx over to serve HTTPS (this step edits `nginx.conf` to add a
+   `443 ssl` server block referencing the certificate that now exists, and
+   redirects plain HTTP to HTTPS) - ask Claude to do this once step 3 has
+   succeeded, or apply it by hand and `docker compose up -d --build`.
+5. Verify: `https://pods2.jphartogi.com` should load with a valid padlock,
+   and `http://pods2.jphartogi.com` should redirect to it.
+
+The `certbot` container then renews automatically (it wakes up every 12h and
+calls `certbot renew`, which is a no-op until the cert is within 30 days of
+expiring) - no further action needed after the initial request.
+
 ## Not yet done in v2.0
 
 - Account Coverage's and AM Workload's own account tables are still the
