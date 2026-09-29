@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.4.4"
+APP_VERSION = "2.5.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -2768,8 +2768,22 @@ def parse_master_account_workbook(wb):
     if revenue_sheet is not None:
         header_rows = list(revenue_sheet.iter_rows(min_row=3, max_row=3, values_only=True))
         header = header_rows[0] if header_rows else ()
-        month_idxs = [i for i in range(9, len(header))
-                      if hasattr(header[i], "strftime") or (isinstance(header[i], str) and header[i].strip())]
+        # Only the first contiguous run of dated columns (the real monthly revenue
+        # block, e.g. J-N) - this sheet repeats the same month dates again for a
+        # "Same"/"OTC" status block and then a numeric "movement" (delta) block
+        # further right, each separated by one blank column. Scanning the whole
+        # row for anything date-like (rather than stopping at the first blank
+        # once a run has started) would silently sum all three blocks together,
+        # corrupting the real revenue figure with unrelated status/delta values.
+        month_idxs = []
+        for i in range(9, len(header)):
+            h = header[i]
+            is_month = hasattr(h, "strftime") or (isinstance(h, str) and h.strip())
+            if not is_month:
+                if month_idxs:
+                    break
+                continue
+            month_idxs.append(i)
         blanks = 0
         for row in revenue_sheet.iter_rows(min_row=4, values_only=True):
             if not any(v is not None for v in row):

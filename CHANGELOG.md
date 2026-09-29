@@ -6,6 +6,29 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.5.0] - 2026-09-29 (branch: v2.0)
+### Fixed
+- **Master Account import was silently corrupting revenue figures.** Its
+  "Revenue Data" sheet repeats the same month-end dates three times across
+  the row - the real monthly revenue block, then a "Same"/"OTC" status-flag
+  block, then a numeric "movement/delta" block - separated only by blank
+  columns. The parser scanned the whole row for anything date-like instead
+  of stopping at the first gap, so it silently summed all three blocks
+  together into each account's revenue figure (confirmed against a real
+  file: one account's total was pulled down by a -80,000,000 delta value
+  that had nothing to do with its actual revenue). Fixed by only taking the
+  first contiguous run of dated columns; cross-checked against a manual sum
+  of the real file for a sampled account and confirmed exact.
+### Changed
+- **Hero card visual upgrade**: the FY Target gauge card now has an eyebrow
+  header ("Revenue Overview", plus an "As of <performance snapshot label>"
+  note when available), a vertical divider between the gauge and the KPI
+  tiles, and the tiles themselves are elevated white/dark cards with soft
+  shadows and gradient icon badges instead of flat tinted panels - bigger,
+  bolder numbers throughout. The same `.metric-tile` styling is shared by
+  Management View's KPI band, so it picked up the same treatment
+  automatically.
+
 ## [2.4.4] - 2026-09-29 (branch: v2.0)
 ### Fixed
 - **Account Coverage was importing other pods' accounts and AMs.** The

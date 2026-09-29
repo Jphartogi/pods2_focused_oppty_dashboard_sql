@@ -236,24 +236,34 @@
   /* --- fresh, dynamic metric cards (top KPI strip) --- */
   .metric-card { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:16px 18px; display:flex; align-items:center; gap:14px; position:relative; overflow:hidden; transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease; }
   /* --- FY target hero card: a Chart.js radial gauge + 3 KPI tiles, replacing the old
-     4-card-plus-flat-bar layout with a single composed "revenue dashboard" style card --- */
-  .metric-hero { border-radius:20px; padding:24px 26px; }
-  .metric-hero-grid { display:grid; grid-template-columns:168px 1fr; gap:28px; align-items:center; }
+     4-card-plus-flat-bar layout with a single composed "revenue dashboard" style card.
+     Tiles are elevated white cards with gradient icon badges rather than flat tinted
+     zones, and the card carries an eyebrow label + divider for a more finished,
+     premium-dashboard hierarchy (label -> hero number -> supporting detail). --- */
+  .metric-hero { border-radius:20px; padding:26px 28px; box-shadow:0 1px 2px var(--shadow), 0 12px 32px -12px var(--shadow-2); }
+  .metric-hero-eyebrow { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+  .metric-hero-grid { display:grid; grid-template-columns:168px 1fr; gap:32px; align-items:center; position:relative; }
+  .metric-hero-grid::before { content:''; position:absolute; left:168px; top:50%; transform:translate(16px,-50%); width:1px; height:calc(100% - 12px); background:var(--border); }
+  @media (max-width:880px) { .metric-hero-grid::before { display:none; } }
   .metric-gauge-col { display:flex; flex-direction:column; align-items:center; text-align:center; }
   .metric-gauge-wrap { position:relative; width:150px; height:150px; }
   .metric-gauge-wrap canvas { width:150px !important; height:150px !important; }
   #coverageGaugeChart { width:150px; height:150px; }
   .metric-gauge-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
-  .metric-gauge-pct { font-size:27px; font-weight:700; letter-spacing:-0.02em; color:var(--text); font-variant-numeric:tabular-nums; }
-  .metric-gauge-caption { font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); margin-top:1px; }
-  .metric-gauge-title { font-size:11.5px; color:var(--text-muted); margin-top:12px; }
-  .metric-gauge-target { font-size:17px; font-weight:600; letter-spacing:-0.01em; color:var(--text); margin-top:1px; font-variant-numeric:tabular-nums; }
+  .metric-gauge-pct { font-size:30px; font-weight:800; letter-spacing:-0.03em; color:var(--text); font-variant-numeric:tabular-nums; }
+  .metric-gauge-caption { font-size:9.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-faint); margin-top:2px; }
+  .metric-gauge-title { font-size:11.5px; color:var(--text-muted); margin-top:14px; }
+  .metric-gauge-target { font-size:19px; font-weight:700; letter-spacing:-0.02em; color:var(--text); margin-top:2px; font-variant-numeric:tabular-nums; }
   .metric-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
-  .metric-tile { display:flex; align-items:center; gap:12px; background:var(--surface-2); border-radius:14px; padding:15px 16px; position:relative; overflow:hidden; }
+  .metric-tile { display:flex; align-items:center; gap:13px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 17px; position:relative; overflow:hidden; box-shadow:0 1px 2px var(--shadow); transition:box-shadow .18s ease, transform .18s ease; }
+  [data-theme="dark"] .metric-tile { background:var(--surface-2); box-shadow:none; }
+  .metric-tile:hover { box-shadow:0 6px 16px -6px var(--shadow-2); transform:translateY(-1px); }
   .metric-tile::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--tile-accent,var(--primary)); }
-  .metric-tile-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:14px; background:color-mix(in srgb, var(--tile-accent) 16%, transparent); color:var(--tile-accent); flex-shrink:0; }
+  .metric-tile-icon { width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; font-size:15px;
+    background:linear-gradient(155deg, color-mix(in srgb, var(--tile-accent) 22%, transparent), color-mix(in srgb, var(--tile-accent) 10%, transparent));
+    color:var(--tile-accent); flex-shrink:0; }
   .metric-tile-label { font-size:10.5px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--text-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .metric-tile-value { font-size:19px; font-weight:600; letter-spacing:-0.01em; margin-top:2px; color:var(--text); font-variant-numeric:tabular-nums; }
+  .metric-tile-value { font-size:20px; font-weight:700; letter-spacing:-0.015em; margin-top:2px; color:var(--text); font-variant-numeric:tabular-nums; }
   @media (max-width:880px) {
     .metric-hero-grid { grid-template-columns:1fr; justify-items:center; }
     .metric-tiles { grid-template-columns:1fr; width:100%; }
@@ -467,6 +477,10 @@
       <!-- Metric strip -->
       <div id="metricStripWrap" class="px-6 pt-6">
         <div class="card elev metric-hero">
+          <div class="metric-hero-eyebrow">
+            <p class="section-label" style="margin:0"><i class="fa-solid fa-chart-pie mr-1.5" style="color:var(--primary)"></i>Revenue Overview</p>
+            <p id="heroAsOf" class="text-[11px]" style="color:var(--text-faint)"></p>
+          </div>
           <div class="metric-hero-grid">
             <div class="metric-gauge-col">
               <div class="metric-gauge-wrap">
@@ -1789,6 +1803,7 @@ async function enterApp(){
   }
   await loadDeals();
   await loadPerformance();
+  document.getElementById('heroAsOf').textContent = (PERF && PERF.available && PERF.label) ? `As of ${PERF.label}` : '';
   if(!CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) await loadAccountCoverage();
   if(ROLE==='admin') await loadUsers();
   // Management lands on the executive briefing; everyone else on the tracker
