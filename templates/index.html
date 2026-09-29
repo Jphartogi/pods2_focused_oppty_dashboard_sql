@@ -1836,7 +1836,10 @@ function switchTab(tab){
   if(tab==='calendar') renderCalendar();
   if(tab==='management') renderManagement();
   if(tab==='performance') renderPerformance();
-  if(tab==='coverage'){ renderCoverage(); renderAmWorkload(); }
+  // Re-fetch (not just re-render) every time this tab opens - Account Coverage is
+  // import-driven and can change server-side (another admin's import, a scheduled
+  // sync) without this browser's in-memory copy ever refreshing otherwise.
+  if(tab==='coverage'){ loadAccountCoverage().then(()=>{ renderCoverage(); renderAmWorkload(); }); }
   if(tab==='weeklymeeting') renderWeeklyMeeting();
   if(tab==='myteamtasks') renderMyTeamTasks();
 }
@@ -3263,7 +3266,13 @@ document.getElementById('perfImportBtn').addEventListener('click',()=>{
       showToast(`Imported ${data.am_count} AMs, ${data.account_rows} account rows`
         + (data.removed ? ` — removed ${data.removed} stale account(s) no longer in this file` : ''));
       await loadPerformance(); renderPerformance();
-      if(document.getElementById('tab-coverage').classList.contains('active')){ renderCoverage(); renderAmWorkload(); }
+      // This import also syncs Account Coverage server-side (upserts + prunes stale rows) -
+      // re-fetch it here too, not just re-render, or the Coverage tab keeps showing whatever
+      // was in memory from page load until a full reload happens to refresh it.
+      if(!CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)){
+        await loadAccountCoverage();
+        if(document.getElementById('tab-coverage').classList.contains('active')){ renderCoverage(); renderAmWorkload(); }
+      }
     }catch(err){ showToast(err.message,true); }
   });
 });

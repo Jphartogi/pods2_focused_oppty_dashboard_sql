@@ -6,6 +6,21 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.5.1] - 2026-09-29 (branch: v2.0)
+### Fixed
+- **Account Coverage kept showing stale/cross-pod data in the browser even
+  after the 2.4.4/2.5.0 fixes were deployed and re-imported** - the server
+  side cleanup was working correctly (re-verified against both real files),
+  but the page only ever loads Account Coverage data once at login. Neither
+  switching to the Coverage tab nor a Performance import's success handler
+  re-fetched it afterward, so the browser kept rendering whatever was in
+  memory from page load. Fixed: opening the Coverage tab now always
+  re-fetches fresh data, and importing a Performance workbook refreshes
+  Account Coverage the same way the Master Account import already did.
+  Verified without a page reload: seeded a stray cross-pod row, ran the
+  import, and confirmed it disappears from the in-memory list and the
+  rendered chart immediately.
+
 ## [2.5.0] - 2026-09-29 (branch: v2.0)
 ### Fixed
 - **Master Account import was silently corrupting revenue figures.** Its
