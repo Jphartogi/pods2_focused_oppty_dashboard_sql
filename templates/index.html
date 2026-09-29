@@ -1133,6 +1133,31 @@
           </div>
 
           <div class="card elev p-5 lg:col-span-2">
+            <p class="text-sm font-medium mb-1"><i class="fa-solid fa-code-merge mr-1.5" style="color:var(--primary)"></i>Merge Account Manager Name</p>
+            <p class="text-[11px] mb-4" style="color:var(--text-faint)">
+              A deal, task or coverage row can carry a name that doesn't match any registered user -
+              e.g. typed with a short name ("Dimas") before that person's real full name
+              ("Dimas Aradzna Himawan Nugroho") was ever set - which fragments one person's data
+              under two different names everywhere. Merge the stray name into the correct one below.
+              This doesn't rename any user account; it only relabels the data that already carries
+              the stray name.
+            </p>
+            <div id="amMismatchList" class="space-y-1.5 mb-4"></div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label class="block text-xs mb-1" style="color:var(--text-muted)">From (stray name)</label>
+                <input id="amMergeFrom" type="text" class="field w-full px-3 py-2 text-sm" placeholder="e.g. Dimas">
+              </div>
+              <div>
+                <label class="block text-xs mb-1" style="color:var(--text-muted)">To (correct name)</label>
+                <select id="amMergeTo" class="field w-full px-3 py-2 text-sm"><option value="">Choose a registered user...</option></select>
+              </div>
+              <button id="amMergeBtn" class="btn-primary text-sm px-4 py-2 rounded-lg">Merge</button>
+            </div>
+            <p id="amMergeResult" class="text-xs mt-3" style="color:var(--text-muted)"></p>
+          </div>
+
+          <div class="card elev p-5 lg:col-span-2">
             <p class="text-sm font-medium mb-1"><i class="fa-solid fa-database mr-1.5" style="color:var(--primary)"></i>Data Backup &amp; Restore</p>
             <p class="text-[11px] mb-4" style="color:var(--text-faint)">Download everything (opportunities, strategies, next actions with target dates, configuration and users) as one Excel file. The same file is the import template — use it to restore after a problem, or to move this dashboard to another cloud provider. Passwords are never exported; imported new users get the temporary password <b>changeme123</b>.</p>
             <div class="flex flex-wrap items-center gap-3">
@@ -4580,7 +4605,55 @@ function renderSettings(){
   renderUsersTable();
   loadEngine1Config();
   loadV1SyncConfig();
+  loadAmMismatches();
 }
+/* ================= MERGE ACCOUNT MANAGER NAME ================= */
+async function loadAmMismatches(){
+  const listEl=document.getElementById('amMismatchList');
+  const toSel=document.getElementById('amMergeTo');
+  const keepTo=toSel.value;
+  toSel.innerHTML='<option value="">Choose a registered user...</option>'
+    + ASSIGNABLE_USERS.map(u=>`<option value="${escapeHtml(u.full_name)}">${escapeHtml(u.full_name)}</option>`).join('');
+  toSel.value=keepTo;
+  try{
+    const rows=await api('/api/admin/am_name_mismatches');
+    if(!rows.length){
+      listEl.innerHTML=`<p class="text-xs" style="color:var(--success)"><i class="fa-solid fa-circle-check mr-1"></i>No stray names found — everything matches a registered user.</p>`;
+      return;
+    }
+    listEl.innerHTML=`<p class="text-[11px] mb-1.5" style="color:var(--text-faint)">Stray names found — click one to fill in "From":</p>`
+      + rows.map(r=>`<div class="am-mismatch-row clickable flex items-center gap-2 rounded-lg px-3 py-2" data-name="${escapeHtml(r.name)}" style="background:var(--surface-2)">
+          <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(r.name)}</span>
+          <span class="text-[11px]" style="color:var(--text-muted)">${r.sources.map(escapeHtml).join(', ')}</span>
+          <span class="chip" style="color:var(--text-muted)">${r.count} row${r.count===1?'':'s'}</span>
+        </div>`).join('');
+    document.querySelectorAll('.am-mismatch-row').forEach(el=>el.addEventListener('click',()=>{
+      document.getElementById('amMergeFrom').value=el.dataset.name;
+    }));
+  }catch(err){ listEl.innerHTML=`<p class="text-xs" style="color:var(--danger)">${escapeHtml(err.message)}</p>`; }
+}
+document.getElementById('amMergeBtn').addEventListener('click',()=>{
+  const from=document.getElementById('amMergeFrom').value.trim();
+  const to=document.getElementById('amMergeTo').value.trim();
+  if(!from||!to){ showToast('Fill in both the stray name and the correct name',true); return; }
+  if(from===to){ showToast('Those are already the same name',true); return; }
+  openConfirm(`Merge "${from}" into "${to}"? Every deal, task, coverage row and target figure currently under "${from}" will be relabeled "${to}". This cannot be undone.`, async()=>{
+    const out=document.getElementById('amMergeResult');
+    try{
+      const data=await api('/api/admin/rename_am',{method:'POST',body:JSON.stringify({old_name:from,new_name:to})});
+      const c=data.counts;
+      out.innerHTML=`<span style="color:var(--success)">Merged.</span> deals: ${c.deals}, tasks: ${c.deal_tasks}, coverage: ${c.account_coverage}${c.config?', targets updated':''}.`;
+      showToast(`Merged "${from}" into "${to}"`);
+      document.getElementById('amMergeFrom').value=''; document.getElementById('amMergeTo').value='';
+      await loadAmMismatches();
+      await loadConfig(); await loadAMs(); await loadDeals();
+      if(!CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)){ await loadAccountCoverage(); }
+    }catch(err){
+      out.innerHTML=`<span style="color:var(--danger)">${escapeHtml(err.message)}</span>`;
+      showToast(err.message,true);
+    }
+  });
+});
 /* ================= CONFIGURATION (taxonomy lists) ================= */
 function renderConfiguration(){
   renderEditableList('stagesList','stages');

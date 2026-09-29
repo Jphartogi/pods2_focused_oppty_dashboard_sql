@@ -6,6 +6,26 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.6.0] - 2026-09-29 (branch: v2.0)
+### Added
+- **Merge Account Manager Name** (Settings, admin only): the 2.5.4 rename
+  cascade only fires when you edit a user whose *own* full name is wrong -
+  it didn't help when the user record already has the correct name but a
+  deal, task, or coverage row still carries stale text from before that
+  name was ever set (exactly this: "Dimas"/"Ashari" not appearing as users
+  at all, only as leftover text elsewhere). This tool surfaces every name
+  found in deals/tasks/coverage/config that doesn't match any registered
+  user, with source and row-count context, and merges a chosen stray name
+  into a real registered user's name in one action - independent of any
+  user record, so it also covers this case.
+
+Verified against the exact reported scenario: registered users already
+correctly named "Dimas Aradzna Himawan Nugroho" / "Ashari Asrar", with
+stray "Dimas"/"Ashari" text still sitting in a deal, an account_coverage
+row and config's target figures. The mismatch list found both by name,
+source and count; merging each cleared the mismatch list to empty and
+correctly relabeled every affected row.
+
 ## [2.5.4] - 2026-09-29 (branch: v2.0)
 ### Added
 - **Renaming a user now cascades everywhere their name is stored.** Two AMs

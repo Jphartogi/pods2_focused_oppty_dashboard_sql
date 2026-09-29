@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.5.4"
+APP_VERSION = "2.6.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -1509,6 +1509,44 @@ def create_user():
     return jsonify(dict(row)), 201
 
 
+def _cascade_rename_am(db, old_name, new_name):
+    """A person's name is denormalized as plain text into every place that
+    references them (a deal's assigned_am, a task's assigned_to, an
+    account_coverage row's am, and the AM-keyed JSON figures in config) rather
+    than a live foreign key. Used both when a user is renamed and as a
+    standalone admin tool for merging stray name text that never went through
+    a user record at all (e.g. a deal typed with a short name before the
+    person's real full name was ever registered)."""
+    old_name = (old_name or "").strip()
+    new_name = (new_name or "").strip()
+    counts = {"deals": 0, "deal_tasks": 0, "account_coverage": 0, "config": 0}
+    if not old_name or not new_name or old_name == new_name:
+        return counts
+    counts["deals"] = db.execute(
+        "UPDATE deals SET assigned_am = %s WHERE assigned_am = %s", (new_name, old_name)).rowcount
+    counts["deal_tasks"] = db.execute(
+        "UPDATE deal_tasks SET assigned_to = %s WHERE assigned_to = %s", (new_name, old_name)).rowcount
+    counts["account_coverage"] = db.execute(
+        "UPDATE account_coverage SET am = %s WHERE am = %s", (new_name, old_name)).rowcount
+    cfg_row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    if cfg_row:
+        cols = {}
+        changed = False
+        for col in ("am_targets", "am_achievements", "am_recurring"):
+            d = json.loads(cfg_row[col] or "{}")
+            if old_name in d:
+                d[new_name] = d.pop(old_name)
+                changed = True
+            cols[col] = json.dumps(d)
+        if changed:
+            db.execute(
+                "UPDATE config SET am_targets=%s, am_achievements=%s, am_recurring=%s WHERE id=%s",
+                (cols["am_targets"], cols["am_achievements"], cols["am_recurring"], cfg_row["id"]),
+            )
+            counts["config"] = 1
+    return counts
+
+
 @app.route("/api/users/<int:user_id>", methods=["PUT"])
 @login_required(roles=("admin",))
 def update_user(user_id):
@@ -1531,42 +1569,79 @@ def update_user(user_id):
         "UPDATE users SET role = %s, full_name = %s, password = %s WHERE id = %s",
         (role, full_name, password_hash, user_id),
     )
-
-    # full_name is denormalized as plain text into every place that references this
-    # person (a deal's assigned_am, a task's assigned_to, an account_coverage row's
-    # am, and the AM-keyed JSON figures in config) rather than a live foreign key -
-    # renaming the user alone would silently orphan all of that from them. Cascade
-    # the rename everywhere it's stored, so e.g. correcting a short seed name like
-    # "Dimas" to a real full name re-merges with any data already keyed by the
-    # correct name instead of leaving two fragmented identities for one person.
-    old_name = (row["full_name"] or "").strip()
-    new_name = (full_name or "").strip()
-    if old_name and new_name and old_name != new_name:
-        db.execute("UPDATE deals SET assigned_am = %s WHERE assigned_am = %s", (new_name, old_name))
-        db.execute("UPDATE deal_tasks SET assigned_to = %s WHERE assigned_to = %s", (new_name, old_name))
-        db.execute("UPDATE account_coverage SET am = %s WHERE am = %s", (new_name, old_name))
-        cfg_row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
-        if cfg_row:
-            cols = {}
-            changed = False
-            for col in ("am_targets", "am_achievements", "am_recurring"):
-                d = json.loads(cfg_row[col] or "{}")
-                if old_name in d:
-                    d[new_name] = d.pop(old_name)
-                    changed = True
-                cols[col] = json.dumps(d)
-            if changed:
-                db.execute(
-                    "UPDATE config SET am_targets=%s, am_achievements=%s, am_recurring=%s WHERE id=%s",
-                    (cols["am_targets"], cols["am_achievements"], cols["am_recurring"], cfg_row["id"]),
-                )
-
+    _cascade_rename_am(db, row["full_name"], full_name)
     db.commit()
     row = db.execute(
         "SELECT id, username, role, full_name, created_at FROM users WHERE id = %s",
         (user_id,),
     ).fetchone()
     return jsonify(dict(row))
+
+
+@app.route("/api/admin/am_name_mismatches", methods=["GET"])
+@login_required(roles=("admin",))
+def am_name_mismatches():
+    """Every distinct name found in a deal's assigned_am, a task's assigned_to,
+    an account_coverage row's am, or a config JSON key that doesn't match any
+    currently-registered user's full name - the "stray text" this often needs
+    a Merge Account Manager Name pass to clean up, independent of any user
+    record (e.g. a deal typed with a short name before the person's real full
+    name was ever registered, so there's no wrongly-named user to rename)."""
+    db = get_db()
+    known = {r["full_name"] for r in db.execute(
+        "SELECT full_name FROM users WHERE full_name != ''").fetchall()}
+    found = {}
+
+    def add(name, source):
+        name = (name or "").strip()
+        if not name or name in known:
+            return
+        found.setdefault(name, {"name": name, "sources": set(), "count": 0})
+        found[name]["sources"].add(source)
+        found[name]["count"] += 1
+
+    for r in db.execute(
+        "SELECT assigned_am, COUNT(*) AS c FROM deals WHERE assigned_am != '' GROUP BY assigned_am").fetchall():
+        if (r["assigned_am"] or "").strip() not in known:
+            found.setdefault(r["assigned_am"], {"name": r["assigned_am"], "sources": set(), "count": 0})
+            found[r["assigned_am"]]["sources"].add("deals")
+            found[r["assigned_am"]]["count"] += r["c"]
+    for r in db.execute(
+        "SELECT assigned_to, COUNT(*) AS c FROM deal_tasks WHERE assigned_to != '' GROUP BY assigned_to").fetchall():
+        if (r["assigned_to"] or "").strip() not in known:
+            found.setdefault(r["assigned_to"], {"name": r["assigned_to"], "sources": set(), "count": 0})
+            found[r["assigned_to"]]["sources"].add("deal_tasks")
+            found[r["assigned_to"]]["count"] += r["c"]
+    for r in db.execute(
+        "SELECT am, COUNT(*) AS c FROM account_coverage WHERE am != '' GROUP BY am").fetchall():
+        if (r["am"] or "").strip() not in known:
+            found.setdefault(r["am"], {"name": r["am"], "sources": set(), "count": 0})
+            found[r["am"]]["sources"].add("account_coverage")
+            found[r["am"]]["count"] += r["c"]
+    cfg_row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    if cfg_row:
+        for col in ("am_targets", "am_achievements", "am_recurring"):
+            for name in json.loads(cfg_row[col] or "{}"):
+                add(name, "config")
+
+    return jsonify(sorted(
+        [{"name": v["name"], "sources": sorted(v["sources"]), "count": v["count"]} for v in found.values()],
+        key=lambda x: -x["count"],
+    ))
+
+
+@app.route("/api/admin/rename_am", methods=["POST"])
+@login_required(roles=("admin",))
+def rename_am():
+    data = request.get_json(force=True) or {}
+    old_name = str(data.get("old_name") or "").strip()
+    new_name = str(data.get("new_name") or "").strip()
+    if not old_name or not new_name:
+        return jsonify({"error": "Both old_name and new_name are required"}), 400
+    db = get_db()
+    counts = _cascade_rename_am(db, old_name, new_name)
+    db.commit()
+    return jsonify({"ok": True, "counts": counts})
 
 
 @app.route("/api/users/<int:user_id>", methods=["DELETE"])
