@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.4.1"
+APP_VERSION = "2.4.2"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -2470,14 +2470,14 @@ def parse_performance_workbook(wb):
                 "mrc_monthly": series(41),        # AO..AZ
                 "pipeline_monthly": series(55),   # BC..BN
                 "po_monthly": series(69),         # BQ..CB
-                "target_fy": _num(sheet.cell(row=r, column=85).value),   # CG
-                "actual_ytd": _num(sheet.cell(row=r, column=86).value),  # CH
-                "mrc_rest": _num(sheet.cell(row=r, column=87).value),    # CI
-                "po_hand": _num(sheet.cell(row=r, column=88).value),     # CJ
-                "forecast_fy": _num(sheet.cell(row=r, column=89).value),  # CK
-                "gap": _num(sheet.cell(row=r, column=90).value),          # CL
-                "conservative_pipeline": _num(sheet.cell(row=r, column=91).value),  # CM
-                "current_pipeline": _num(sheet.cell(row=r, column=93).value),       # CO
+                "target_fy": _num(sheet.cell(row=r, column=84).value),   # CF: Target FY 2026
+                "actual_ytd": _num(sheet.cell(row=r, column=85).value),  # CG: Actual YTD
+                "mrc_rest": _num(sheet.cell(row=r, column=86).value),    # CH: MRC (Sep-Dec)
+                "po_hand": _num(sheet.cell(row=r, column=87).value),     # CI: PO on Hand (Sep-Dec)
+                "forecast_fy": _num(sheet.cell(row=r, column=88).value),  # CJ: Total Forecast FY 2026
+                "gap": _num(sheet.cell(row=r, column=89).value),          # CK: Gap
+                "conservative_pipeline": _num(sheet.cell(row=r, column=90).value),  # CL: Conservative Pipeline
+                "current_pipeline": _num(sheet.cell(row=r, column=92).value),       # CN: Current Pipeline (CM/91 is a blank spacer column)
             })
 
     # ---- Sheet 2: account-level monthly revenue

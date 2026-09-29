@@ -6,6 +6,20 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.4.2] - 2026-09-29 (branch: v2.0)
+### Fixed
+- **Performance workbook import read every AM summary column one off from
+  where it actually is** in the real "PODS (2)" template - `Target FY 2026`
+  was read as `Actual YTD`, `Actual YTD` as `MRC`, `MRC` as `PO on Hand`, and
+  so on down the row, with `Current Pipeline` off by two (a blank spacer
+  column wasn't accounted for). This silently corrupted the Performance
+  page's team scorecard, the AM Targets import (an AM's target could show
+  as low as 1/10th the real figure), and the PDF report. Fixed by
+  re-deriving every column index directly against a real production
+  workbook; verified target/achieved/recurring/gap/pipeline all now match
+  the source file exactly for every AM, both via `/api/performance` and
+  `/api/config/am_targets/import`.
+
 ## [2.4.1] - 2026-09-29 (branch: v2.0)
 ### Added
 - **HTTPS is live**: nginx now serves `https://pods2.jphartogi.com` (TLS
