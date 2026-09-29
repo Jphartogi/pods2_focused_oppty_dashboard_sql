@@ -6,6 +6,25 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.5.3] - 2026-09-29 (branch: v2.0)
+### Fixed
+- **Master Account import still left old cross-pod accounts behind** if the
+  Performance workbook wasn't also re-uploaded - its cleanup only ever
+  removed stale rows it created itself (`source='master'`), never stale
+  rows left over from an earlier (pre-fix) Performance import
+  (`source='performance'`). Since the Master file is described as "the
+  authoritative account list," it now also prunes stale performance-sourced
+  rows that aren't in it - a performance-only import stays narrowly scoped
+  to its own source (it's just a monthly revenue snapshot, not a complete
+  account registry, so it can't safely make that call), but the master list
+  can. Tracker/manual rows - real local work - are still never touched by
+  either.
+
+Verified: seeded two cross-pod `source='performance'` rows plus one
+legitimate `source='tracker'` row, ran only the Master import, and
+confirmed both strays are removed while the Tracker-derived row survives
+untouched.
+
 ## [2.5.2] - 2026-09-29 (branch: v2.0)
 ### Changed
 - **Tracker page header restructured**: "Export PDF" and "Add Opportunity"

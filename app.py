@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.5.2"
+APP_VERSION = "2.5.3"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -2884,14 +2884,19 @@ def import_master_accounts():
             )
             created += 1
 
-    # Prune master-sourced accounts that dropped out of this file (e.g. reassigned to
-    # another pod, or removed from the master list) - never touches master rows for a
-    # different reason (master is the richest source here), nor tracker/manual rows.
+    # This file is the authoritative PODS 2 account list (per its own description in
+    # Settings), so it prunes both master- and performance-sourced strays that aren't
+    # in it - not just rows it created itself. A performance-only import is a narrower
+    # monthly snapshot (only accounts with billed revenue that month) and can't safely
+    # make that call, but the master list is a complete account registry, so anything
+    # import-sourced and missing from it genuinely doesn't belong (e.g. it belonged to
+    # another pod that a parsing bug used to let through). Tracker/manual rows - real
+    # local work, not an import artifact - are never touched here.
     removed = 0
     if accounts:
         current_keys = list(accounts.keys())
         cur = db.execute(
-            "DELETE FROM account_coverage WHERE source = 'master' AND NOT (account_key = ANY(%s))",
+            "DELETE FROM account_coverage WHERE source IN ('master', 'performance') AND NOT (account_key = ANY(%s))",
             (current_keys,),
         )
         removed = cur.rowcount
