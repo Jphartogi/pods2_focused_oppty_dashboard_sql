@@ -482,8 +482,8 @@
             <i class="fa-solid fa-chevron-down chev"></i><span>Tracker &amp; Updates</span>
           </button>
           <div class="nav-group-items space-y-1">
-            <button data-tab="tracker" id="trackerNavBtn" title="Tracker" class="nav-link active w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-table-cells-large w-4"></i> <span class="rail-label">Tracker</span></button>
-            <button data-tab="calendar" id="calendarNavBtn" title="Calendar" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-calendar-days w-4"></i> <span class="rail-label">Calendar</span></button>
+            <button data-tab="tracker" id="trackerNavBtn" title="My Tracker" class="nav-link active w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-table-cells-large w-4"></i> <span class="rail-label">My Tracker</span></button>
+            <button data-tab="weeklyplan" id="weeklyPlanNavBtn" title="My Weekly Plan" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-calendar-week w-4"></i> <span class="rail-label">My Weekly Plan</span></button>
           </div>
         </div>
         <!-- Analytics -->
@@ -763,64 +763,78 @@
         <div id="dealsTable"></div>
       </section>
 
-      <!-- ============ CALENDAR ============ -->
-      <section id="tab-calendar" class="tab-panel px-8 py-7">
-        <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
-          <button id="calPrev" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-left"></i></button>
-          <button id="calToday" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)">Today</button>
-          <button id="calNext" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-right"></i></button>
-          <p id="calMonthLabel" class="text-base font-medium ml-2" style="color:var(--text)"></p>
-          <div class="flex items-center gap-1 ml-2 card p-1" style="width:fit-content">
-            <button data-calview="week" class="calview-btn active">Week</button>
-            <button data-calview="month" class="calview-btn">Month</button>
+      <!-- ============ MY WEEKLY PLAN ============ -->
+      <section id="tab-weeklyplan" class="tab-panel px-8 py-7">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <p class="section-label mb-1">Weekly Meeting Prep</p>
+            <p class="page-title">My Weekly Plan</p>
           </div>
+        </div>
+
+        <div class="card elev tracker-toolbar px-4 py-3 mb-4 flex flex-wrap items-center gap-2.5">
+          <button id="wpPrevBtn" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-left"></i></button>
+          <button id="wpTodayBtn" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)">This week</button>
+          <button id="wpNextBtn" class="text-sm px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-right"></i></button>
+          <p id="wpWeekLabel" class="text-base font-medium ml-2" style="color:var(--text)"></p>
           <div class="flex-1"></div>
-          <span class="text-xs" style="color:var(--text-muted)">Account Manager</span>
-          <select id="calFilterAM" class="field text-sm px-3 py-1.5"><option value="">All Account Managers</option></select>
-          <label class="flex items-center gap-1.5 text-xs ml-2" style="color:var(--text-muted)"><input id="calHideDone" type="checkbox"> Hide completed</label>
+          <div id="wpAmFilterWrap" class="select-ico" style="width:230px;display:none">
+            <i class="fa-solid fa-user"></i>
+            <select id="wpAmFilter" class="field-ico text-sm py-2"><option value="">All Account Managers</option></select>
+          </div>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-          <div id="calKpiAllCard" class="stat-card clickable" style="--stat-accent:var(--text-muted)"><p class="stat-label">Scheduled actions</p><p id="calKpiTotal" class="stat-value">0</p></div>
-          <div id="calKpiOverdueCard" class="stat-card clickable" style="--stat-accent:var(--danger)"><p class="stat-label"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Overdue</p><p id="calKpiOverdue" class="stat-value">0</p></div>
-          <div id="calKpiProgressCard" class="stat-card clickable" style="--stat-accent:var(--primary)"><p class="stat-label">In progress</p><p id="calKpiProgress" class="stat-value">0</p></div>
-          <div id="calKpiDoneCard" class="stat-card clickable" style="--stat-accent:var(--success)"><p class="stat-label">Done</p><p id="calKpiDone" class="stat-value">0</p></div>
-          <div id="calKpiUndatedCard" class="stat-card clickable" style="--stat-accent:var(--text-muted)"><p class="stat-label">No date set</p><p id="calKpiUndated" class="stat-value">0</p></div>
+
+        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i><b>No day = no plan.</b> This plan is checked at the start of next week's meeting.</p>
+
+        <div id="wpOwnWrap">
+          <div id="wpDayCards" class="space-y-3"></div>
         </div>
-        <p id="calFilterNote" class="text-[11px] mb-3" style="color:var(--primary);display:none"><i class="fa-solid fa-filter mr-1"></i><span id="calFilterNoteText"></span> — <button id="calFilterClear" type="button" class="underline">clear</button></p>
-        <div class="card elev p-4 mb-4">
-          <div id="calDowRow" class="grid grid-cols-7 gap-1 mb-1"></div>
-          <div id="calGrid" class="grid grid-cols-7 gap-1"></div>
-        </div>
-        <!-- Undated items can't appear anywhere on the grid above, so this only shows up for
-             that one case ("No date set") - every other view is fully covered by the grid itself. -->
-        <div id="calListWrap" class="card elev p-5" style="display:none">
-          <p class="text-sm font-medium mb-1"><i class="fa-solid fa-calendar-xmark mr-1.5" style="color:var(--primary)"></i>Actions without a date</p>
-          <p class="text-xs mb-3" style="color:var(--text-muted)">These can't show on the grid above since they have no date set. Click a row to see it — then open its opportunity if you need to.</p>
-          <div id="calList" class="space-y-2"></div>
-        </div>
+        <div id="wpAllWrap" class="space-y-4" style="display:none"></div>
       </section>
 
-      <!-- ===================== CALENDAR ITEM DETAIL ===================== -->
-      <div id="calItemModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
+      <!-- ===================== WEEKLY PLAN ENTRY ===================== -->
+      <div id="wpEntryModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
         <div class="card w-full max-w-md elev p-6">
-          <div class="flex items-start justify-between mb-3">
-            <span id="calItemKind" class="chip" style="color:var(--text-muted)"></span>
-            <button data-close-modal="calItemModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button>
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <p class="text-xs" style="color:var(--text-muted)">Plan a visit</p>
+              <p id="wpEntryDayLabel" class="text-sm font-semibold" style="color:var(--text)"></p>
+            </div>
+            <button data-close-modal="wpEntryModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button>
           </div>
-          <p id="calItemText" class="text-sm font-medium mb-3" style="color:var(--text)"></p>
-          <div class="grid grid-cols-2 gap-3 mb-3">
-            <div class="card p-2.5"><p class="text-[10px]" style="color:var(--text-muted)">Status</p><p id="calItemStatus" class="text-sm font-medium mt-0.5"></p></div>
-            <div class="card p-2.5"><p class="text-[10px]" style="color:var(--text-muted)">Date</p><p id="calItemDate" class="text-sm font-medium mt-0.5" style="color:var(--text)"></p></div>
-          </div>
-          <div class="card p-2.5 mb-4">
-            <p class="text-[10px]" style="color:var(--text-muted)">Opportunity</p>
-            <p id="calItemDeal" class="text-sm font-medium mt-0.5" style="color:var(--text)"></p>
-            <p id="calItemMeta" class="text-xs mt-0.5" style="color:var(--text-muted)"></p>
-          </div>
-          <div class="flex justify-end gap-2">
-            <button type="button" data-close-modal="calItemModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Close</button>
-            <button type="button" id="calItemViewOppty" class="btn-primary text-sm px-4 py-2 rounded-lg"><i class="fa-solid fa-arrow-up-right-from-square mr-1.5"></i>View opportunity</button>
-          </div>
+          <form id="wpEntryForm" class="space-y-4">
+            <input type="hidden" id="wpEntryId">
+            <input type="hidden" id="wpEntryDay">
+            <div>
+              <label class="block text-xs mb-1" style="color:var(--text-muted)">Customer</label>
+              <input id="wpEntryCustomer" list="wpCustomerList" type="text" class="field w-full px-3 py-2 text-sm" placeholder="Type or pick a customer…" autocomplete="off">
+              <datalist id="wpCustomerList"></datalist>
+            </div>
+            <div>
+              <label class="block text-xs mb-1" style="color:var(--text-muted)">Topic to bring</label>
+              <input id="wpEntryTopic" type="text" class="field w-full px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs mb-1" style="color:var(--text-muted)">Goal of the visit</label>
+              <textarea id="wpEntryGoal" rows="2" class="field w-full px-3 py-2 text-sm"></textarea>
+            </div>
+            <div>
+              <label class="block text-xs mb-1" style="color:var(--text-muted)">Attach plan / proof of visit</label>
+              <div id="wpEntryAttachRow" class="flex items-center gap-3 mb-2" style="display:none">
+                <a id="wpEntryAttachLink" href="#" target="_blank" class="text-xs underline flex items-center gap-1.5" style="color:var(--primary)"><i class="fa-solid fa-paperclip"></i><span></span></a>
+                <button type="button" id="wpEntryAttachRemove" class="text-xs" style="color:var(--danger)" title="Remove attachment"><i class="fa-solid fa-trash"></i></button>
+              </div>
+              <input id="wpEntryAttachFile" type="file" accept=".pdf,.png,.jpg,.jpeg" class="field w-full px-3 py-2 text-sm">
+              <p class="text-[10px] mt-1" style="color:var(--text-faint)">PDF, PNG or JPG — uploads automatically once selected.</p>
+            </div>
+            <div class="flex items-center gap-2 pt-2">
+              <button type="button" id="wpEntryDeleteBtn" class="text-sm px-3 py-2 rounded-lg" style="color:var(--danger);display:none"><i class="fa-solid fa-trash mr-1"></i>Delete</button>
+              <div class="flex gap-2 ml-auto">
+                <button type="button" data-close-modal="wpEntryModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button>
+                <button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button>
+              </div>
+            </div>
+          </form>
         </div>
       </div>
 
@@ -1640,7 +1654,7 @@
   <div class="card elev w-full max-w-lg overflow-hidden" style="max-height:70vh">
     <div class="flex items-center gap-2.5 px-4 py-3" style="border-bottom:1px solid var(--border)">
       <i class="fa-solid fa-magnifying-glass text-sm" style="color:var(--text-faint)"></i>
-      <input id="cmdInput" type="text" placeholder="Search features — Tracker, Calendar, Analytics, Settings…" class="flex-1 text-sm bg-transparent outline-none" style="color:var(--text)">
+      <input id="cmdInput" type="text" placeholder="Search features — Tracker, Weekly Plan, Analytics, Settings…" class="flex-1 text-sm bg-transparent outline-none" style="color:var(--text)">
       <button data-close-modal="cmdPalette" class="chip" style="color:var(--text-faint)">Esc</button>
     </div>
     <div id="cmdResults" class="overflow-y-auto" style="max-height:calc(70vh - 52px)"></div>
@@ -1659,7 +1673,7 @@ let FULLNAME = localStorage.getItem('dt_fullname');
 /* ================= TRACKER FILTER DROPDOWNS (Choices.js) ================= */
 const CHOICES_INSTANCES = {};
 function initFilterChoices(){
-  ['filterAM','filterPillar','filterStage','sortSelect'].forEach(id=>{
+  ['filterAM','filterPillar','filterStage','sortSelect','wpAmFilter'].forEach(id=>{
     const el=document.getElementById(id);
     if(!el || CHOICES_INSTANCES[id]) return;
     CHOICES_INSTANCES[id] = new Choices(el, {
@@ -1702,7 +1716,7 @@ let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[]
 let COVERAGE = [];
 let timelineItemsDraft = [], confirmCallback = null, analyticsFilters = {};
 let dealModalDirty = false, dealModalRestricted = false, dealAutosaveTimer = null, dealAutosaveInFlight = false;
-let currentPage = 1, calMonth = new Date();
+let currentPage = 1;
 let proofsDraft = {}, fwDrillKey = null;
 // The 8 Enterprise Proofs (fetched from the server; this is the fallback order/labels)
 let PROOF_FRAMEWORK = [
@@ -1903,17 +1917,16 @@ async function enterApp(){
   document.getElementById('covMasterImportWrap').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('addDealBtn').style.display = (ROLE==='admin'||ROLE==='account_manager') ? '' : 'none';
   // Solution / Project / Product can see every opportunity (read-only, for context) and
-  // their own task inbox, but not Calendar / Analytics / Performance / any edit control.
+  // their own task inbox, but not Weekly Plan / Analytics / Performance / any edit control.
   const isCrossFunctional = CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
   document.getElementById('myTeamTasksNavBtn').style.display = isCrossFunctional ? '' : 'none';
-  ['calendarNavBtn','analyticsNavBtn','perfNavBtn','coverageNavBtn'].forEach(id=>{
+  ['weeklyPlanNavBtn','analyticsNavBtn','perfNavBtn','coverageNavBtn'].forEach(id=>{
     document.getElementById(id).style.display = isCrossFunctional ? 'none' : '';
   });
+  // Admin/management get an AM picker on Weekly Plan (to review anyone's plan, or
+  // "All Account Managers" for the full team); an AM only ever sees their own.
+  document.getElementById('wpAmFilterWrap').style.display = (ROLE==='admin'||ROLE==='management') ? '' : 'none';
   try { PROOF_FRAMEWORK = await api('/api/proof_framework'); } catch(e) { /* keep fallback */ }
-  // An AM only ever sees their own action plan on the calendar
-  const calAM=document.getElementById('calFilterAM');
-  if(ROLE==='account_manager'){ calAM.innerHTML=`<option>${escapeHtml(FULLNAME)}</option>`; calAM.disabled=true; }
-  else { calAM.disabled=false; }
   await loadConfig();
   await loadAMs();
   await loadAssignableUsers();
@@ -1942,21 +1955,21 @@ function switchTab(tab){
   if((tab==='settings'||tab==='configuration'||tab==='loginlogs') && ROLE!=='admin') return;
   if(tab==='management' && !(ROLE==='admin'||ROLE==='management')) return;
   if(tab==='myteamtasks' && !CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
-  if(['calendar','analytics','performance','coverage'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
+  if(['weeklyplan','analytics','performance','coverage'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   // The FY target / achieved / pipeline / gap strip only matters where it's actually
-  // read against day-to-day work (Tracker, Calendar) or the exec summary (Management) -
+  // read against day-to-day work (Tracker) or the exec summary (Management) -
   // every other tab is a focused worklist or its own analytics page, where it's noise.
-  document.getElementById('metricStripWrap').style.display = ['tracker','calendar','management'].includes(tab) ? '' : 'none';
-  if(['tracker','calendar','management'].includes(tab)) updateMetrics();
+  document.getElementById('metricStripWrap').style.display = ['tracker','management'].includes(tab) ? '' : 'none';
+  if(['tracker','management'].includes(tab)) updateMetrics();
   refreshNavGroups(tab);
   if(tab==='analytics'){ switchAnalyticsTab('gap'); renderAnalytics(); }
   if(tab==='settings') renderSettings();
   if(tab==='configuration') renderConfiguration();
   if(tab==='loginlogs') renderLoginLogs();
-  if(tab==='calendar') renderCalendar();
+  if(tab==='weeklyplan') renderWeeklyPlan();
   if(tab==='management') renderManagement();
   if(tab==='performance') renderPerformance();
   // Re-fetch (not just re-render) every time this tab opens - Account Coverage is
@@ -2056,23 +2069,15 @@ function populateSelectors(){
   const keepMg=mgAM.value;
   mgAM.innerHTML='<option value="">All Account Managers</option>'+AMS.map(a=>`<option>${escapeHtml(a)}</option>`).join('');
   mgAM.value=keepMg;
-  // An AM is locked to their own action plan; admin/management get the full picker
-  const calAM=document.getElementById('calFilterAM');
-  if(ROLE==='account_manager'){ calAM.innerHTML=`<option>${escapeHtml(FULLNAME)}</option>`; calAM.disabled=true; }
-  else {
-    const keepCal=calAM.value;
-    calAM.innerHTML='<option value="">All Account Managers</option>'+AMS.map(a=>`<option>${escapeHtml(a)}</option>`).join('');
-    calAM.value=keepCal; calAM.disabled=false;
-  }
+  setSelectOptions('wpAmFilter', [{value:'',label:'All Account Managers'}, ...AMS.map(a=>({value:a,label:a}))]);
   syncAnalyticsFilterSelects();
 }
 
 // Which Account Manager filter is relevant right now depends on which tab the
-// metric strip is actually showing on top of (Tracker / Calendar / Management
-// each have their own independent AM filter select).
+// metric strip is actually showing on top of (Tracker / Management each have
+// their own independent AM filter select).
 function selectedAMForMetrics(){
   if(document.getElementById('tab-tracker').classList.contains('active')) return document.getElementById('filterAM').value;
-  if(document.getElementById('tab-calendar').classList.contains('active')) return document.getElementById('calFilterAM').value;
   if(document.getElementById('tab-management').classList.contains('active')) return document.getElementById('mgmtFilterAM').value;
   return '';
 }
@@ -2176,7 +2181,6 @@ async function loadDeals(){
   ALL_DEALS = p.toString() ? await api('/api/deals') : DEALS;
   currentPage = 1;
   renderDealsTable(); updateMetrics();
-  if(document.getElementById('tab-calendar').classList.contains('active')) renderCalendar();
 }
 
 function filteredBySearch(){
@@ -3244,7 +3248,7 @@ function renderManagement(){
     </div>`;
   }).join('')||`<p class="text-xs" style="color:var(--text-faint)">No dated actions in the next 30 days.</p>`;
   if(items.length>12) document.getElementById('mgActions').insertAdjacentHTML('beforeend',
-    `<p class="text-[11px] mt-1" style="color:var(--text-faint)">+${items.length-12} more — see the Calendar</p>`);
+    `<p class="text-[11px] mt-1" style="color:var(--text-faint)">+${items.length-12} more</p>`);
 
   // --- Account Manager performance: target vs covered (achieved + recurring + pipeline),
   // mirroring the Gap = Target − YTD actual − FY26 recurring − 2026 pipeline rule used on Analytics ---
@@ -3680,179 +3684,186 @@ function lineChart(data){
     <polyline points="${pts}" fill="none" stroke="#12b5cb" stroke-width="2"/>${circles}${labels}</svg>`;
 }
 
-/* ================= CALENDAR (next-action plan) ================= */
+/* ================= DATE HELPERS ================= */
 function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function ymd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
 function startOfWeek(d){ const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x; }
 
-let calView='week', calStatusFilter=null, calRenderedItems=[];
+/* ================= MY WEEKLY PLAN ================= */
+let WP_WEEK_START = ymd(startOfWeek(new Date()));
+let WP_CUSTOMERS = [];
+let WP_CURRENT_ENTRY_ID = null;
+const WP_DAY_LABELS = {mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri'};
 
-// Flatten every scheduled item across the visible deals: each evidence entry
-// logged against any of the 8 Enterprise Proofs (regardless of whether that
-// proof is planned, in progress or done — nothing is filtered out here) plus
-// every ad-hoc next action. Calendar labels use only the AM's own wording.
-function calendarActions(){
-  const amFilter = ROLE==='account_manager' ? FULLNAME : document.getElementById('calFilterAM').value;
-  const hideDone = document.getElementById('calHideDone').checked;
-  const out=[];
-  (ALL_DEALS||[]).forEach(d=>{
-    if(amFilter && d.assigned_am!==amFilter) return;
-    const pr=normalizeProofs(d.proofs);
-    PROOF_FRAMEWORK.forEach(p=>{
-      const it=pr[p.key]; if(!it) return;
-      (it.entries||[]).forEach(e=>{
-        if(hideDone && e.status==='done') return;
-        out.push({
-          action:e.text, done:e.status==='done', status:e.status,
-          start:e.date||'', end:e.end||e.date||'',
-          dealId:d.id, dealName:d.deal_name, customer:d.customer, am:d.assigned_am,
-          kind:'proof', proofName:p.name,
-        });
+function wpWeekLabel(weekStartStr){
+  const start=new Date(weekStartStr+'T00:00:00'), end=addDays(start,4);
+  return `${start.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+}
+
+async function renderWeeklyPlan(){
+  document.getElementById('wpWeekLabel').textContent = wpWeekLabel(WP_WEEK_START);
+  const isAdminLike = ROLE==='admin' || ROLE==='management';
+  const am = isAdminLike ? document.getElementById('wpAmFilter').value : FULLNAME;
+  document.getElementById('wpOwnWrap').style.display = (!isAdminLike || am) ? '' : 'none';
+  document.getElementById('wpAllWrap').style.display = (isAdminLike && !am) ? '' : 'none';
+
+  if(isAdminLike && !am){
+    const data = await api(`/api/weekly_plan?week_start=${WP_WEEK_START}`);
+    renderWeeklyPlanAll(data.entries||[]);
+    return;
+  }
+  const data = await api(`/api/weekly_plan?week_start=${WP_WEEK_START}&am=${encodeURIComponent(am)}`);
+  renderWeeklyPlanOwn(data.entries||[], !isAdminLike);
+  if(!isAdminLike){
+    try { WP_CUSTOMERS = await api('/api/weekly_plan/customers'); } catch(e){ WP_CUSTOMERS=[]; }
+  }
+}
+
+function wpEntryRow(e, editable){
+  const attach = e.has_attachment
+    ? `<a href="/api/weekly_plan/${e.id}/attachment?token=${encodeURIComponent(TOKEN)}" target="_blank" class="text-xs" style="color:var(--primary)" title="${escapeHtml(e.attachment_filename)}" onclick="event.stopPropagation()"><i class="fa-solid fa-paperclip"></i></a>`
+    : '';
+  return `<div class="wp-entry-row flex items-center gap-3 rounded-lg px-3 py-2 ${editable?'clickable':''}" data-id="${e.id}" style="background:var(--surface-2)">
+    <span class="chip" style="min-width:130px;color:var(--text)">${escapeHtml(e.customer)||'No customer'}</span>
+    <span class="text-xs flex-1" style="color:var(--text)">${escapeHtml(e.topic)||'—'}</span>
+    <span class="text-xs flex-1" style="color:var(--text-muted)">${escapeHtml(e.goal)}</span>
+    ${attach}
+  </div>`;
+}
+
+function renderWeeklyPlanOwn(entries, editable){
+  const byDay={mon:[],tue:[],wed:[],thu:[],fri:[]};
+  entries.forEach(e=>{ (byDay[e.day]=byDay[e.day]||[]).push(e); });
+  document.getElementById('wpDayCards').innerHTML = Object.keys(WP_DAY_LABELS).map(day=>{
+    const list=byDay[day]||[];
+    const rows = list.length ? list.map(e=>wpEntryRow(e, editable)).join('')
+      : `<p class="text-xs" style="color:var(--text-faint)">No visit planned.</p>`;
+    const addBtn = editable ? `<button type="button" class="wp-add-btn text-xs px-2.5 py-1 rounded-lg" data-day="${day}" style="background:var(--surface-2);color:var(--primary)"><i class="fa-solid fa-plus mr-1"></i>Add visit</button>` : '';
+    return `<div class="card elev p-4">
+      <div class="flex items-center justify-between mb-2.5">
+        <span class="text-sm font-semibold" style="color:var(--text)">${WP_DAY_LABELS[day]}</span>
+        ${addBtn}
+      </div>
+      <div class="space-y-2">${rows}</div>
+    </div>`;
+  }).join('');
+  if(editable){
+    document.querySelectorAll('.wp-add-btn').forEach(b=>b.addEventListener('click',()=>openWpEntryModal(b.dataset.day)));
+    document.querySelectorAll('.wp-entry-row.clickable').forEach(row=>{
+      row.addEventListener('click',()=>{
+        const e=entries.find(x=>String(x.id)===row.dataset.id);
+        if(e) openWpEntryModal(e.day, e);
       });
     });
-    normalizeTimelineItems(d.next_actions).forEach(a=>{
-      if(hideDone && a.status==='done') return;
-      out.push({ action:a.text, done:a.status==='done', status:a.status,
-                 start:a.date||'', end:a.end||a.date||'',
-                 dealId:d.id, dealName:d.deal_name, customer:d.customer, am:d.assigned_am,
-                 kind:'action', proofName:'' });
-    });
-  });
-  return out;
+  }
 }
 
-document.querySelectorAll('.calview-btn').forEach(b=>b.addEventListener('click',()=>{
-  calView=b.dataset.calview;
-  document.querySelectorAll('.calview-btn').forEach(x=>x.classList.toggle('active',x===b));
-  renderCalendar();
-}));
-document.getElementById('calPrev').addEventListener('click',()=>{ calMonth = calView==='week' ? addDays(calMonth,-7) : new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1); renderCalendar(); });
-document.getElementById('calNext').addEventListener('click',()=>{ calMonth = calView==='week' ? addDays(calMonth,7) : new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1); renderCalendar(); });
-document.getElementById('calToday').addEventListener('click',()=>{ calMonth=new Date(); renderCalendar(); });
-document.getElementById('calFilterAM').addEventListener('change',()=>{ renderCalendar(); updateMetrics(); });
-document.getElementById('calHideDone').addEventListener('change',renderCalendar);
-document.getElementById('calFilterClear').addEventListener('click',()=>{ calStatusFilter=null; renderCalendar(); });
-[['calKpiAllCard',null],['calKpiOverdueCard','overdue'],['calKpiProgressCard','in_progress'],['calKpiDoneCard','done'],['calKpiUndatedCard','no_date']].forEach(([id,key])=>{
-  document.getElementById(id).addEventListener('click',()=>{ calStatusFilter = calStatusFilter===key ? null : key; renderCalendar(); });
-});
-const CAL_FILTER_LABELS={overdue:'Overdue only',in_progress:'In progress only',done:'Done only',no_date:'No date set'};
-
-function renderCalendar(){
-  const all=calendarActions();
-  calRenderedItems=all;
-  const today=todayStr();
-
-  const dated=all.filter(a=>a.start);
-  const undated=all.filter(a=>!a.start);
-  document.getElementById('calKpiTotal').textContent=dated.length;
-  document.getElementById('calKpiOverdue').textContent=dated.filter(a=>!a.done&&a.end<today).length;
-  document.getElementById('calKpiProgress').textContent=dated.filter(a=>a.status==='in_progress').length;
-  document.getElementById('calKpiDone').textContent=dated.filter(a=>a.status==='done').length;
-  document.getElementById('calKpiUndated').textContent=undated.length;
-
-  ['calKpiAllCard','calKpiOverdueCard','calKpiProgressCard','calKpiDoneCard','calKpiUndatedCard'].forEach(id=>document.getElementById(id).classList.remove('active'));
-  const activeCardId={overdue:'calKpiOverdueCard',in_progress:'calKpiProgressCard',done:'calKpiDoneCard',no_date:'calKpiUndatedCard'}[calStatusFilter];
-  if(activeCardId) document.getElementById(activeCardId).classList.add('active');
-  const noteEl=document.getElementById('calFilterNote');
-  if(calStatusFilter){ noteEl.style.display=''; document.getElementById('calFilterNoteText').textContent=`Showing: ${CAL_FILTER_LABELS[calStatusFilter]}`; }
-  else noteEl.style.display='none';
-
-  const matchFilter=a=>{
-    if(!calStatusFilter) return true;
-    if(calStatusFilter==='overdue') return !a.done && a.end<today;
-    if(calStatusFilter==='in_progress') return a.status==='in_progress';
-    if(calStatusFilter==='done') return a.status==='done';
-    return true;
-  };
-  const visibleDated = (calStatusFilter==='no_date'?[]:dated).filter(matchFilter);
-  const visibleUndated = (calStatusFilter && calStatusFilter!=='no_date') ? [] : undated;
-
-  // Group by every date each item spans, so a multi-day entry renders on every day in range
-  const byDate={};
-  visibleDated.forEach(a=>{
-    const idx=all.indexOf(a);
-    let cur=new Date(a.start+'T00:00:00'); const end=new Date(a.end+'T00:00:00');
-    let guard=0;
-    while(cur<=end && guard<366){ const k=ymd(cur); (byDate[k]=byDate[k]||[]).push({...a, idx}); cur=addDays(cur,1); guard++; }
-  });
-
-  let cells=[];
-  if(calView==='week'){
-    const rangeStart=startOfWeek(calMonth), rangeEnd=addDays(rangeStart,6);
-    for(let i=0;i<7;i++) cells.push(addDays(rangeStart,i));
-    document.getElementById('calMonthLabel').textContent=
-      `${rangeStart.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${rangeEnd.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
-  } else {
-    const y=calMonth.getFullYear(), m=calMonth.getMonth();
-    document.getElementById('calMonthLabel').textContent=calMonth.toLocaleString('en-US',{month:'long',year:'numeric'});
-    const first=new Date(y,m,1);
-    const startOffset=(first.getDay()+6)%7;             // Mon=0
-    const daysInMonth=new Date(y,m+1,0).getDate();
-    for(let i=0;i<startOffset;i++) cells.push(null);
-    for(let d=1;d<=daysInMonth;d++) cells.push(new Date(y,m,d));
-    while(cells.length%7!==0) cells.push(null);
-  }
-
-  document.getElementById('calDowRow').innerHTML=['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
-    .map(x=>`<div class="text-[11px] font-medium text-center py-1" style="color:var(--text-muted)">${x}</div>`).join('');
-
-  const cellMinH = calView==='week' ? 190 : 96;
-  const itemsPerCell = calView==='week' ? 10 : 3;
-  document.getElementById('calGrid').innerHTML=cells.map(dt=>{
-    if(!dt) return `<div class="rounded-lg" style="min-height:${cellMinH}px;background:var(--surface-2);opacity:.35"></div>`;
-    const key=ymd(dt), list=byDate[key]||[], isToday=key===today;
-    const items=list.slice(0,itemsPerCell).map(a=>{
-      const overdue=!a.done&&a.end<today;
-      const em=ENTRY_STATUS_META[a.status]||ENTRY_STATUS_META.not_started;
-      const bg=overdue?'var(--danger)':(em.bg==='var(--surface-3)'?'var(--text-faint)':em.bg);
-      const multi=a.start!==a.end;
-      const span=multi?(key===a.start?' ▶':key===a.end?' ◀':' ·'):'';
-      return `<div class="cal-item clickable truncate" data-idx="${a.idx}" title="${escapeHtml(a.action)} — ${escapeHtml(a.dealName)}${multi?` (${a.start} → ${a.end})`:''}"
-        style="font-size:10px;padding:2px 5px;border-radius:4px;margin-bottom:2px;background:${bg};color:#fff;opacity:${a.done?.6:1}">
-        ${escapeHtml(a.action)}${span}</div>`;
-    }).join('');
-    const more=list.length>itemsPerCell?`<div style="font-size:10px;color:var(--text-faint)">+${list.length-itemsPerCell} more</div>`:'';
-    return `<div class="rounded-lg p-1.5" style="min-height:${cellMinH}px;background:var(--surface);border:1px solid ${isToday?'var(--primary)':'var(--border)'}">
-      <div class="text-[11px] mb-1" style="color:${isToday?'var(--primary)':'var(--text-muted)'};font-weight:${isToday?'700':'400'}">${dt.getDate()}</div>
-      ${items}${more}</div>`;
+function renderWeeklyPlanAll(entries){
+  const byAm={};
+  entries.forEach(e=>{ (byAm[e.am_full_name]=byAm[e.am_full_name]||[]).push(e); });
+  const ams=Object.keys(byAm).sort();
+  const wrap=document.getElementById('wpAllWrap');
+  if(!ams.length){ wrap.innerHTML=`<p class="text-sm" style="color:var(--text-faint)">No one has planned anything for this week yet.</p>`; return; }
+  wrap.innerHTML = ams.map(am=>{
+    const byDay={mon:[],tue:[],wed:[],thu:[],fri:[]};
+    byAm[am].forEach(e=>{ (byDay[e.day]=byDay[e.day]||[]).push(e); });
+    const planned=byAm[am].length;
+    return `<div class="card elev p-5">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-sm font-semibold" style="color:var(--text)"><i class="fa-solid fa-user mr-1.5" style="color:var(--primary)"></i>${escapeHtml(am)}</span>
+        <span class="chip" style="color:var(--text-muted)">${planned} visit${planned===1?'':'s'} planned</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
+        ${Object.keys(WP_DAY_LABELS).map(day=>{
+          const list=byDay[day]||[];
+          return `<div class="rounded-lg p-2.5" style="background:var(--surface-2)">
+            <p class="text-[11px] font-medium mb-1.5" style="color:var(--text-muted)">${WP_DAY_LABELS[day]}</p>
+            ${list.length ? list.map(e=>`<div class="mb-1.5 pb-1.5" style="border-bottom:1px solid var(--border)">
+                <p class="text-xs font-medium" style="color:var(--text)">${escapeHtml(e.customer)||'—'}</p>
+                ${e.topic?`<p class="text-[11px]" style="color:var(--text-muted)">${escapeHtml(e.topic)}</p>`:''}
+                ${e.goal?`<p class="text-[11px]" style="color:var(--text-faint)">${escapeHtml(e.goal)}</p>`:''}
+                ${e.has_attachment?`<a href="/api/weekly_plan/${e.id}/attachment?token=${encodeURIComponent(TOKEN)}" target="_blank" class="text-[11px]" style="color:var(--primary)"><i class="fa-solid fa-paperclip mr-1"></i>Attachment</a>`:''}
+              </div>`).join('') : `<p class="text-[11px]" style="color:var(--text-faint)">—</p>`}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
   }).join('');
+}
 
-  // Undated items can't appear on the grid above, so they get a small list of their own -
-  // shown only when that's the active filter; every other view is fully covered by the grid.
-  document.getElementById('calListWrap').style.display = calStatusFilter==='no_date' ? '' : 'none';
-  if(calStatusFilter==='no_date'){
-    const el=document.getElementById('calList');
-    el.innerHTML = visibleUndated.map(a=>{
-      const idx=all.indexOf(a);
-      return `<div class="cal-item clickable flex items-center gap-3 rounded-lg px-3 py-2" data-idx="${idx}" style="background:var(--surface-2)">
-        <span class="chip" style="color:var(--text-muted);min-width:104px;text-align:center">No date</span>
-        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(a.action)}</span>
-        <span class="text-xs" style="color:var(--text-muted)">${escapeHtml(a.dealName)}</span>
-        <span class="chip" style="color:var(--text-muted)">${escapeHtml((a.am||'').split(' ')[0])}</span>
-      </div>`;
-    }).join('')||`<p class="text-xs" style="color:var(--text-faint)">Nothing without a date.</p>`;
+function openWpEntryModal(day, entry){
+  WP_CURRENT_ENTRY_ID = entry ? entry.id : null;
+  document.getElementById('wpEntryDayLabel').textContent = WP_DAY_LABELS[day];
+  document.getElementById('wpEntryDay').value = day;
+  document.getElementById('wpEntryId').value = entry ? entry.id : '';
+  document.getElementById('wpEntryCustomer').value = entry ? entry.customer : '';
+  document.getElementById('wpEntryTopic').value = entry ? entry.topic : '';
+  document.getElementById('wpEntryGoal').value = entry ? entry.goal : '';
+  document.getElementById('wpEntryAttachFile').value = '';
+  document.getElementById('wpCustomerList').innerHTML = WP_CUSTOMERS.map(c=>`<option value="${escapeHtml(c)}">`).join('');
+  const attachRow=document.getElementById('wpEntryAttachRow');
+  if(entry && entry.has_attachment){
+    attachRow.style.display='flex';
+    const link=document.getElementById('wpEntryAttachLink');
+    link.href = `/api/weekly_plan/${entry.id}/attachment?token=${encodeURIComponent(TOKEN)}`;
+    link.querySelector('span').textContent = entry.attachment_filename;
+  } else {
+    attachRow.style.display='none';
   }
-
-  document.querySelectorAll('.cal-item').forEach(n=>n.addEventListener('click',()=>openCalItem(parseInt(n.dataset.idx))));
+  document.getElementById('wpEntryDeleteBtn').style.display = entry ? '' : 'none';
+  openModal('wpEntryModal');
 }
 
-/* Clicking a calendar item shows just that item's detail, with an explicit
-   button to open the full opportunity — not the opportunity itself by default. */
-function openCalItem(idx){
-  const a=calRenderedItems[idx]; if(!a) return;
-  document.getElementById('calItemKind').textContent = a.kind==='proof' ? a.proofName : 'Next action';
-  document.getElementById('calItemText').textContent = a.action;
-  const em=ENTRY_STATUS_META[a.status]||ENTRY_STATUS_META.not_started;
-  const statusEl=document.getElementById('calItemStatus');
-  statusEl.textContent=em.label;
-  statusEl.style.color=em.bg==='var(--surface-3)'?'var(--text-faint)':em.bg;
-  document.getElementById('calItemDate').textContent = a.start ? (a.start!==a.end?`${a.start} → ${a.end}`:a.start) : 'No date set';
-  document.getElementById('calItemDeal').textContent = a.dealName;
-  document.getElementById('calItemMeta').textContent = `${a.customer||'—'} · ${a.am||'—'}`;
-  document.getElementById('calItemViewOppty').onclick=()=>{ closeModal('calItemModal'); openDetail(a.dealId); };
-  openModal('calItemModal');
-}
+document.getElementById('wpEntryForm').addEventListener('submit', async ev=>{
+  ev.preventDefault();
+  const body = {
+    week_start: WP_WEEK_START,
+    day: document.getElementById('wpEntryDay').value,
+    customer: document.getElementById('wpEntryCustomer').value.trim(),
+    topic: document.getElementById('wpEntryTopic').value.trim(),
+    goal: document.getElementById('wpEntryGoal').value.trim(),
+  };
+  try {
+    const saved = WP_CURRENT_ENTRY_ID
+      ? await api(`/api/weekly_plan/${WP_CURRENT_ENTRY_ID}`, {method:'PUT', body:JSON.stringify(body)})
+      : await api('/api/weekly_plan', {method:'POST', body:JSON.stringify(body)});
+    const file = document.getElementById('wpEntryAttachFile').files[0];
+    if(file){
+      const fd = new FormData(); fd.append('file', file);
+      await fetch(`/api/weekly_plan/${saved.id}/attachment`, {method:'POST', headers:{'Authorization':'Bearer '+TOKEN}, body: fd});
+    }
+    closeModal('wpEntryModal');
+    showToast('Plan saved');
+    renderWeeklyPlan();
+  } catch(err){ showToast(err.message, true); }
+});
+
+document.getElementById('wpEntryDeleteBtn').addEventListener('click', ()=>{
+  if(!WP_CURRENT_ENTRY_ID) return;
+  openConfirm('Delete this planned visit?', async ()=>{
+    try {
+      await api(`/api/weekly_plan/${WP_CURRENT_ENTRY_ID}`, {method:'DELETE'});
+      closeModal('wpEntryModal');
+      showToast('Visit deleted');
+      renderWeeklyPlan();
+    } catch(err){ showToast(err.message, true); }
+  });
+});
+
+document.getElementById('wpEntryAttachRemove').addEventListener('click', async ()=>{
+  if(!WP_CURRENT_ENTRY_ID) return;
+  try {
+    await api(`/api/weekly_plan/${WP_CURRENT_ENTRY_ID}/attachment`, {method:'DELETE'});
+    document.getElementById('wpEntryAttachRow').style.display='none';
+    showToast('Attachment removed');
+  } catch(err){ showToast(err.message, true); }
+});
+
+document.getElementById('wpPrevBtn').addEventListener('click', ()=>{ WP_WEEK_START = ymd(addDays(new Date(WP_WEEK_START+'T00:00:00'), -7)); renderWeeklyPlan(); });
+document.getElementById('wpNextBtn').addEventListener('click', ()=>{ WP_WEEK_START = ymd(addDays(new Date(WP_WEEK_START+'T00:00:00'), 7)); renderWeeklyPlan(); });
+document.getElementById('wpTodayBtn').addEventListener('click', ()=>{ WP_WEEK_START = ymd(startOfWeek(new Date())); renderWeeklyPlan(); });
+document.getElementById('wpAmFilter').addEventListener('change', renderWeeklyPlan);
 
 /* ================= ANALYTICS ================= */
 function analyticsDeals(){
@@ -5039,8 +5050,8 @@ document.getElementById('perfExportPdfBtn').addEventListener('click',async()=>{
 /* ================= COMMAND PALETTE (feature search) ================= */
 const CMD_FEATURES = [
   {label:'Management View', desc:'Executive briefing — headline, blockers, AM performance & insights', icon:'fa-briefcase', tab:'management', roles:['admin','management']},
-  {label:'Tracker', desc:'Search, filter, sort and edit opportunities', icon:'fa-table-cells-large', tab:'tracker'},
-  {label:'Calendar', desc:'Week/month view of every scheduled action item', icon:'fa-calendar-days', tab:'calendar'},
+  {label:'My Tracker', desc:'Search, filter, sort and edit opportunities', icon:'fa-table-cells-large', tab:'tracker'},
+  {label:'My Weekly Plan', desc:'Plan customer visits Mon-Fri for the weekly meeting', icon:'fa-calendar-week', tab:'weeklyplan'},
   {label:'Pipeline Analytics', desc:'Gap & targets, breakdown, execution framework, strategy, leaderboard', icon:'fa-chart-line', tab:'analytics'},
   {label:'Performance', desc:'Monthly ACH actuals, targets, pipeline cover, churn watch', icon:'fa-gauge-high', tab:'performance'},
   {label:'Account Coverage', desc:'AM load, cold/champion accounts, rotation signal, new vs. performance-given', icon:'fa-users-viewfinder', tab:'coverage', ctab:'coverage'},

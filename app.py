@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.8.0"
+APP_VERSION = "2.9.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -479,6 +479,21 @@ def _init_schema_and_seed(db):
                 local_deal_id INTEGER PRIMARY KEY REFERENCES deals(id) ON DELETE CASCADE,
                 engine1_deal_id INTEGER NOT NULL,
                 synced_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS weekly_plans (
+                id SERIAL PRIMARY KEY,
+                am_full_name TEXT NOT NULL,
+                week_start TEXT NOT NULL,
+                day TEXT NOT NULL CHECK(day IN ('mon', 'tue', 'wed', 'thu', 'fri')),
+                customer TEXT DEFAULT '',
+                topic TEXT DEFAULT '',
+                goal TEXT DEFAULT '',
+                attachment_filename TEXT DEFAULT '',
+                attachment_stored_path TEXT DEFAULT '',
+                attachment_content_type TEXT DEFAULT '',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
             );
             """
         )
@@ -1096,6 +1111,228 @@ def delete_document(doc_id):
     return jsonify({"ok": True})
 
 
+# --------------------------------------------------------------------------
+# Weekly Plans ("My Weekly Plan" - per-AM, per-week visit plan reviewed in the
+# weekly meeting: one row per planned customer visit, Mon-Fri, with an
+# optional attached image/PDF proof of the visit)
+# --------------------------------------------------------------------------
+WEEKLY_PLAN_DAYS = ("mon", "tue", "wed", "thu", "fri")
+ALLOWED_PLAN_ATTACHMENT_EXTENSIONS = {"pdf", "png", "jpg", "jpeg"}
+
+
+def weekly_plan_to_dict(row):
+    return {
+        "id": row["id"],
+        "am_full_name": row["am_full_name"],
+        "week_start": row["week_start"],
+        "day": row["day"],
+        "customer": row["customer"] or "",
+        "topic": row["topic"] or "",
+        "goal": row["goal"] or "",
+        "attachment_filename": row["attachment_filename"] or "",
+        "has_attachment": bool(row["attachment_stored_path"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _can_view_weekly_plan(user, am_full_name):
+    if user["role"] in ("admin", "management"):
+        return True
+    return user["role"] == "account_manager" and (user["full_name"] or "") == am_full_name
+
+
+@app.route("/api/weekly_plan", methods=["GET"])
+@login_required(roles=("admin", "account_manager", "management"))
+def get_weekly_plan():
+    db = get_db()
+    user = g.current_user
+    week_start = request.args.get("week_start", "")
+    if not week_start:
+        return jsonify({"error": "week_start is required"}), 400
+    am = request.args.get("am", "")
+    if user["role"] == "account_manager":
+        am = user["full_name"] or ""
+    if am:
+        rows = db.execute(
+            "SELECT * FROM weekly_plans WHERE week_start = %s AND am_full_name = %s "
+            "ORDER BY array_position(ARRAY['mon','tue','wed','thu','fri'], day), id",
+            (week_start, am),
+        ).fetchall()
+    else:
+        # Admin/management with no am filter - the full team's plan for that week.
+        rows = db.execute(
+            "SELECT * FROM weekly_plans WHERE week_start = %s "
+            "ORDER BY am_full_name, array_position(ARRAY['mon','tue','wed','thu','fri'], day), id",
+            (week_start,),
+        ).fetchall()
+    return jsonify({"week_start": week_start, "entries": [weekly_plan_to_dict(r) for r in rows]})
+
+
+@app.route("/api/weekly_plan/customers", methods=["GET"])
+@login_required(roles=("admin", "account_manager", "management"))
+def get_weekly_plan_customers():
+    """Customer picker source for the plan form: every customer already in this
+    AM's Tracker deals or Account Coverage list, so planning a visit doesn't
+    mean retyping a name that's already tracked elsewhere."""
+    db = get_db()
+    user = g.current_user
+    am = user["full_name"] if user["role"] == "account_manager" else request.args.get("am", "")
+    if not am:
+        return jsonify([])
+    names = set()
+    for r in db.execute(
+        "SELECT DISTINCT customer FROM deals WHERE assigned_am = %s AND customer != ''", (am,)
+    ).fetchall():
+        names.add(r["customer"])
+    for r in db.execute(
+        "SELECT DISTINCT account_name FROM account_coverage WHERE am = %s AND account_name != ''", (am,)
+    ).fetchall():
+        names.add(r["account_name"])
+    return jsonify(sorted(names))
+
+
+@app.route("/api/weekly_plan", methods=["POST"])
+@login_required(roles=("account_manager",))
+def create_weekly_plan_entry():
+    db = get_db()
+    user = g.current_user
+    data = request.get_json(force=True) or {}
+    week_start = (data.get("week_start") or "").strip()
+    day = (data.get("day") or "").strip().lower()
+    if not week_start or day not in WEEKLY_PLAN_DAYS:
+        return jsonify({"error": "week_start and a valid day are required"}), 400
+    cur = db.execute(
+        """INSERT INTO weekly_plans (am_full_name, week_start, day, customer, topic, goal)
+           VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+        (user["full_name"], week_start, day,
+         (data.get("customer") or "").strip(), (data.get("topic") or "").strip(),
+         (data.get("goal") or "").strip()),
+    )
+    new_id = cur.fetchone()["id"]
+    db.commit()
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (new_id,)).fetchone()
+    return jsonify(weekly_plan_to_dict(row)), 201
+
+
+def _get_own_weekly_plan_row(db, user, plan_id):
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (plan_id,)).fetchone()
+    if not row:
+        return None, (jsonify({"error": "Plan entry not found"}), 404)
+    if row["am_full_name"] != (user["full_name"] or ""):
+        return None, (jsonify({"error": "You can only edit your own plan"}), 403)
+    return row, None
+
+
+@app.route("/api/weekly_plan/<int:plan_id>", methods=["PUT"])
+@login_required(roles=("account_manager",))
+def update_weekly_plan_entry(plan_id):
+    db = get_db()
+    row, err = _get_own_weekly_plan_row(db, g.current_user, plan_id)
+    if err:
+        return err
+    data = request.get_json(force=True) or {}
+    db.execute(
+        """UPDATE weekly_plans SET customer = %s, topic = %s, goal = %s,
+           updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
+        ((data.get("customer") or "").strip(), (data.get("topic") or "").strip(),
+         (data.get("goal") or "").strip(), plan_id),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (plan_id,)).fetchone()
+    return jsonify(weekly_plan_to_dict(row))
+
+
+@app.route("/api/weekly_plan/<int:plan_id>", methods=["DELETE"])
+@login_required(roles=("account_manager",))
+def delete_weekly_plan_entry(plan_id):
+    db = get_db()
+    row, err = _get_own_weekly_plan_row(db, g.current_user, plan_id)
+    if err:
+        return err
+    if row["attachment_stored_path"]:
+        try:
+            os.remove(row["attachment_stored_path"])
+        except OSError:
+            pass
+    db.execute("DELETE FROM weekly_plans WHERE id = %s", (plan_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/weekly_plan/<int:plan_id>/attachment", methods=["POST"])
+@login_required(roles=("account_manager",))
+def upload_weekly_plan_attachment(plan_id):
+    db = get_db()
+    row, err = _get_own_weekly_plan_row(db, g.current_user, plan_id)
+    if err:
+        return err
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return jsonify({"error": "No file uploaded"}), 400
+    ext = upload.filename.rsplit(".", 1)[-1].lower() if "." in upload.filename else ""
+    if ext not in ALLOWED_PLAN_ATTACHMENT_EXTENSIONS:
+        return jsonify({"error": f"File type .{ext} isn't allowed. "
+                                  f"Allowed: {', '.join(sorted(ALLOWED_PLAN_ATTACHMENT_EXTENSIONS))}"}), 400
+
+    if row["attachment_stored_path"]:
+        try:
+            os.remove(row["attachment_stored_path"])
+        except OSError:
+            pass
+
+    safe_name = secure_filename(upload.filename) or f"file.{ext}"
+    stored_name = f"{uuid.uuid4().hex}_{safe_name}"
+    plan_dir = os.path.join(UPLOAD_DIR, "weekly_plans", str(plan_id))
+    os.makedirs(plan_dir, exist_ok=True)
+    stored_path = os.path.join(plan_dir, stored_name)
+    upload.save(stored_path)
+
+    db.execute(
+        """UPDATE weekly_plans SET attachment_filename = %s, attachment_stored_path = %s,
+           attachment_content_type = %s, updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
+        (safe_name, stored_path, upload.content_type or "", plan_id),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (plan_id,)).fetchone()
+    return jsonify(weekly_plan_to_dict(row)), 201
+
+
+@app.route("/api/weekly_plan/<int:plan_id>/attachment", methods=["GET"])
+@login_required(roles=("admin", "account_manager", "management"))
+def download_weekly_plan_attachment(plan_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (plan_id,)).fetchone()
+    if not row or not row["attachment_stored_path"]:
+        return jsonify({"error": "Attachment not found"}), 404
+    if not _can_view_weekly_plan(g.current_user, row["am_full_name"]):
+        return jsonify({"error": "Forbidden"}), 403
+    return send_file(row["attachment_stored_path"], as_attachment=True,
+                      download_name=row["attachment_filename"])
+
+
+@app.route("/api/weekly_plan/<int:plan_id>/attachment", methods=["DELETE"])
+@login_required(roles=("account_manager",))
+def delete_weekly_plan_attachment(plan_id):
+    db = get_db()
+    row, err = _get_own_weekly_plan_row(db, g.current_user, plan_id)
+    if err:
+        return err
+    if row["attachment_stored_path"]:
+        try:
+            os.remove(row["attachment_stored_path"])
+        except OSError:
+            pass
+    db.execute(
+        """UPDATE weekly_plans SET attachment_filename = '', attachment_stored_path = '',
+           attachment_content_type = '', updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
+        (plan_id,),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (plan_id,)).fetchone()
+    return jsonify(weekly_plan_to_dict(row))
+
+
 @app.route("/api/deals/<int:deal_id>/progress", methods=["PUT"])
 @login_required(roles=("admin", "account_manager"))
 def update_progress(deal_id):
@@ -1530,7 +1767,7 @@ def _cascade_rename_am(db, old_name, new_name):
     person's real full name was ever registered)."""
     old_name = (old_name or "").strip()
     new_name = (new_name or "").strip()
-    counts = {"deals": 0, "deal_tasks": 0, "account_coverage": 0, "config": 0}
+    counts = {"deals": 0, "deal_tasks": 0, "account_coverage": 0, "weekly_plans": 0, "config": 0}
     if not old_name or not new_name or old_name == new_name:
         return counts
     counts["deals"] = db.execute(
@@ -1539,6 +1776,8 @@ def _cascade_rename_am(db, old_name, new_name):
         "UPDATE deal_tasks SET assigned_to = %s WHERE assigned_to = %s", (new_name, old_name)).rowcount
     counts["account_coverage"] = db.execute(
         "UPDATE account_coverage SET am = %s WHERE am = %s", (new_name, old_name)).rowcount
+    counts["weekly_plans"] = db.execute(
+        "UPDATE weekly_plans SET am_full_name = %s WHERE am_full_name = %s", (new_name, old_name)).rowcount
     cfg_row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
     if cfg_row:
         cols = {}
@@ -1629,6 +1868,13 @@ def am_name_mismatches():
             found.setdefault(r["am"], {"name": r["am"], "sources": set(), "count": 0})
             found[r["am"]]["sources"].add("account_coverage")
             found[r["am"]]["count"] += r["c"]
+    for r in db.execute(
+        "SELECT am_full_name, COUNT(*) AS c FROM weekly_plans WHERE am_full_name != '' "
+        "GROUP BY am_full_name").fetchall():
+        if (r["am_full_name"] or "").strip() not in known:
+            found.setdefault(r["am_full_name"], {"name": r["am_full_name"], "sources": set(), "count": 0})
+            found[r["am_full_name"]]["sources"].add("weekly_plans")
+            found[r["am_full_name"]]["count"] += r["c"]
     cfg_row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
     if cfg_row:
         for col in ("am_targets", "am_achievements", "am_recurring"):
@@ -2295,7 +2541,7 @@ def export_xlsx():
         ["Execution Framework sheet (the 8 Enterprise Proofs):"],
         ["  - One row per opportunity per proof. Keep Deal ID and Proof name unchanged."],
         ["  - Status accepts: not_started / in_progress / done / na"],
-        ["  - Target Date is YYYY-MM-DD and shows up on the Calendar."],
+        ["  - Target Date is YYYY-MM-DD."],
         ["  - Evidence: one item per line. Optional date prefix, e.g."],
         ["        2026-08-01 | Workshop held with DAOP ops team"],
         ["        Budget letter received"],

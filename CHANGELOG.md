@@ -6,6 +6,51 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.9.0] - 2026-09-30 (branch: v2.0)
+### Added
+- **"My Weekly Plan"**: a new per-AM, per-week visit planner, replacing the
+  Calendar tab. Each Account Manager plans Mon-Fri customer visits (customer,
+  topic to bring, goal of the visit - matching the team's existing paper
+  Commitment Plan template), reviewed live in the weekly meeting instead of
+  screenshotted from a spreadsheet.
+  - Customer is picked from that AM's own Tracker opportunities and Account
+    Coverage list (a `<datalist>`, so it's quick to pick an existing account
+    but still free text for a brand-new prospect).
+  - Each planned visit can have one attached image or PDF (plan or proof of
+    the visit), stored the same way opportunity documents already are.
+  - Plans are saved per calendar week (`week_start` = that week's Monday) and
+    per AM (`am_full_name`) - nothing is shared or overwritten between AMs or
+    weeks, and the AM-rename tool in Settings now carries weekly plan entries
+    along with everything else when a name is merged.
+  - **Admin/management get a review view**: an "All Account Managers" mode
+    shows every AM's week side-by-side (read-only), or a specific AM can be
+    picked to see their plan exactly as they see it. An AM only ever sees and
+    edits their own plan.
+  - New endpoints: `GET/POST /api/weekly_plan`, `PUT/DELETE
+    /api/weekly_plan/<id>`, `GET /api/weekly_plan/customers`,
+    `POST/GET/DELETE /api/weekly_plan/<id>/attachment`. New `weekly_plans`
+    table.
+### Changed
+- **The Tracker tab is now labeled "My Tracker"** and the Calendar tab has
+  been removed (superseded by My Weekly Plan above) - the next-action items
+  it showed are still visible in each opportunity's own timeline and in the
+  Weekly Meeting prep tab, which never depended on the Calendar.
+### Fixed
+- **A real bug from the Calendar removal**: `loadDeals()` still referenced
+  the now-gone `#tab-calendar` element after every Tracker filter change,
+  which would have thrown on every single filter/search/sort action. Caught
+  and removed before shipping.
+
+Verified in an ephemeral Docker stack: created, edited, and deleted plan
+entries as a real AM login (Anisa Rahmy), including attaching and removing a
+PDF; confirmed the customer field only offers that AM's own accounts;
+confirmed an admin login sees every AM's week in the grouped overview and
+can drill into one AM read-only with no edit controls; confirmed every other
+tab (Tracker, Analytics, Performance, Account Coverage, Management, Weekly
+Meeting, My Team Tasks, Settings, Configuration, Login Logs) still switches
+cleanly with zero console errors after the Calendar removal; confirmed light
+and dark theme.
+
 ## [2.8.0] - 2026-09-30 (branch: v2.0)
 ### Fixed
 - **Filter dropdowns (AM/Pillar/Stage) were rendering clipped to 1-2 visible
