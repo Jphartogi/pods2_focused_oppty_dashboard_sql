@@ -6,6 +6,27 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [1.9.3] - 2026-09-30
+### Added
+- **Sunset notice and automatic read-only lockdown.** This deployment is
+  retired in favor of v2.0 (https://pods2.jphartogi.com), which now has this
+  system's data fully migrated. A banner is shown on every page - "Heads up"
+  (amber) until the cutoff, then "retired and read-only" (red) after it -
+  linking straight to the new dashboard.
+  - From **October 1, 2026** onward, every write request (create/update/
+    delete - anything other than GET, login, or logout) is blocked at the
+    API level with a clear 403 message, so the lockdown can't be bypassed by
+    calling the API directly even if a UI button is still clickable.
+  - Nothing needs to be done manually - the cutoff is a fixed date
+    (`READONLY_CUTOFF` in `app.py`) checked on every request; the version
+    just needs to be deployed once before then.
+
+Verified locally: confirmed the banner shows the pre-cutoff "Heads up"
+wording today (2026-09-30) and that writes still succeed; then re-tested
+with the cutoff temporarily moved to a past date to confirm the banner
+switches to the red "retired" wording, login and GET requests keep working,
+and a POST is correctly rejected with a 403 and the expected message.
+
 ## [1.9.2] - 2026-09-24
 ### Added
 - `GET /api/admin/export_db` (admin only): returns the raw `db.sqlite3` file.

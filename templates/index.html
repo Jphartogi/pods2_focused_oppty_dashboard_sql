@@ -157,6 +157,18 @@
 </head>
 <body>
 
+<!-- ===================== MIGRATION NOTICE ===================== -->
+<div style="background:{{ '#b91c1c' if readonly_mode else '#b45309' }};color:#fff;padding:9px 16px;text-align:center;font-size:12.5px;line-height:1.5;position:relative;z-index:80">
+  {% if readonly_mode %}
+    <strong>This system has been retired and is now read-only.</strong>
+    All data has already been migrated &mdash; please switch to the new Dashboard Tracker at
+  {% else %}
+    <strong>Heads up:</strong> this system is being retired on {{ readonly_cutoff_label }} and will become read-only.
+    All data has already been migrated &mdash; please switch to the new Dashboard Tracker at
+  {% endif %}
+  <a href="{{ new_dashboard_url }}" target="_blank" rel="noopener" style="color:#fff;text-decoration:underline;font-weight:600">{{ new_dashboard_url }}</a>.
+</div>
+
 <!-- ===================== LOGIN ===================== -->
 <div id="loginScreen" class="min-h-screen flex items-center justify-center p-4 sm:p-8" style="background:var(--bg)">
   <div class="w-full max-w-4xl grid md:grid-cols-2 rounded-2xl overflow-hidden card elev">

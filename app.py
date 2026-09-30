@@ -22,7 +22,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "1.9.2"
+APP_VERSION = "1.9.3"
 
 # Keep the database next to app.py so it persists in a predictable location
 # regardless of the host's working directory (Render, PythonAnywhere, Docker, etc.).
@@ -30,6 +30,38 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "db.sqlite3"))
 
 app = Flask(__name__)
+
+# --------------------------------------------------------------------------
+# Sunset notice: this v1.9 deployment is retired in favor of v2.0
+# (https://pods2.jphartogi.com). The UI shows a migration banner well before
+# the cutoff so nobody is surprised; from READONLY_CUTOFF onward every write
+# request is also blocked at the API level (not just hidden in the UI, so it
+# can't be bypassed by calling the API directly). Login/logout stay open so
+# anyone who still needs to look something up here can still sign in.
+# --------------------------------------------------------------------------
+READONLY_CUTOFF = date(2026, 10, 1)
+READONLY_CUTOFF_LABEL = "October 1, 2026"
+NEW_DASHBOARD_URL = "https://pods2.jphartogi.com"
+_READONLY_EXEMPT_PATHS = {"/api/login", "/api/logout"}
+
+
+def is_readonly_mode():
+    return date.today() >= READONLY_CUTOFF
+
+
+@app.before_request
+def _enforce_readonly_after_cutoff():
+    if (
+        is_readonly_mode()
+        and request.method in ("POST", "PUT", "DELETE", "PATCH")
+        and request.path not in _READONLY_EXEMPT_PATHS
+    ):
+        return jsonify({
+            "error": f"This version was retired on {READONLY_CUTOFF_LABEL} and is now read-only. "
+                     f"Please use the new Dashboard Tracker at {NEW_DASHBOARD_URL} - "
+                     f"your data has already been migrated there.",
+        }), 403
+
 
 # In-memory token store: token -> {user_id, username, role, full_name}
 TOKENS = {}
@@ -726,7 +758,13 @@ def deal_to_dict(row):
 # --------------------------------------------------------------------------
 @app.route("/")
 def index():
-    return render_template("index.html", app_version=APP_VERSION)
+    return render_template(
+        "index.html",
+        app_version=APP_VERSION,
+        readonly_mode=is_readonly_mode(),
+        readonly_cutoff_label=READONLY_CUTOFF_LABEL,
+        new_dashboard_url=NEW_DASHBOARD_URL,
+    )
 
 
 @app.route("/api/version", methods=["GET"])
