@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.9.0"
+APP_VERSION = "2.10.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -494,6 +494,15 @@ def _init_schema_and_seed(db):
                 attachment_content_type TEXT DEFAULT '',
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
                 updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS notification_state (
+                id SERIAL PRIMARY KEY,
+                user_full_name TEXT NOT NULL,
+                notif_key TEXT NOT NULL,
+                first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                read_at TIMESTAMP,
+                UNIQUE(user_full_name, notif_key)
             );
             """
         )
@@ -1710,8 +1719,120 @@ def get_notifications():
                     "mentioned": False,
                 })
 
-    notifications.sort(key=lambda n: (NOTIFY_SEVERITY_RANK.get(n["type"], 9), n["days"] if n["days"] is not None else 999))
-    return jsonify(notifications[:50])
+    keys = [n["id"] for n in notifications]
+
+    # Drop tracked state for anything no longer live (task done, date moved
+    # outside the notify window, etc.) so this table never accumulates rows
+    # for notifications that can't come back.
+    if keys:
+        db.execute(
+            "DELETE FROM notification_state WHERE user_full_name = %s AND NOT (notif_key = ANY(%s))",
+            (full_name, keys),
+        )
+    else:
+        db.execute("DELETE FROM notification_state WHERE user_full_name = %s", (full_name,))
+
+    # "Birth" any notification seen for the first time - first_seen_at only ever
+    # gets set once per key, via ON CONFLICT DO NOTHING.
+    for key in keys:
+        db.execute(
+            """INSERT INTO notification_state (user_full_name, notif_key) VALUES (%s, %s)
+               ON CONFLICT (user_full_name, notif_key) DO NOTHING""",
+            (full_name, key),
+        )
+
+    state_rows = db.execute(
+        "SELECT notif_key, first_seen_at, read_at FROM notification_state "
+        "WHERE user_full_name = %s AND notif_key = ANY(%s)",
+        (full_name, keys),
+    ).fetchall() if keys else []
+    state_by_key = {r["notif_key"]: r for r in state_rows}
+
+    # A notification that's sat around for 2 weeks - read or not - is deleted
+    # outright rather than left to linger forever.
+    cutoff = datetime.utcnow() - timedelta(days=14)
+    kept, stale_keys = [], []
+    for n in notifications:
+        st = state_by_key.get(n["id"])
+        if st and st["first_seen_at"] and st["first_seen_at"] < cutoff:
+            stale_keys.append(n["id"])
+            continue
+        n["read"] = bool(st and st["read_at"])
+        kept.append(n)
+    if stale_keys:
+        db.execute(
+            "DELETE FROM notification_state WHERE user_full_name = %s AND notif_key = ANY(%s)",
+            (full_name, stale_keys),
+        )
+    db.commit()
+
+    kept.sort(key=lambda n: (NOTIFY_SEVERITY_RANK.get(n["type"], 9), n["days"] if n["days"] is not None else 999))
+    return jsonify(kept[:50])
+
+
+@app.route("/api/notifications/read", methods=["POST"])
+@login_required()
+def mark_notification_read():
+    data = request.get_json(force=True) or {}
+    key = str(data.get("id") or "").strip()
+    if not key:
+        return jsonify({"error": "id is required"}), 400
+    db = get_db()
+    full_name = (g.current_user.get("full_name") or "").strip()
+    db.execute(
+        """INSERT INTO notification_state (user_full_name, notif_key, read_at)
+           VALUES (%s, %s, CURRENT_TIMESTAMP)
+           ON CONFLICT (user_full_name, notif_key) DO UPDATE SET read_at = CURRENT_TIMESTAMP""",
+        (full_name, key),
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# My Profile (any logged-in role) - self-service username/password change,
+# distinct from the admin-only /api/users/<id> below which can touch anyone.
+# --------------------------------------------------------------------------
+@app.route("/api/me", methods=["PUT"])
+@login_required()
+def update_me():
+    db = get_db()
+    user = g.current_user
+    row = db.execute("SELECT * FROM users WHERE id = %s", (user["user_id"],)).fetchone()
+    if not row:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json(force=True) or {}
+    current_password = data.get("current_password", "")
+    if not current_password or not check_password_hash(row["password"], current_password):
+        return jsonify({"error": "Current password is incorrect"}), 403
+
+    new_username = (data.get("username") or "").strip()
+    new_password = data.get("new_password", "")
+    username = new_username or row["username"]
+    if username != row["username"]:
+        existing = db.execute(
+            "SELECT id FROM users WHERE username = %s AND id != %s", (username, row["id"])
+        ).fetchone()
+        if existing:
+            return jsonify({"error": "Username already exists"}), 409
+
+    password_hash = row["password"]
+    if new_password:
+        if len(new_password) < 6:
+            return jsonify({"error": "New password must be at least 6 characters"}), 400
+        password_hash = _hash(new_password)
+
+    db.execute("UPDATE users SET username = %s, password = %s WHERE id = %s",
+               (username, password_hash, row["id"]))
+    # Keep this same active session's denormalized username in sync so the UI
+    # doesn't show a stale name until the next login.
+    auth = request.headers.get("Authorization", "")
+    token = auth.replace("Bearer ", "").strip()
+    if token:
+        db.execute("UPDATE sessions SET username = %s WHERE token = %s", (username, token))
+    db.commit()
+    return jsonify({"username": username})
 
 
 # --------------------------------------------------------------------------

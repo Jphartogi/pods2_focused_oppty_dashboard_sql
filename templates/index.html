@@ -92,6 +92,9 @@
      (especially when flipped upward near the bottom of the viewport). Undo that
      containment here so filter dropdowns render in full instead of getting cut off. */
   .tracker-toolbar { border-radius:16px; contain:none; }
+  /* Same containment fix as .tracker-toolbar above, for a Choices.js dropdown
+     living inside a modal card (the Weekly Plan entry form's Customer field). */
+  #wpEntryModal .card { contain:none; }
   .toolbar-divider { width:1px; height:22px; background:var(--border); }
   /* --- Choices.js re-skin: the Tracker toolbar's AM/Pillar/Stage/Sort selects use a
      real dropdown component (searchable, styled selectable list) instead of a native
@@ -433,10 +436,9 @@
       <img src="{{ url_for('static', filename='img/pods2-logo-256.png') }}" alt="Home" class="w-9 h-9 rounded-lg flex-shrink-0" style="object-fit:cover">
       <span class="text-sm font-semibold leading-tight hidden sm:inline" style="color:var(--text);letter-spacing:-0.01em">Dashboard Tracker</span>
     </button>
-    <button id="searchTriggerBtn" type="button" class="hidden md:flex items-center gap-2.5 flex-1 mx-3 px-4 py-2 rounded-full text-sm" style="background:var(--surface-2);color:var(--text-faint);border:1px solid var(--border);max-width:640px;min-width:0" title="Search (Ctrl+K)">
+    <button id="searchTriggerBtn" type="button" class="hidden md:flex items-center gap-2.5 flex-1 mx-3 px-4 py-2 rounded-full text-sm" style="background:var(--surface-2);color:var(--text-faint);border:1px solid var(--border);min-width:0" title="Search (Ctrl+K)">
       <i class="fa-solid fa-magnifying-glass flex-shrink-0"></i><span class="flex-1 text-left" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search opportunities, features…</span><span class="chip flex-shrink-0" style="padding:1px 6px;font-size:9px;color:var(--text-faint)">Ctrl K</span>
     </button>
-    <div class="flex-1"></div>
     <button id="searchTriggerBtnMobile" type="button" class="icon-btn md:hidden" title="Search (Ctrl+K)"><i class="fa-solid fa-magnifying-glass"></i></button>
     <button id="quickConfigBtn" title="Configuration" class="icon-btn" style="display:none"><i class="fa-solid fa-list-check"></i></button>
     <button id="quickSettingsBtn" title="Settings" class="icon-btn" style="display:none"><i class="fa-solid fa-gear"></i></button>
@@ -452,11 +454,13 @@
     </div>
     <button id="themeToggle" title="Toggle theme" class="icon-btn"><i id="themeIcon" class="fa-solid fa-moon"></i></button>
     <div class="flex items-center gap-2 pl-1" style="border-left:1px solid var(--border)">
-      <div class="text-right hidden sm:block pl-2">
-        <p id="topUserName" class="text-xs font-medium leading-tight" style="color:var(--text)"></p>
-        <p id="topUserRole" class="text-[10px] uppercase tracking-wide leading-tight" style="color:var(--primary)"></p>
-      </div>
-      <div id="avatar" class="w-9 h-9 rounded-full btn-primary flex items-center justify-center text-sm font-semibold"></div>
+      <button id="profileBtn" type="button" class="flex items-center gap-2" title="My Profile" style="background:none;border:none;cursor:pointer;padding:0">
+        <div class="text-right hidden sm:block pl-2">
+          <p id="topUserName" class="text-xs font-medium leading-tight" style="color:var(--text)"></p>
+          <p id="topUserRole" class="text-[10px] uppercase tracking-wide leading-tight" style="color:var(--primary)"></p>
+        </div>
+        <div id="avatar" class="w-9 h-9 rounded-full btn-primary flex items-center justify-center text-sm font-semibold"></div>
+      </button>
       <button id="logoutBtn" title="Sign out" class="icon-btn"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
     </div>
   </header>
@@ -767,7 +771,7 @@
       <section id="tab-weeklyplan" class="tab-panel px-8 py-7">
         <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
           <div>
-            <p class="section-label mb-1">Weekly Meeting Prep</p>
+            <p class="section-label mb-1">Visit Planning</p>
             <p class="page-title">My Weekly Plan</p>
           </div>
         </div>
@@ -807,8 +811,11 @@
             <input type="hidden" id="wpEntryDay">
             <div>
               <label class="block text-xs mb-1" style="color:var(--text-muted)">Customer</label>
-              <input id="wpEntryCustomer" list="wpCustomerList" type="text" class="field w-full px-3 py-2 text-sm" placeholder="Type or pick a customer…" autocomplete="off">
-              <datalist id="wpCustomerList"></datalist>
+              <div class="select-ico">
+                <i class="fa-solid fa-building"></i>
+                <select id="wpEntryCustomer" class="field-ico text-sm py-2 w-full"><option value="">Select a customer…</option></select>
+              </div>
+              <input id="wpEntryCustomerNew" type="text" class="field w-full px-3 py-2 text-sm mt-2" placeholder="New customer name…" style="display:none">
             </div>
             <div>
               <label class="block text-xs mb-1" style="color:var(--text-muted)">Topic to bring</label>
@@ -1644,6 +1651,24 @@
   </div>
 </div>
 
+<!-- ===================== MY PROFILE ===================== -->
+<div id="profileModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
+  <div class="card w-full max-w-md elev">
+    <div class="px-6 py-4 flex items-center justify-between" style="border-bottom:1px solid var(--border)"><h2 class="text-base font-medium">My Profile</h2><button data-close-modal="profileModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+    <form id="profileForm" class="px-6 py-5 space-y-4">
+      <div>
+        <p class="text-xs mb-1" style="color:var(--text-muted)">Full name</p>
+        <p id="profileFullName" class="text-sm font-medium" style="color:var(--text)"></p>
+        <p id="profileRole" class="text-[10px] uppercase tracking-wide mt-0.5" style="color:var(--primary)"></p>
+      </div>
+      <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Username</label><input id="profileUsername" required type="text" class="field w-full px-3 py-2 text-sm"></div>
+      <div><label class="block text-xs mb-1" style="color:var(--text-muted)">New password <span style="color:var(--text-faint)">(leave blank to keep current)</span></label><input id="profileNewPassword" type="password" class="field w-full px-3 py-2 text-sm" placeholder="At least 6 characters" autocomplete="new-password"></div>
+      <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Current password <span style="color:var(--text-faint)">(required to save any change)</span></label><input id="profileCurrentPassword" required type="password" class="field w-full px-3 py-2 text-sm" autocomplete="current-password"></div>
+      <div class="flex justify-end gap-2 pt-2"><button type="button" data-close-modal="profileModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button></div>
+    </form>
+  </div>
+</div>
+
 <!-- ===================== CONFIRM ===================== -->
 <div id="confirmModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
   <div class="card w-full max-w-sm elev p-6"><p id="confirmMessage" class="text-sm mb-5" style="color:var(--text)">Are you sure?</p><div class="flex justify-end gap-2"><button id="confirmCancelBtn" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button id="confirmOkBtn" class="text-sm px-4 py-2 rounded-lg text-white" style="background:var(--danger)">Delete</button></div></div>
@@ -1673,7 +1698,7 @@ let FULLNAME = localStorage.getItem('dt_fullname');
 /* ================= TRACKER FILTER DROPDOWNS (Choices.js) ================= */
 const CHOICES_INSTANCES = {};
 function initFilterChoices(){
-  ['filterAM','filterPillar','filterStage','sortSelect','wpAmFilter'].forEach(id=>{
+  ['filterAM','filterPillar','filterStage','sortSelect','wpAmFilter','wpEntryCustomer'].forEach(id=>{
     const el=document.getElementById(id);
     if(!el || CHOICES_INSTANCES[id]) return;
     CHOICES_INSTANCES[id] = new Choices(el, {
@@ -1992,28 +2017,38 @@ function notifDueLabel(n){
   if(n.days===0) return 'Due today';
   return `Due in ${n.days}d`;
 }
-async function loadNotifications(){
-  try { NOTIFICATIONS = await api('/api/notifications'); } catch(e){ return; }
+function updateNotifBadge(){
   const badge=document.getElementById('notifBadge');
-  const urgent=NOTIFICATIONS.filter(n=>n.type!=='mention'||n.mentioned).length;
+  const urgent=NOTIFICATIONS.filter(n=>!n.read && (n.type!=='mention'||n.mentioned)).length;
   if(urgent>0){ badge.textContent = urgent>99?'99+':String(urgent); badge.classList.remove('hidden'); }
   else badge.classList.add('hidden');
+}
+async function loadNotifications(){
+  try { NOTIFICATIONS = await api('/api/notifications'); } catch(e){ return; }
+  updateNotifBadge();
   if(!document.getElementById('notifPanel').classList.contains('hidden')) renderNotifPanel();
 }
 function renderNotifPanel(){
   document.getElementById('notifPanelCount').textContent = NOTIFICATIONS.length ? `${NOTIFICATIONS.length} item${NOTIFICATIONS.length===1?'':'s'}` : '';
   document.getElementById('notifPanelList').innerHTML = NOTIFICATIONS.length ? NOTIFICATIONS.map((n,idx)=>{
     const m=NOTIF_META[n.type]||NOTIF_META.mention;
-    return `<div class="notif-row" data-idx="${idx}">
-      <span class="notif-dot" style="background:${m.color}"></span>
+    return `<div class="notif-row" data-idx="${idx}" style="${n.read?'opacity:.55':''}">
+      <span class="notif-dot" style="background:${n.read?'transparent':m.color}"></span>
       <div class="min-w-0 flex-1">
-        <p class="text-xs font-medium truncate" style="color:var(--text)"><i class="fa-solid ${m.icon} mr-1" style="color:${m.color}"></i>${escapeHtml(n.title)}</p>
+        <p class="text-xs ${n.read?'':'font-medium'} truncate" style="color:var(--text)"><i class="fa-solid ${m.icon} mr-1" style="color:${m.color}"></i>${escapeHtml(n.title)}</p>
         <p class="text-[11px] truncate mt-0.5" style="color:var(--text-muted)">${escapeHtml(n.deal_name||'')}${n.customer?' &middot; '+escapeHtml(n.customer):''}</p>
         <p class="text-[10.5px] mt-0.5" style="color:${m.color}">${escapeHtml(notifDueLabel(n))}${n.mentioned&&n.type!=='mention'?' &middot; mentioned you':''}</p>
       </div>
     </div>`;
   }).join('') : `<div class="notif-empty"><i class="fa-regular fa-circle-check text-lg mb-1.5" style="display:block"></i>You're all caught up.</div>`;
   document.querySelectorAll('#notifPanelList .notif-row').forEach(row=>row.addEventListener('click',()=>goToNotification(parseInt(row.dataset.idx))));
+}
+async function markNotificationRead(n){
+  if(n.read) return;
+  n.read = true;
+  updateNotifBadge();
+  renderNotifPanel();
+  try { await api('/api/notifications/read', {method:'POST', body:JSON.stringify({id:n.id})}); } catch(e){}
 }
 document.getElementById('notifBtn').addEventListener('click',(e)=>{
   e.stopPropagation();
@@ -2031,6 +2066,7 @@ document.addEventListener('click',(e)=>{
 async function goToNotification(idx){
   const n=NOTIFICATIONS[idx]; if(!n) return;
   document.getElementById('notifPanel').classList.add('hidden');
+  markNotificationRead(n);
   if(!n.task_id){
     try{ ALL_DEALS=await api('/api/deals'); }catch(e){}
     switchTab('tracker');
@@ -3792,16 +3828,26 @@ function renderWeeklyPlanAll(entries){
   }).join('');
 }
 
+const WP_NEW_CUSTOMER_VALUE = '__new__';
+function wpCustomerOptions(currentValue){
+  const opts = WP_CUSTOMERS.map(c=>({value:c,label:c}));
+  if(currentValue && !WP_CUSTOMERS.includes(currentValue)) opts.unshift({value:currentValue,label:currentValue});
+  opts.push({value:WP_NEW_CUSTOMER_VALUE,label:'+ Add new customer…'});
+  return opts;
+}
 function openWpEntryModal(day, entry){
   WP_CURRENT_ENTRY_ID = entry ? entry.id : null;
   document.getElementById('wpEntryDayLabel').textContent = WP_DAY_LABELS[day];
   document.getElementById('wpEntryDay').value = day;
   document.getElementById('wpEntryId').value = entry ? entry.id : '';
-  document.getElementById('wpEntryCustomer').value = entry ? entry.customer : '';
+  const custValue = entry ? entry.customer : '';
+  setSelectOptions('wpEntryCustomer', [{value:'',label:'Select a customer…'}, ...wpCustomerOptions(custValue)]);
+  setSelectValue('wpEntryCustomer', custValue);
+  document.getElementById('wpEntryCustomerNew').style.display = 'none';
+  document.getElementById('wpEntryCustomerNew').value = '';
   document.getElementById('wpEntryTopic').value = entry ? entry.topic : '';
   document.getElementById('wpEntryGoal').value = entry ? entry.goal : '';
   document.getElementById('wpEntryAttachFile').value = '';
-  document.getElementById('wpCustomerList').innerHTML = WP_CUSTOMERS.map(c=>`<option value="${escapeHtml(c)}">`).join('');
   const attachRow=document.getElementById('wpEntryAttachRow');
   if(entry && entry.has_attachment){
     attachRow.style.display='flex';
@@ -3815,12 +3861,20 @@ function openWpEntryModal(day, entry){
   openModal('wpEntryModal');
 }
 
+document.getElementById('wpEntryCustomer').addEventListener('change', e=>{
+  document.getElementById('wpEntryCustomerNew').style.display = e.target.value===WP_NEW_CUSTOMER_VALUE ? '' : 'none';
+});
+
 document.getElementById('wpEntryForm').addEventListener('submit', async ev=>{
   ev.preventDefault();
+  const custSel = document.getElementById('wpEntryCustomer').value;
+  const customer = custSel===WP_NEW_CUSTOMER_VALUE
+    ? document.getElementById('wpEntryCustomerNew').value.trim()
+    : custSel;
   const body = {
     week_start: WP_WEEK_START,
     day: document.getElementById('wpEntryDay').value,
-    customer: document.getElementById('wpEntryCustomer').value.trim(),
+    customer,
     topic: document.getElementById('wpEntryTopic').value.trim(),
     goal: document.getElementById('wpEntryGoal').value.trim(),
   };
@@ -5106,6 +5160,31 @@ function openCmdPalette(){
 document.getElementById('searchTriggerBtn').addEventListener('click',openCmdPalette);
 document.getElementById('searchTriggerBtnMobile').addEventListener('click',openCmdPalette);
 document.getElementById('homeBtn').addEventListener('click',()=>switchTab('tracker'));
+
+/* ================= MY PROFILE ================= */
+document.getElementById('profileBtn').addEventListener('click',()=>{
+  document.getElementById('profileFullName').textContent = FULLNAME;
+  document.getElementById('profileRole').textContent = ROLE.replace('_',' ');
+  document.getElementById('profileUsername').value = USERNAME;
+  document.getElementById('profileNewPassword').value = '';
+  document.getElementById('profileCurrentPassword').value = '';
+  openModal('profileModal');
+});
+document.getElementById('profileForm').addEventListener('submit', async ev=>{
+  ev.preventDefault();
+  const body = {
+    username: document.getElementById('profileUsername').value.trim(),
+    new_password: document.getElementById('profileNewPassword').value,
+    current_password: document.getElementById('profileCurrentPassword').value,
+  };
+  try {
+    const res = await api('/api/me', {method:'PUT', body:JSON.stringify(body)});
+    USERNAME = res.username;
+    localStorage.setItem('dt_username', USERNAME);
+    closeModal('profileModal');
+    showToast('Profile updated');
+  } catch(err){ showToast(err.message, true); }
+});
 document.getElementById('cmdInput').addEventListener('input',renderCmdResults);
 document.getElementById('cmdInput').addEventListener('keydown',e=>{
   if(e.key==='ArrowDown'){ e.preventDefault(); cmdMove(1); }

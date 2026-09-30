@@ -6,6 +6,41 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.10.0] - 2026-09-30 (branch: v2.0)
+### Added
+- **"My Profile"**: click the avatar/name in the top bar (any role) to change
+  your own username and/or password. Requires re-entering your current
+  password to save any change; a username change is checked for a conflict
+  the same way the admin's own user form already is. New `PUT /api/me`.
+- **Notifications now have real read state and age out.** Clicking a
+  notification marks it read (dims it, and it stops counting toward the bell
+  badge) and persists that across reloads; any notification - read or not -
+  is deleted outright once it's 14 days old, so overdue items don't pile up
+  forever. New `notification_state` table and `POST /api/notifications/read`;
+  `GET /api/notifications` now births, ages, and prunes this state on every
+  call rather than only ever computing fresh.
+### Changed
+- **Weekly Plan's Customer field is now a searchable dropdown** (Choices.js,
+  matching the Tracker's own filters) instead of a plain text box with a
+  native datalist - offered customers are still that AM's own Tracker/
+  Account Coverage accounts, plus a "+ Add new customer…" option that reveals
+  a text field for a brand-new prospect.
+- Renamed the "Weekly Meeting Prep" eyebrow on My Weekly Plan to "Visit
+  Planning" - that wording belongs to the separate, existing Weekly Meeting
+  tab and was confusing sitting on this page too.
+- **Top bar search is noticeably longer**, extending to just before the
+  icon cluster (Configuration/Settings/Notifications/Theme) instead of
+  stopping well short of it with a large dead gap.
+
+Verified in an ephemeral Docker stack: confirmed a wrong current password is
+rejected and a correct one updates both username and password (re-verified
+login with the new credentials); confirmed a notification dims and the badge
+count drops immediately on click, persists after a reload, and is deleted
+once its tracked age exceeds 14 days (simulated by backdating the row
+directly); confirmed the Customer dropdown renders every option unclipped
+and picking "+ Add new customer…" reveals the free-text field; confirmed the
+widened search bar and no console errors across a full click-through.
+
 ## [2.9.0] - 2026-09-30 (branch: v2.0)
 ### Added
 - **"My Weekly Plan"**: a new per-AM, per-week visit planner, replacing the
