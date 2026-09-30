@@ -6,6 +6,31 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.7.0] - 2026-09-30 (branch: v2.0)
+### Changed
+- **Tracker toolbar redesigned**: search is now full-width on its own row
+  instead of squeezed alongside the filters, with Account Manager/Pillar/
+  Stage/Sort on their own row below.
+- **AM/Pillar/Stage/Sort filters now use Choices.js** instead of native
+  `<select>` elements - a real styled dropdown panel (searchable, themed to
+  match light/dark mode) instead of the browser's own unstyleable popup.
+  Fully re-skinned to the app's existing design tokens; the "has a value"
+  accent, AM-role default selection, and Clear button all carry over
+  unchanged.
+- **Revenue Overview hero card de-duplicated**: the legend row under the
+  gauge repeated the exact same Achieved/Recurring/Pipeline/Gap numbers
+  already shown in the tiles above it. Replaced with a new context row
+  pulling genuinely different information from Pipeline Analytics and
+  Account Coverage - opportunity count, average progress, accounts tracked,
+  and engaged % - scoped to the same AM filter as the rest of the card.
+
+Verified end-to-end: selecting an AM in the new Choices dropdown correctly
+filters the Tracker table and re-scopes the hero card and its new context
+row (confirmed via a real AM login, whose card correctly showed "Your FY
+2026 Target," 100% covered, and her own opportunity/account counts); Clear,
+light/dark theme, and every other tab (Analytics, Management, Calendar, Add
+Opportunity modal) still work with no console errors.
+
 ## [2.6.0] - 2026-09-29 (branch: v2.0)
 ### Added
 - **Merge Account Manager Name** (Settings, admin only): the 2.5.4 rename

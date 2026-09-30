@@ -15,6 +15,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.0/css/tabulator.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.0/js/tabulator.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/choices.js/10.2.0/choices.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/choices.js/10.2.0/choices.min.js"></script>
 <script>
   tailwind.config = { darkMode: ['selector', '[data-theme="dark"]'] };
 </script>
@@ -87,6 +89,41 @@
     background-repeat:no-repeat; background-position:right 11px center; padding-right:28px; }
   .tracker-toolbar { border-radius:16px; }
   .toolbar-divider { width:1px; height:22px; background:var(--border); }
+  /* --- Choices.js re-skin: the Tracker toolbar's AM/Pillar/Stage/Sort selects use a
+     real dropdown component (searchable, styled selectable list) instead of a native
+     <select>, whose popup can't be styled and looks jarring against a dark theme.
+     Choices renders its own markup inside .select-ico in place of the (now hidden)
+     native select, so this reproduces the .field-ico look on Choices' own elements. --- */
+  .select-ico { display:flex; align-items:center; }
+  .select-ico .choices { position:relative; width:100%; margin-bottom:0; font-size:13px; }
+  .select-ico .choices__inner {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:7px 22px 7px 30px; min-height:0; font-size:13px; color:var(--text);
+    display:flex; align-items:center; transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .select-ico .choices__inner:hover { border-color:var(--text-faint); }
+  .select-ico .choices.is-open .choices__inner, .select-ico .choices.is-focused .choices__inner {
+    border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); outline:none;
+  }
+  .select-ico .choices__list--single { padding:0; }
+  .select-ico .choices__list--single .choices__item { color:var(--text); }
+  .select-ico .choices[data-type*="select-one"]::after {
+    border-color:var(--text-faint) transparent transparent; right:12px; margin-top:-2px;
+  }
+  .select-ico .choices__list--dropdown, .select-ico .choices__list[aria-expanded] {
+    background:var(--surface); border:1px solid var(--border) !important; border-radius:10px; margin-top:4px;
+    box-shadow:0 4px 10px var(--shadow), 0 12px 28px -10px var(--shadow-2); overflow:hidden; z-index:20;
+  }
+  .select-ico .choices__list--dropdown .choices__item--selectable, .select-ico .choices__list[aria-expanded] .choices__item--selectable {
+    color:var(--text); padding:8px 12px 8px 30px; font-size:13px;
+  }
+  .select-ico .choices__list--dropdown .choices__item--selectable.is-highlighted,
+  .select-ico .choices__list[aria-expanded] .choices__item--selectable.is-highlighted { background:var(--surface-2); }
+  .select-ico .choices__input { background:var(--surface) !important; color:var(--text) !important; font-size:13px; margin-bottom:0; }
+  .select-ico .choices__list--dropdown .choices__input { border-bottom:1px solid var(--border); }
+  .select-ico > i { z-index:2; }
+  .select-ico.has-value .choices__inner { border-color:var(--primary); background:var(--primary-soft); color:var(--primary); font-weight:500; }
+  .select-ico.has-value > i { color:var(--primary); }
   .modal-overlay { background: rgba(15,20,30,.5); }
   ::-webkit-scrollbar { width:10px; height:10px; }
   ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius:8px; border:2px solid var(--surface); }
@@ -303,6 +340,8 @@
   .metric-value { font-size:1.55rem; font-weight:600; letter-spacing:-0.02em; color:var(--text); line-height:1.2; }
   .cov-seg { transition: width .6s cubic-bezier(.22,.9,.35,1); }
   .cov-pill { display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:4px 10px 4px 8px; border-radius:9999px; background:var(--surface-2); color:var(--text-muted); }
+  .metric-context-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; padding-top:16px; border-top:1px solid var(--border); }
+  .metric-context-item { display:inline-flex; align-items:center; gap:7px; font-size:12px; padding:5px 12px; border-radius:9999px; background:var(--surface-2); }
 </style>
 </head>
 <body>
@@ -508,7 +547,10 @@
               </div>
             </div>
           </div>
-          <div id="coverageLegend" class="flex flex-wrap gap-2 mt-4"></div>
+          <!-- New-information context row, not a repeat of the numbers above - a quick
+               pull from Pipeline Analytics (opportunity count, blocked) and Account
+               Coverage (accounts tracked, engaged %), scoped to the same AM if filtered. -->
+          <div id="heroContext" class="metric-context-row"></div>
         </div>
       </div>
 
@@ -678,37 +720,39 @@
         </div>
 
         <!-- Filter bar: filtering/sorting only, nothing else -->
-        <div class="card elev tracker-toolbar px-4 py-3 mb-4 flex flex-wrap items-center gap-2.5">
-          <div class="select-ico" style="flex:1 1 220px;min-width:180px">
+        <div class="card elev tracker-toolbar px-4 py-3.5 mb-4">
+          <div class="select-ico mb-3">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <input id="searchInput" type="text" placeholder="Search opportunity or customer..." class="field-ico py-2 pr-3 text-sm w-full">
+            <input id="searchInput" type="text" placeholder="Search opportunity or customer..." class="field-ico py-2.5 pr-3 text-sm w-full">
           </div>
-          <span class="toolbar-divider"></span>
-          <div class="select-ico">
-            <i class="fa-solid fa-user"></i>
-            <select id="filterAM" class="field-ico text-sm py-2"><option value="">All Account Managers</option></select>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <div class="select-ico" style="width:200px">
+              <i class="fa-solid fa-user"></i>
+              <select id="filterAM" class="field-ico text-sm py-2"><option value="">All Account Managers</option></select>
+            </div>
+            <div class="select-ico" style="width:170px">
+              <i class="fa-solid fa-layer-group"></i>
+              <select id="filterPillar" class="field-ico text-sm py-2"><option value="">All Pillars</option></select>
+            </div>
+            <div class="select-ico" style="width:150px">
+              <i class="fa-solid fa-flag"></i>
+              <select id="filterStage" class="field-ico text-sm py-2"><option value="">All Stages</option></select>
+            </div>
+            <span class="toolbar-divider"></span>
+            <div class="select-ico" style="width:230px">
+              <i class="fa-solid fa-arrow-down-wide-short"></i>
+              <select id="sortSelect" class="field-ico text-sm py-2" title="Sort opportunities">
+                <option value="progress_desc">Sort: Progress (High → Low)</option>
+                <option value="progress_asc">Progress (Low → High)</option>
+                <option value="value_desc">TCV (High → Low)</option>
+                <option value="value_asc">TCV (Low → High)</option>
+                <option value="rev_desc">Rev 2026 (High → Low)</option>
+                <option value="rev_asc">Rev 2026 (Low → High)</option>
+                <option value="name_asc">Name (A → Z)</option>
+              </select>
+            </div>
+            <button id="clearFilters" class="text-sm px-2.5 py-2 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
           </div>
-          <div class="select-ico">
-            <i class="fa-solid fa-layer-group"></i>
-            <select id="filterPillar" class="field-ico text-sm py-2"><option value="">All Pillars</option></select>
-          </div>
-          <div class="select-ico">
-            <i class="fa-solid fa-flag"></i>
-            <select id="filterStage" class="field-ico text-sm py-2"><option value="">All Stages</option></select>
-          </div>
-          <div class="select-ico">
-            <i class="fa-solid fa-arrow-down-wide-short"></i>
-            <select id="sortSelect" class="field-ico text-sm py-2" title="Sort opportunities">
-              <option value="progress_desc">Sort: Progress (High → Low)</option>
-              <option value="progress_asc">Progress (Low → High)</option>
-              <option value="value_desc">TCV (High → Low)</option>
-              <option value="value_asc">TCV (Low → High)</option>
-              <option value="rev_desc">Rev 2026 (High → Low)</option>
-              <option value="rev_asc">Rev 2026 (Low → High)</option>
-              <option value="name_asc">Name (A → Z)</option>
-            </select>
-          </div>
-          <button id="clearFilters" class="text-sm px-2.5 py-2 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
         </div>
 
         <p id="amFocusNote" class="text-[11px] mb-2" style="display:none;color:var(--primary)"><i class="fa-solid fa-user-check mr-1"></i>Showing <b>your</b> opportunities by default. Change the Account Manager filter to see the whole team.</p>
@@ -1610,6 +1654,47 @@ let TOKEN = localStorage.getItem('dt_token');
 let ROLE = localStorage.getItem('dt_role');
 let USERNAME = localStorage.getItem('dt_username');
 let FULLNAME = localStorage.getItem('dt_fullname');
+/* ================= TRACKER FILTER DROPDOWNS (Choices.js) ================= */
+const CHOICES_INSTANCES = {};
+function initFilterChoices(){
+  ['filterAM','filterPillar','filterStage','sortSelect'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el || CHOICES_INSTANCES[id]) return;
+    CHOICES_INSTANCES[id] = new Choices(el, {
+      searchEnabled: id!=='sortSelect',
+      searchPlaceholderValue: 'Search...',
+      shouldSort: false,
+      itemSelectText: '',
+      allowHTML: false,
+      placeholder: false,
+    });
+  });
+}
+// Programmatic value changes must go through the Choices instance (if the select has
+// one) - setting the native <select>.value directly doesn't update Choices' own
+// rendered label, since it renders its own markup instead of showing the select.
+function setSelectValue(id, value){
+  const inst=CHOICES_INSTANCES[id];
+  if(inst) inst.setChoiceByValue(value||'');
+  else document.getElementById(id).value = value||'';
+}
+// Options list changed (e.g. CONFIG reloaded) - route through Choices' own API rather
+// than overwriting the (now hidden) native select's innerHTML, which Choices wouldn't
+// otherwise notice.
+function setSelectOptions(id, options){
+  const el=document.getElementById(id);
+  const current=el.value;
+  const inst=CHOICES_INSTANCES[id];
+  if(inst){
+    inst.clearChoices();
+    inst.setChoices(options, 'value', 'label', true);
+    if(options.some(o=>o.value===current)) inst.setChoiceByValue(current);
+  } else {
+    el.innerHTML = options.map(o=>`<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('');
+    el.value = current;
+  }
+}
+
 let NOTIFICATIONS = [], notifPollTimer = null;
 let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[], squads:[], stages:[], am_targets:{}, am_achievements:{}, am_recurring:{}, current_achievement:0, recurring_revenue:0, max_login_logs:100 }, USERS = [], AMS = [], ASSIGNABLE_USERS = [];
 let COVERAGE = [];
@@ -1800,6 +1885,7 @@ function logout(){
 async function enterApp(){
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('appScreen').classList.remove('hidden');
+  initFilterChoices();
   document.getElementById('topUserName').textContent = FULLNAME;
   document.getElementById('topUserRole').textContent = ROLE.replace('_',' ');
   document.getElementById('avatar').textContent = initials(FULLNAME);
@@ -1831,8 +1917,7 @@ async function enterApp(){
   await loadAssignableUsers();
   // An Account Manager lands focused on their own opportunities by default
   if(ROLE==='account_manager'){
-    const f=document.getElementById('filterAM');
-    if([...f.options].some(o=>o.value===FULLNAME)) f.value=FULLNAME;
+    if(AMS.includes(FULLNAME)) setSelectValue('filterAM', FULLNAME);
     document.getElementById('amFocusNote').style.display='';
   } else {
     document.getElementById('amFocusNote').style.display='none';
@@ -1952,15 +2037,13 @@ async function loadAssignableUsers(){ try { ASSIGNABLE_USERS = await api('/api/a
 
 function populateSelectors(){
   const pl=CONFIG.strategic_pillars||[];
-  document.getElementById('filterPillar').innerHTML='<option value="">All Pillars</option>'+pl.map(p=>`<option>${escapeHtml(p)}</option>`).join('');
-  document.getElementById('filterAM').innerHTML='<option value="">All Account Managers</option>'+AMS.map(a=>`<option>${escapeHtml(a)}</option>`).join('');
+  setSelectOptions('filterPillar', [{value:'',label:'All Pillars'}, ...pl.map(p=>({value:p,label:p}))]);
+  setSelectOptions('filterAM', [{value:'',label:'All Account Managers'}, ...AMS.map(a=>({value:a,label:a}))]);
   document.getElementById('dealPillar').innerHTML=pl.map(p=>`<option>${escapeHtml(p)}</option>`).join('');
   document.getElementById('dealAM').innerHTML=AMS.map(a=>`<option>${escapeHtml(a)}</option>`).join('');
   // Stage-driven selects (stages are configurable)
   const st=stageList();
-  const keepFilterStage=document.getElementById('filterStage').value;
-  document.getElementById('filterStage').innerHTML='<option value="">All Stages</option>'+st.map(x=>`<option>${escapeHtml(x)}</option>`).join('');
-  document.getElementById('filterStage').value=keepFilterStage;
+  setSelectOptions('filterStage', [{value:'',label:'All Stages'}, ...st.map(x=>({value:x,label:x}))]);
   document.getElementById('dealStage').innerHTML=st.map(x=>`<option>${escapeHtml(x)}</option>`).join('');
   // Analytics filter selects
   document.getElementById('aFilterAM').innerHTML='<option value="">All AMs</option>'+AMS.map(a=>`<option>${escapeHtml(a)}</option>`).join('');
@@ -2012,10 +2095,33 @@ function updateMetrics(){
   document.getElementById('metricGap').textContent=fmtIDR(gap);
   document.getElementById('coveragePct').textContent=target>0?`${Math.round(covered/target*100)}%`:'–';
   renderCoverageGauge(achieved, recurring, pipeline2026, gap);
-  document.getElementById('coverageLegend').innerHTML=[
-    ['var(--success)','Achieved',achieved],['#12b5cb','Recurring',recurring],
-    ['var(--primary)','2026 Pipeline',pipeline2026],['var(--text-faint)','Remaining gap',gap]
-  ].map(([c,l,v])=>`<span class="cov-pill"><span class="w-2 h-2 rounded-full" style="background:${c}"></span>${l}: <b style="color:var(--text)">${fmtIDR(v)}</b></span>`).join('');
+  renderHeroContext(am, scopedPool);
+}
+
+// A quick pull from Pipeline Analytics + Account Coverage - genuinely new information,
+// not the same revenue figures already shown in the gauge/tiles above.
+function renderHeroContext(am, scopedPool){
+  const el=document.getElementById('heroContext');
+  const blocked=scopedPool.filter(d=>d.is_blocked).length;
+  const avgProgress=scopedPool.length?Math.round(scopedPool.reduce((s,d)=>s+(d.progress||0),0)/scopedPool.length):0;
+  const items=[
+    {icon:'fa-table-cells-large', label:'Opportunities', value:scopedPool.length},
+    {icon:'fa-gauge-high', label:'Avg. progress', value:avgProgress+'%'},
+  ];
+  if(blocked>0) items.push({icon:'fa-triangle-exclamation', label:'Blocked', value:blocked, accent:'var(--danger)'});
+  if(typeof COVERAGE!=='undefined' && Array.isArray(COVERAGE) && COVERAGE.length){
+    const cov = am ? COVERAGE.filter(r=>am_matches(r.am, am)) : COVERAGE;
+    if(cov.length){
+      const engaged=cov.filter(r=>r.deal_count>0).length;
+      items.push({icon:'fa-users-viewfinder', label:'Accounts tracked', value:cov.length});
+      items.push({icon:'fa-handshake', label:'Engaged', value:`${engaged}/${cov.length}`});
+    }
+  }
+  el.innerHTML = items.map(it=>`<span class="metric-context-item">
+      <i class="fa-solid ${it.icon}" style="color:${it.accent||'var(--text-faint)'}"></i>
+      <span style="color:var(--text-muted)">${escapeHtml(it.label)}:</span>
+      <b style="color:${it.accent||'var(--text)'}">${escapeHtml(String(it.value))}</b>
+    </span>`).join('');
 }
 
 function renderCoverageGauge(achieved, recurring, pipeline2026, gap){
@@ -2041,16 +2147,20 @@ function renderCoverageGauge(achieved, recurring, pipeline2026, gap){
 
 /* ================= DEALS ================= */
 function markTrackerFilterState(){
-  ['filterAM','filterPillar','filterStage','searchInput'].forEach(id=>{
+  ['filterAM','filterPillar','filterStage'].forEach(id=>{
     const el=document.getElementById(id);
-    el.classList.toggle('has-value', !!el.value);
+    // Choices renders its own markup in place of the select, so the "has a value"
+    // accent goes on the .select-ico wrapper rather than the (now hidden) select itself.
+    el.closest('.select-ico').classList.toggle('has-value', !!el.value);
   });
+  const s=document.getElementById('searchInput');
+  s.classList.toggle('has-value', !!s.value);
 }
 ['filterAM','filterPillar','filterStage'].forEach(id=>document.getElementById(id).addEventListener('change',loadDeals));
 document.getElementById('searchInput').addEventListener('input',()=>{ markTrackerFilterState(); renderDealsTable(); });
 document.getElementById('sortSelect').addEventListener('change',renderDealsTable);
 document.getElementById('clearFilters').addEventListener('click',()=>{
-  ['filterAM','filterPillar','filterStage'].forEach(id=>document.getElementById(id).value='');
+  ['filterAM','filterPillar','filterStage'].forEach(id=>setSelectValue(id,''));
   document.getElementById('searchInput').value=''; loadDeals();
 });
 
