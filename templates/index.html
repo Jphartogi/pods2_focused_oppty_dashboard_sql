@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PODS-2 Dashboard Tracker</title>
+<title>Dashboard Tracker</title>
 <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}">
 <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='img/favicon-16.png') }}">
 <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
@@ -87,7 +87,11 @@
   select.field-ico { appearance:none; -webkit-appearance:none; cursor:pointer;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b929c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat:no-repeat; background-position:right 11px center; padding-right:28px; }
-  .tracker-toolbar { border-radius:16px; }
+  /* .card sets contain:layout paint for perf, which clips anything that overflows
+     its box - including the Choices.js dropdown panel opening out of this card
+     (especially when flipped upward near the bottom of the viewport). Undo that
+     containment here so filter dropdowns render in full instead of getting cut off. */
+  .tracker-toolbar { border-radius:16px; contain:none; }
   .toolbar-divider { width:1px; height:22px; background:var(--border); }
   /* --- Choices.js re-skin: the Tracker toolbar's AM/Pillar/Stage/Sort selects use a
      real dropdown component (searchable, styled selectable list) instead of a native
@@ -355,7 +359,7 @@
       <div class="mb-7">
         <img src="{{ url_for('static', filename='img/pods2-logo-256.png') }}" alt="PODS-2" class="w-12 h-12 rounded-xl mb-4" style="object-fit:cover">
         <h1 class="text-2xl font-semibold" style="color:var(--text)">Sign in</h1>
-        <p class="text-xs mt-1.5" style="color:var(--text-muted)">PODS-2 Dashboard Tracker &mdash; deal execution &amp; strategy</p>
+        <p class="text-xs mt-1.5" style="color:var(--text-muted)">Dashboard Tracker &mdash; deal execution &amp; strategy</p>
       </div>
       <form id="loginForm" class="space-y-4">
         <div>
@@ -385,7 +389,7 @@
       <div class="absolute rounded-full" style="width:220px;height:220px;bottom:-70px;left:-60px;background:rgba(124,185,240,.14);filter:blur(10px)"></div>
 
       <div class="relative z-10 text-center mb-2">
-        <h2 class="text-white text-xl font-semibold leading-snug">Welcome to the<br>PODS-2 Dashboard Tracker</h2>
+        <h2 class="text-white text-xl font-semibold leading-snug">Welcome to the<br>Dashboard Tracker</h2>
         <p class="text-[12px] mt-2" style="color:rgba(255,255,255,.72)">Track every opportunity, strategy and target in one place</p>
       </div>
 
@@ -425,17 +429,15 @@
   <!-- Top app bar — dark navy chrome, AWS-style, regardless of light/dark theme -->
   <header class="app-topbar flex items-center gap-3 px-4 h-14 flex-shrink-0">
     <button id="railToggle" class="icon-btn" title="Collapse / expand menu"><i class="fa-solid fa-bars"></i></button>
-    <img src="{{ url_for('static', filename='img/pods2-logo-256.png') }}" alt="PODS-2" class="w-9 h-9 rounded-lg flex-shrink-0" style="object-fit:cover">
-    <div>
-      <p class="text-sm font-semibold leading-tight" style="color:var(--text);letter-spacing:-0.01em">PODS-2 Dashboard Tracker</p>
-      <p class="text-[11px] leading-tight" style="color:var(--text-muted)">H2 2026 Strategic Playbook</p>
-    </div>
-    <span class="chip ml-2 hidden sm:inline" style="color:var(--text-muted)">IDR &middot; Production</span>
-    <button id="searchTriggerBtn" type="button" class="hidden lg:flex items-center gap-2 ml-5 px-3 py-1.5 rounded-lg text-xs" style="background:var(--surface-2);color:var(--text-faint);border:1px solid var(--border);min-width:230px" title="Search (Ctrl+K)">
-      <i class="fa-solid fa-magnifying-glass"></i><span class="flex-1 text-left">Search features…</span><span class="chip" style="padding:1px 6px;font-size:9px;color:var(--text-faint)">Ctrl K</span>
+    <button id="homeBtn" type="button" class="flex items-center gap-2.5 flex-shrink-0" title="Go to Tracker" style="background:none;border:none;cursor:pointer;padding:0">
+      <img src="{{ url_for('static', filename='img/pods2-logo-256.png') }}" alt="Home" class="w-9 h-9 rounded-lg flex-shrink-0" style="object-fit:cover">
+      <span class="text-sm font-semibold leading-tight hidden sm:inline" style="color:var(--text);letter-spacing:-0.01em">Dashboard Tracker</span>
+    </button>
+    <button id="searchTriggerBtn" type="button" class="hidden md:flex items-center gap-2.5 flex-1 mx-3 px-4 py-2 rounded-full text-sm" style="background:var(--surface-2);color:var(--text-faint);border:1px solid var(--border);max-width:640px;min-width:0" title="Search (Ctrl+K)">
+      <i class="fa-solid fa-magnifying-glass flex-shrink-0"></i><span class="flex-1 text-left" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search opportunities, features…</span><span class="chip flex-shrink-0" style="padding:1px 6px;font-size:9px;color:var(--text-faint)">Ctrl K</span>
     </button>
     <div class="flex-1"></div>
-    <button id="searchTriggerBtnMobile" type="button" class="icon-btn lg:hidden" title="Search (Ctrl+K)"><i class="fa-solid fa-magnifying-glass"></i></button>
+    <button id="searchTriggerBtnMobile" type="button" class="icon-btn md:hidden" title="Search (Ctrl+K)"><i class="fa-solid fa-magnifying-glass"></i></button>
     <button id="quickConfigBtn" title="Configuration" class="icon-btn" style="display:none"><i class="fa-solid fa-list-check"></i></button>
     <button id="quickSettingsBtn" title="Settings" class="icon-btn" style="display:none"><i class="fa-solid fa-gear"></i></button>
     <div class="relative">
@@ -5092,6 +5094,7 @@ function openCmdPalette(){
 }
 document.getElementById('searchTriggerBtn').addEventListener('click',openCmdPalette);
 document.getElementById('searchTriggerBtnMobile').addEventListener('click',openCmdPalette);
+document.getElementById('homeBtn').addEventListener('click',()=>switchTab('tracker'));
 document.getElementById('cmdInput').addEventListener('input',renderCmdResults);
 document.getElementById('cmdInput').addEventListener('keydown',e=>{
   if(e.key==='ArrowDown'){ e.preventDefault(); cmdMove(1); }

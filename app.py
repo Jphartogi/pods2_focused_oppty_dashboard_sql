@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.7.0"
+APP_VERSION = "2.8.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -811,12 +811,23 @@ def get_proof_framework():
 @app.route("/api/account_managers", methods=["GET"])
 @login_required()
 def get_account_managers():
+    """Every name the Tracker filter should be able to select: registered
+    account_manager users, plus any name already carrying deals (e.g. synced in
+    from v1.9 or a bulk import before that person had a v2.0 login of their own)
+    - otherwise their opportunities exist but can never be filtered to by name."""
     db = get_db()
-    rows = db.execute(
-        "SELECT full_name FROM users WHERE role = 'account_manager' ORDER BY full_name"
-    ).fetchall()
-    names = [r["full_name"] for r in rows if r["full_name"]]
-    return jsonify(names)
+    names = {
+        r["full_name"]
+        for r in db.execute(
+            "SELECT full_name FROM users WHERE role = 'account_manager'"
+        ).fetchall()
+        if r["full_name"]
+    }
+    for r in db.execute(
+        "SELECT DISTINCT assigned_am FROM deals WHERE assigned_am != ''"
+    ).fetchall():
+        names.add(r["assigned_am"])
+    return jsonify(sorted(names))
 
 
 @app.route("/api/assignable_users", methods=["GET"])

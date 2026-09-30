@@ -6,6 +6,44 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.8.0] - 2026-09-30 (branch: v2.0)
+### Fixed
+- **Filter dropdowns (AM/Pillar/Stage) were rendering clipped to 1-2 visible
+  rows, floating in the wrong place.** Root cause: `.card`'s CSS sets
+  `contain: layout paint` for render performance, which also clips any
+  content that overflows the card's own box - including the Choices.js
+  dropdown panel, especially when it flips to open upward (common near the
+  bottom of a typical viewport). All options were always present in the DOM
+  and the underlying `<select>` - only the visible popup was cut off. Fixed
+  by disabling containment specifically on the Tracker toolbar card so its
+  dropdowns can overflow the card and render in full.
+- **Account Manager filter only listed people with a registered login**,
+  missing any AM who already has opportunities in the Tracker but hasn't
+  been given a v2.0 account yet (e.g. after a v1.9 sync or bulk import).
+  `GET /api/account_managers` now also includes every distinct name already
+  assigned to a deal, unioned with registered `account_manager` users, so
+  the filter covers everyone actually in the pipeline data.
+### Changed
+- **Top app bar redesigned**: the small "Search features" pill is now a
+  long, full-width search bar (Google Cloud Console style) instead of a
+  narrow fixed-width button.
+- Removed the "IDR · Production" chip and the "H2 2026 Strategic Playbook"
+  subtitle from the header; the app is now just labeled "Dashboard Tracker"
+  throughout (browser tab title, sign-in screen, top bar) so this build can
+  be replicated for other teams without PODS-2-specific wording baked in.
+- **The logo in the top bar is now a home button** - click it from any page
+  to jump straight back to the Tracker.
+
+Verified in an ephemeral Docker stack: seeded a deal for an AM with no
+registered v2.0 login ("Mutiara Rizky") alongside the 4 seeded registered
+AMs, confirmed she was previously invisible in the filter and now appears
+and filters correctly; confirmed the AM/Pillar dropdowns render every option
+in full (no clipping) in both light and dark theme, at both a narrow
+(800px) and a wide (1440px) viewport; confirmed the home button navigates
+back to Tracker from another tab; confirmed a real AM login (Anisa Rahmy)
+still gets auto-scoped to her own opportunities by default with no console
+errors.
+
 ## [2.7.0] - 2026-09-30 (branch: v2.0)
 ### Changed
 - **Tracker toolbar redesigned**: search is now full-width on its own row
