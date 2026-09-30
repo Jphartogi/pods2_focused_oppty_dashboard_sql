@@ -6,6 +6,29 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.11.0] - 2026-09-30 (branch: v2.0)
+### Added
+- **Weekly Plan's "Goal of the visit" is now multiple points**, not one
+  block of text - each goal is its own line with a remove button, and
+  "+ Add point" adds another. Stored as newline-separated text (same
+  convention already used for Next Actions elsewhere), rendered as a real
+  bullet list wherever a plan is displayed.
+- **Admin/management can double-click any planned visit to see its full
+  details** - customer, topic, every goal point, and the attachment - in a
+  read-only popup, from both the "All Account Managers" overview and a
+  single AM's drilled-in view. No edit controls are shown; it's purely a
+  detail view, since only the AM themselves can change their own plan.
+### Changed
+- The compact one-line preview of a visit (in the day cards and the All-AMs
+  grouped summary) now joins goal points with " · " instead of showing raw
+  newlines.
+
+Verified in an ephemeral Docker stack: added a 4-point goal to a visit as an
+AM, confirmed all 4 points saved and reloaded correctly; confirmed an admin
+double-clicking that visit (both from the single-AM view and the grouped
+All Account Managers view) opens a read-only detail modal showing every
+goal point as a bullet, with no Save/Delete/upload controls present.
+
 ## [2.10.0] - 2026-09-30 (branch: v2.0)
 ### Added
 - **"My Profile"**: click the avatar/name in the top bar (any role) to change

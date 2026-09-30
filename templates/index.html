@@ -801,7 +801,7 @@
         <div class="card w-full max-w-md elev p-6">
           <div class="flex items-start justify-between mb-4">
             <div>
-              <p class="text-xs" style="color:var(--text-muted)">Plan a visit</p>
+              <p id="wpEntryModalKicker" class="text-xs" style="color:var(--text-muted)">Plan a visit</p>
               <p id="wpEntryDayLabel" class="text-sm font-semibold" style="color:var(--text)"></p>
             </div>
             <button data-close-modal="wpEntryModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button>
@@ -811,19 +811,23 @@
             <input type="hidden" id="wpEntryDay">
             <div>
               <label class="block text-xs mb-1" style="color:var(--text-muted)">Customer</label>
-              <div class="select-ico">
+              <div id="wpEntryCustomerWrap" class="select-ico">
                 <i class="fa-solid fa-building"></i>
                 <select id="wpEntryCustomer" class="field-ico text-sm py-2 w-full"><option value="">Select a customer…</option></select>
               </div>
+              <p id="wpEntryCustomerStatic" class="text-sm font-medium" style="color:var(--text);display:none"></p>
               <input id="wpEntryCustomerNew" type="text" class="field w-full px-3 py-2 text-sm mt-2" placeholder="New customer name…" style="display:none">
             </div>
             <div>
               <label class="block text-xs mb-1" style="color:var(--text-muted)">Topic to bring</label>
               <input id="wpEntryTopic" type="text" class="field w-full px-3 py-2 text-sm">
+              <p id="wpEntryTopicStatic" class="text-sm" style="color:var(--text);display:none"></p>
             </div>
             <div>
               <label class="block text-xs mb-1" style="color:var(--text-muted)">Goal of the visit</label>
-              <textarea id="wpEntryGoal" rows="2" class="field w-full px-3 py-2 text-sm"></textarea>
+              <div id="wpEntryGoalList" class="space-y-1.5"></div>
+              <button type="button" id="wpEntryGoalAddBtn" class="text-xs px-2.5 py-1 rounded-lg mt-1.5" style="background:var(--surface-2);color:var(--primary)"><i class="fa-solid fa-plus mr-1"></i>Add point</button>
+              <ul id="wpEntryGoalStatic" class="text-sm list-disc pl-4 space-y-1" style="color:var(--text);display:none"></ul>
             </div>
             <div>
               <label class="block text-xs mb-1" style="color:var(--text-muted)">Attach plan / proof of visit</label>
@@ -831,15 +835,21 @@
                 <a id="wpEntryAttachLink" href="#" target="_blank" class="text-xs underline flex items-center gap-1.5" style="color:var(--primary)"><i class="fa-solid fa-paperclip"></i><span></span></a>
                 <button type="button" id="wpEntryAttachRemove" class="text-xs" style="color:var(--danger)" title="Remove attachment"><i class="fa-solid fa-trash"></i></button>
               </div>
-              <input id="wpEntryAttachFile" type="file" accept=".pdf,.png,.jpg,.jpeg" class="field w-full px-3 py-2 text-sm">
-              <p class="text-[10px] mt-1" style="color:var(--text-faint)">PDF, PNG or JPG — uploads automatically once selected.</p>
+              <div id="wpEntryAttachUploadWrap">
+                <input id="wpEntryAttachFile" type="file" accept=".pdf,.png,.jpg,.jpeg" class="field w-full px-3 py-2 text-sm">
+                <p class="text-[10px] mt-1" style="color:var(--text-faint)">PDF, PNG or JPG — uploads automatically once selected.</p>
+              </div>
+              <p id="wpEntryAttachNone" class="text-xs" style="color:var(--text-faint);display:none">No attachment.</p>
             </div>
-            <div class="flex items-center gap-2 pt-2">
+            <div id="wpEntryEditFooter" class="flex items-center gap-2 pt-2">
               <button type="button" id="wpEntryDeleteBtn" class="text-sm px-3 py-2 rounded-lg" style="color:var(--danger);display:none"><i class="fa-solid fa-trash mr-1"></i>Delete</button>
               <div class="flex gap-2 ml-auto">
                 <button type="button" data-close-modal="wpEntryModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button>
                 <button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button>
               </div>
+            </div>
+            <div id="wpEntryReadFooter" class="flex justify-end pt-2" style="display:none">
+              <button type="button" data-close-modal="wpEntryModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Close</button>
             </div>
           </form>
         </div>
@@ -3756,19 +3766,32 @@ async function renderWeeklyPlan(){
   }
 }
 
+function wpGoalPoints(goal){
+  return (goal||'').split('\n').map(s=>s.trim()).filter(Boolean);
+}
+function wpGoalPreview(goal){
+  return wpGoalPoints(goal).map(escapeHtml).join(' &middot; ');
+}
+// Every entry rendered anywhere on this page, keyed by id - so a double-click
+// on a summary row (which doesn't carry the full record inline) can still
+// look up the complete entry to show in the read-only detail modal.
+let WP_ENTRIES_BY_ID = {};
+
 function wpEntryRow(e, editable){
   const attach = e.has_attachment
     ? `<a href="/api/weekly_plan/${e.id}/attachment?token=${encodeURIComponent(TOKEN)}" target="_blank" class="text-xs" style="color:var(--primary)" title="${escapeHtml(e.attachment_filename)}" onclick="event.stopPropagation()"><i class="fa-solid fa-paperclip"></i></a>`
     : '';
-  return `<div class="wp-entry-row flex items-center gap-3 rounded-lg px-3 py-2 ${editable?'clickable':''}" data-id="${e.id}" style="background:var(--surface-2)">
+  return `<div class="wp-entry-row flex items-center gap-3 rounded-lg px-3 py-2 clickable" data-id="${e.id}" style="background:var(--surface-2)">
     <span class="chip" style="min-width:130px;color:var(--text)">${escapeHtml(e.customer)||'No customer'}</span>
     <span class="text-xs flex-1" style="color:var(--text)">${escapeHtml(e.topic)||'—'}</span>
-    <span class="text-xs flex-1" style="color:var(--text-muted)">${escapeHtml(e.goal)}</span>
+    <span class="text-xs flex-1" style="color:var(--text-muted)">${wpGoalPreview(e.goal)}</span>
     ${attach}
   </div>`;
 }
 
 function renderWeeklyPlanOwn(entries, editable){
+  WP_ENTRIES_BY_ID = {};
+  entries.forEach(e=>{ WP_ENTRIES_BY_ID[e.id]=e; });
   const byDay={mon:[],tue:[],wed:[],thu:[],fri:[]};
   entries.forEach(e=>{ (byDay[e.day]=byDay[e.day]||[]).push(e); });
   document.getElementById('wpDayCards').innerHTML = Object.keys(WP_DAY_LABELS).map(day=>{
@@ -3784,18 +3807,17 @@ function renderWeeklyPlanOwn(entries, editable){
       <div class="space-y-2">${rows}</div>
     </div>`;
   }).join('');
-  if(editable){
-    document.querySelectorAll('.wp-add-btn').forEach(b=>b.addEventListener('click',()=>openWpEntryModal(b.dataset.day)));
-    document.querySelectorAll('.wp-entry-row.clickable').forEach(row=>{
-      row.addEventListener('click',()=>{
-        const e=entries.find(x=>String(x.id)===row.dataset.id);
-        if(e) openWpEntryModal(e.day, e);
-      });
-    });
-  }
+  if(editable) document.querySelectorAll('.wp-add-btn').forEach(b=>b.addEventListener('click',()=>openWpEntryModal(b.dataset.day)));
+  document.querySelectorAll('#wpDayCards .wp-entry-row.clickable').forEach(row=>{
+    const e=WP_ENTRIES_BY_ID[row.dataset.id]; if(!e) return;
+    if(editable) row.addEventListener('click',()=>openWpEntryModal(e.day, e));
+    else row.addEventListener('dblclick',()=>openWpEntryModal(e.day, e, true));
+  });
 }
 
 function renderWeeklyPlanAll(entries){
+  WP_ENTRIES_BY_ID = {};
+  entries.forEach(e=>{ WP_ENTRIES_BY_ID[e.id]=e; });
   const byAm={};
   entries.forEach(e=>{ (byAm[e.am_full_name]=byAm[e.am_full_name]||[]).push(e); });
   const ams=Object.keys(byAm).sort();
@@ -3815,17 +3837,21 @@ function renderWeeklyPlanAll(entries){
           const list=byDay[day]||[];
           return `<div class="rounded-lg p-2.5" style="background:var(--surface-2)">
             <p class="text-[11px] font-medium mb-1.5" style="color:var(--text-muted)">${WP_DAY_LABELS[day]}</p>
-            ${list.length ? list.map(e=>`<div class="mb-1.5 pb-1.5" style="border-bottom:1px solid var(--border)">
+            ${list.length ? list.map(e=>`<div class="wp-all-entry clickable mb-1.5 pb-1.5" data-id="${e.id}" style="border-bottom:1px solid var(--border)">
                 <p class="text-xs font-medium" style="color:var(--text)">${escapeHtml(e.customer)||'—'}</p>
                 ${e.topic?`<p class="text-[11px]" style="color:var(--text-muted)">${escapeHtml(e.topic)}</p>`:''}
-                ${e.goal?`<p class="text-[11px]" style="color:var(--text-faint)">${escapeHtml(e.goal)}</p>`:''}
-                ${e.has_attachment?`<a href="/api/weekly_plan/${e.id}/attachment?token=${encodeURIComponent(TOKEN)}" target="_blank" class="text-[11px]" style="color:var(--primary)"><i class="fa-solid fa-paperclip mr-1"></i>Attachment</a>`:''}
+                ${e.goal?`<p class="text-[11px]" style="color:var(--text-faint)">${wpGoalPreview(e.goal)}</p>`:''}
+                ${e.has_attachment?`<i class="fa-solid fa-paperclip" style="color:var(--primary);font-size:10px"></i>`:''}
               </div>`).join('') : `<p class="text-[11px]" style="color:var(--text-faint)">—</p>`}
           </div>`;
         }).join('')}
       </div>
     </div>`;
   }).join('');
+  document.querySelectorAll('.wp-all-entry.clickable').forEach(row=>{
+    const e=WP_ENTRIES_BY_ID[row.dataset.id]; if(!e) return;
+    row.addEventListener('dblclick',()=>openWpEntryModal(e.day, e, true));
+  });
 }
 
 const WP_NEW_CUSTOMER_VALUE = '__new__';
@@ -3835,29 +3861,90 @@ function wpCustomerOptions(currentValue){
   opts.push({value:WP_NEW_CUSTOMER_VALUE,label:'+ Add new customer…'});
   return opts;
 }
-function openWpEntryModal(day, entry){
+// Goal of the visit is stored as newline-separated points in one TEXT column -
+// the form just presents/edits it as a dynamic list of point inputs.
+function wpGoalRowHtml(value){
+  return `<div class="flex items-center gap-2">
+    <input type="text" class="field flex-1 px-3 py-2 text-sm wp-goal-point" value="${escapeHtml(value||'')}" placeholder="Goal point…">
+    <button type="button" class="wp-goal-remove text-xs px-1.5" style="color:var(--text-faint)" title="Remove point"><i class="fa-solid fa-xmark"></i></button>
+  </div>`;
+}
+function wpWireGoalRemovers(){
+  document.querySelectorAll('.wp-goal-remove').forEach(b=>{
+    b.onclick=()=>{
+      const rows=document.querySelectorAll('#wpEntryGoalList > div');
+      if(rows.length<=1){ b.closest('div').querySelector('input').value=''; return; }
+      b.closest('div').remove();
+    };
+  });
+}
+document.getElementById('wpEntryGoalAddBtn').addEventListener('click',()=>{
+  document.getElementById('wpEntryGoalList').insertAdjacentHTML('beforeend', wpGoalRowHtml(''));
+  wpWireGoalRemovers();
+  const inputs=document.querySelectorAll('.wp-goal-point');
+  inputs[inputs.length-1].focus();
+});
+function wpGoalPointsValue(){
+  return Array.from(document.querySelectorAll('.wp-goal-point')).map(i=>i.value.trim()).filter(Boolean);
+}
+
+function openWpEntryModal(day, entry, readOnly){
   WP_CURRENT_ENTRY_ID = entry ? entry.id : null;
-  document.getElementById('wpEntryDayLabel').textContent = WP_DAY_LABELS[day];
+  document.getElementById('wpEntryModalKicker').textContent = readOnly ? 'Visit details' : 'Plan a visit';
+  document.getElementById('wpEntryDayLabel').textContent =
+    (readOnly && entry ? entry.am_full_name+' — ' : '') + WP_DAY_LABELS[day];
   document.getElementById('wpEntryDay').value = day;
   document.getElementById('wpEntryId').value = entry ? entry.id : '';
+
   const custValue = entry ? entry.customer : '';
-  setSelectOptions('wpEntryCustomer', [{value:'',label:'Select a customer…'}, ...wpCustomerOptions(custValue)]);
-  setSelectValue('wpEntryCustomer', custValue);
+  document.getElementById('wpEntryCustomerWrap').style.display = readOnly ? 'none' : '';
+  document.getElementById('wpEntryCustomerStatic').style.display = readOnly ? '' : 'none';
+  if(readOnly){
+    document.getElementById('wpEntryCustomerStatic').textContent = custValue || 'No customer';
+  } else {
+    setSelectOptions('wpEntryCustomer', [{value:'',label:'Select a customer…'}, ...wpCustomerOptions(custValue)]);
+    setSelectValue('wpEntryCustomer', custValue);
+  }
   document.getElementById('wpEntryCustomerNew').style.display = 'none';
   document.getElementById('wpEntryCustomerNew').value = '';
-  document.getElementById('wpEntryTopic').value = entry ? entry.topic : '';
-  document.getElementById('wpEntryGoal').value = entry ? entry.goal : '';
+
+  document.getElementById('wpEntryTopic').style.display = readOnly ? 'none' : '';
+  document.getElementById('wpEntryTopicStatic').style.display = readOnly ? '' : 'none';
+  if(readOnly) document.getElementById('wpEntryTopicStatic').textContent = entry.topic || '—';
+  else document.getElementById('wpEntryTopic').value = entry ? entry.topic : '';
+
+  const goalPoints = entry ? wpGoalPoints(entry.goal) : [];
+  document.getElementById('wpEntryGoalList').style.display = readOnly ? 'none' : '';
+  document.getElementById('wpEntryGoalAddBtn').style.display = readOnly ? 'none' : '';
+  document.getElementById('wpEntryGoalStatic').style.display = readOnly ? '' : 'none';
+  if(readOnly){
+    document.getElementById('wpEntryGoalStatic').innerHTML = goalPoints.length
+      ? goalPoints.map(p=>`<li>${escapeHtml(p)}</li>`).join('')
+      : `<li style="color:var(--text-faint);list-style:none;margin-left:-1rem">No goal points.</li>`;
+  } else {
+    document.getElementById('wpEntryGoalList').innerHTML = (goalPoints.length?goalPoints:['']).map(wpGoalRowHtml).join('');
+    wpWireGoalRemovers();
+  }
+
   document.getElementById('wpEntryAttachFile').value = '';
+  document.getElementById('wpEntryAttachUploadWrap').style.display = readOnly ? 'none' : '';
+  document.getElementById('wpEntryAttachRemove').style.display = readOnly ? 'none' : '';
   const attachRow=document.getElementById('wpEntryAttachRow');
+  const attachNone=document.getElementById('wpEntryAttachNone');
   if(entry && entry.has_attachment){
     attachRow.style.display='flex';
+    attachNone.style.display='none';
     const link=document.getElementById('wpEntryAttachLink');
     link.href = `/api/weekly_plan/${entry.id}/attachment?token=${encodeURIComponent(TOKEN)}`;
     link.querySelector('span').textContent = entry.attachment_filename;
   } else {
     attachRow.style.display='none';
+    attachNone.style.display = readOnly ? '' : 'none';
   }
-  document.getElementById('wpEntryDeleteBtn').style.display = entry ? '' : 'none';
+
+  document.getElementById('wpEntryDeleteBtn').style.display = (!readOnly && entry) ? '' : 'none';
+  document.getElementById('wpEntryEditFooter').style.display = readOnly ? 'none' : 'flex';
+  document.getElementById('wpEntryReadFooter').style.display = readOnly ? 'flex' : 'none';
   openModal('wpEntryModal');
 }
 
@@ -3876,7 +3963,7 @@ document.getElementById('wpEntryForm').addEventListener('submit', async ev=>{
     day: document.getElementById('wpEntryDay').value,
     customer,
     topic: document.getElementById('wpEntryTopic').value.trim(),
-    goal: document.getElementById('wpEntryGoal').value.trim(),
+    goal: wpGoalPointsValue().join('\n'),
   };
   try {
     const saved = WP_CURRENT_ENTRY_ID
