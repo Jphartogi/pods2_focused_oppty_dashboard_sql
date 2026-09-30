@@ -1,6 +1,6 @@
 """
 H2 2026 Command Center - PODS 2
-Deal Execution Tracker & Strategy Dashboard (SQLite-backed version)
+Deal Execution Tracker & Strategy Dashboard (Postgres-backed v2.0)
 
 Row-level access control: each Account Manager can only edit the opportunities
 assigned to them; ADMIN can edit everything; MANAGEMENT is read-only.
@@ -11,60 +11,44 @@ import os
 import re
 import secrets
 import sqlite3
+import tempfile
 import urllib.error
 import urllib.request
+import uuid
 from datetime import datetime, date, timedelta, timezone
 from functools import wraps
 
+import psycopg
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 from flask import Flask, g, jsonify, render_template, request, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "1.9.3"
+APP_VERSION = "2.11.0"
 
-# Keep the database next to app.py so it persists in a predictable location
-# regardless of the host's working directory (Render, PythonAnywhere, Docker, etc.).
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "db.sqlite3"))
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgresql://pods2:pods2@localhost:5432/pods2"
+)
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads"))
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # 25MB per uploaded file
 
-# --------------------------------------------------------------------------
-# Sunset notice: this v1.9 deployment is retired in favor of v2.0
-# (https://pods2.jphartogi.com). The UI shows a migration banner well before
-# the cutoff so nobody is surprised; from READONLY_CUTOFF onward every write
-# request is also blocked at the API level (not just hidden in the UI, so it
-# can't be bypassed by calling the API directly). Login/logout stay open so
-# anyone who still needs to look something up here can still sign in.
-# --------------------------------------------------------------------------
-READONLY_CUTOFF = date(2026, 10, 1)
-READONLY_CUTOFF_LABEL = "October 1, 2026"
-NEW_DASHBOARD_URL = "https://pods2.jphartogi.com"
-_READONLY_EXEMPT_PATHS = {"/api/login", "/api/logout"}
+# Small pool: a handful of gunicorn workers x a couple of connections each is
+# plenty for this team's traffic - session storage moving into Postgres (see
+# the `sessions` table below) is what makes running multiple workers safe at
+# all, since tokens used to live in an in-process dict.
+_pool = ConnectionPool(
+    DATABASE_URL, min_size=1, max_size=8, kwargs={"row_factory": dict_row}, open=False
+)
+_pool.open(wait=True, timeout=30)
 
-
-def is_readonly_mode():
-    return date.today() >= READONLY_CUTOFF
-
-
-@app.before_request
-def _enforce_readonly_after_cutoff():
-    if (
-        is_readonly_mode()
-        and request.method in ("POST", "PUT", "DELETE", "PATCH")
-        and request.path not in _READONLY_EXEMPT_PATHS
-    ):
-        return jsonify({
-            "error": f"This version was retired on {READONLY_CUTOFF_LABEL} and is now read-only. "
-                     f"Please use the new Dashboard Tracker at {NEW_DASHBOARD_URL} - "
-                     f"your data has already been migrated there.",
-        }), 403
-
-
-# In-memory token store: token -> {user_id, username, role, full_name}
-TOKENS = {}
+SESSION_LIFETIME = timedelta(hours=12)
 
 VALID_ROLES = ("admin", "account_manager", "management", "solution", "project", "product")
 # Cross-functional roles that can only edit the Team Tasks section of an opportunity
@@ -204,9 +188,7 @@ def _hash(pw):
 # --------------------------------------------------------------------------
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db = _pool.getconn()
     return g.db
 
 
@@ -214,7 +196,9 @@ def get_db():
 def close_db(exception=None):
     db = g.pop("db", None)
     if db is not None:
-        db.close()
+        if exception:
+            db.rollback()
+        _pool.putconn(db)
 
 
 # Seed opportunity dataset (PODS 2 real pipeline).
@@ -330,344 +314,260 @@ def _seed_deals():
     return rows
 
 
-def _widen_cov_status(db):
-    """Older databases have the pre-1.7.0 account_coverage status CHECK (just
-    cold/low_priority/no_contact/not_preferable). SQLite can't ALTER a CHECK
-    constraint in place, so rebuild with the richer relationship-status
-    taxonomy - copying every row unchanged except remapping 'cold' to its
-    renamed equivalent 'at_risk'."""
-    row = db.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='account_coverage'"
-    ).fetchone()
-    if not row or not row["sql"] or "'existing_customer'" in row["sql"]:
-        return  # table doesn't exist yet, or already migrated
-    db.executescript(
-        """
-        ALTER TABLE account_coverage RENAME TO account_coverage_pre_status_widen;
-        CREATE TABLE account_coverage (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_key TEXT UNIQUE NOT NULL,
-            account_name TEXT NOT NULL,
-            am TEXT DEFAULT '',
-            pillar TEXT DEFAULT '',
-            revenue_category TEXT DEFAULT '',
-            account_size REAL DEFAULT 0,
-            account_target REAL DEFAULT 0,
-            source TEXT NOT NULL DEFAULT 'performance' CHECK(source IN
-                ('performance', 'master', 'tracker', 'manual')),
-            is_manual BOOLEAN DEFAULT 0,
-            status TEXT NOT NULL DEFAULT 'unreviewed' CHECK(status IN
-                ('unreviewed', 'existing_customer', 'preferred', 'growth_potential',
-                 'at_risk', 'low_priority', 'no_contact', 'not_preferable')),
-            is_champion BOOLEAN DEFAULT 0,
-            notes TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        INSERT INTO account_coverage (id, account_key, account_name, am, pillar, revenue_category,
-                account_size, account_target, source, is_manual, status, is_champion, notes,
-                created_at, updated_at)
-            SELECT id, account_key, account_name, am, pillar, revenue_category,
-                account_size, account_target, source, is_manual,
-                CASE status WHEN 'cold' THEN 'at_risk' ELSE status END,
-                is_champion, notes, created_at, updated_at
-            FROM account_coverage_pre_status_widen;
-        DROP TABLE account_coverage_pre_status_widen;
-        """
-    )
-
-
-def _widen_user_roles(db):
-    """Older databases have CHECK(role IN ('admin','account_manager','management')) on
-    users. SQLite can't ALTER a CHECK constraint in place, so when the constraint is too
-    narrow for the new cross-functional roles we rebuild the table - copying every row
-    across unchanged - rather than touching any data."""
-    row = db.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
-    ).fetchone()
-    if not row or not row["sql"] or "'solution'" in row["sql"]:
-        return  # table doesn't exist yet, or already migrated
-    db.executescript(
-        """
-        ALTER TABLE users RENAME TO users_pre_roles_widen;
-        CREATE TABLE users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN
-                ('admin', 'account_manager', 'management', 'solution', 'project', 'product')),
-            full_name TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        INSERT INTO users (id, username, password, role, full_name, created_at)
-            SELECT id, username, password, role, full_name, created_at FROM users_pre_roles_widen;
-        DROP TABLE users_pre_roles_widen;
-        """
-    )
-
-
-def migrate_db(db):
-    """Add columns introduced after the first release, without touching data."""
-    def columns(table):
-        return {r[1] for r in db.execute(f"PRAGMA table_info({table})")}
-
-    _widen_user_roles(db)
-
-    deal_cols = columns("deals")
-    if "revenue_2026" not in deal_cols:
-        db.execute("ALTER TABLE deals ADD COLUMN revenue_2026 INTEGER DEFAULT 0")
-        db.execute("UPDATE deals SET revenue_2026 = estimated_value WHERE revenue_2026 = 0")
-    if "strategy" not in deal_cols:
-        db.execute("ALTER TABLE deals ADD COLUMN strategy TEXT DEFAULT ''")
-    if "proofs" not in deal_cols:
-        db.execute("ALTER TABLE deals ADD COLUMN proofs TEXT DEFAULT '{}'")
-    if "expected_po_date" not in deal_cols:
-        db.execute("ALTER TABLE deals ADD COLUMN expected_po_date TEXT DEFAULT ''")
-    if "expected_revenue_date" not in deal_cols:
-        db.execute("ALTER TABLE deals ADD COLUMN expected_revenue_date TEXT DEFAULT ''")
-
-    config_cols = columns("config")
-    if "am_targets" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN am_targets TEXT DEFAULT '{}'")
-        db.execute("UPDATE config SET am_targets = ?", (json.dumps(DEFAULT_AM_TARGETS),))
-    if "current_achievement" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN current_achievement INTEGER DEFAULT 0")
-    if "recurring_revenue" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN recurring_revenue INTEGER DEFAULT 0")
-    if "stages" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN stages TEXT")
-        db.execute("UPDATE config SET stages = ?", (json.dumps(DEFAULT_STAGES),))
-    if "am_achievements" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN am_achievements TEXT DEFAULT '{}'")
-    if "am_recurring" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN am_recurring TEXT DEFAULT '{}'")
-    if "auto_stage" not in config_cols:
-        # Column kept for backward compatibility with older backups; stage automation
-        # has been removed from the app, so this is no longer read anywhere.
-        db.execute("ALTER TABLE config ADD COLUMN auto_stage INTEGER DEFAULT 1")
-    if "stage_rules" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN stage_rules TEXT DEFAULT '{}'")
-    if "max_login_logs" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN max_login_logs INTEGER DEFAULT 100")
-    if "engine1_url" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN engine1_url TEXT DEFAULT ''")
-    if "engine1_username" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN engine1_username TEXT DEFAULT ''")
-    if "engine1_password" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN engine1_password TEXT DEFAULT ''")
-    if "engine1_last_sync" not in config_cols:
-        db.execute("ALTER TABLE config ADD COLUMN engine1_last_sync TEXT DEFAULT ''")
-
-    db.execute(
-        """CREATE TABLE IF NOT EXISTS deal_sync_map (
-            local_deal_id INTEGER PRIMARY KEY REFERENCES deals(id) ON DELETE CASCADE,
-            engine1_deal_id INTEGER NOT NULL,
-            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )"""
-    )
-
-    if "account_coverage" in {r[0] for r in db.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    )}:
-        cov_cols = columns("account_coverage")
-        if "account_target" not in cov_cols:
-            db.execute("ALTER TABLE account_coverage ADD COLUMN account_target REAL DEFAULT 0")
-        if "source" not in cov_cols:
-            db.execute("ALTER TABLE account_coverage ADD COLUMN source TEXT NOT NULL DEFAULT 'performance'")
-        _widen_cov_status(db)
-
-    if "deal_tasks" in {r[0] for r in db.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    )}:
-        task_cols = columns("deal_tasks")
-        if "due" not in task_cols:
-            db.execute("ALTER TABLE deal_tasks ADD COLUMN due TEXT DEFAULT ''")
-        if "source_team" not in task_cols:
-            db.execute("ALTER TABLE deal_tasks ADD COLUMN source_team TEXT DEFAULT 'sales'")
-            # Best-effort backfill for existing rows: a cross-functional user who filed
-            # a task under their own team is the source; everything else defaults to
-            # 'sales' (admin/account_manager), which is already the column default.
-            db.execute(
-                """UPDATE deal_tasks SET source_team = team
-                   WHERE EXISTS (
-                       SELECT 1 FROM users
-                       WHERE (users.full_name = deal_tasks.created_by OR users.username = deal_tasks.created_by)
-                         AND users.role = deal_tasks.team
-                         AND users.role IN ('solution', 'project', 'product')
-                   )"""
-            )
-        if "assigned_to" not in task_cols:
-            db.execute("ALTER TABLE deal_tasks ADD COLUMN assigned_to TEXT DEFAULT ''")
-            # Best-effort backfill: a task a cross-functional team filed on their own
-            # initiative was implicitly for the opportunity's AM to see - anything
-            # sales/admin filed already names its target via the `team` column, so
-            # leave those blank rather than guess an individual.
-            db.execute(
-                """UPDATE deal_tasks SET assigned_to = (
-                       SELECT assigned_am FROM deals WHERE deals.id = deal_tasks.deal_id
-                   ) WHERE source_team != 'sales' AND (assigned_to IS NULL OR assigned_to = '')"""
-            )
-
-
 def init_db():
-    db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
-    db.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS deals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            deal_name TEXT NOT NULL,
-            customer TEXT DEFAULT '',
-            assigned_am TEXT DEFAULT '',
-            squad TEXT NOT NULL,
-            strategic_pillar TEXT NOT NULL,
-            estimated_value INTEGER NOT NULL,
-            revenue_2026 INTEGER DEFAULT 0,
-            target_quarter TEXT DEFAULT '',
-            stage TEXT NOT NULL,
-            progress INTEGER DEFAULT 0,
-            is_blocked BOOLEAN DEFAULT 0,
-            blocker_description TEXT,
-            next_actions TEXT,
-            strategy TEXT DEFAULT '',
-            proofs TEXT DEFAULT '{}',
-            expected_po_date TEXT DEFAULT '',
-            expected_revenue_date TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
+    """Create the schema if it doesn't exist yet and seed a fresh database.
 
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN
-                ('admin', 'account_manager', 'management', 'solution', 'project', 'product')),
-            full_name TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
+    v2.0 starts from a clean Postgres schema - no SQLite-era ALTER TABLE
+    migration history to carry forward, since this is a brand new database
+    populated once via migrate_from_sqlite.py rather than incrementally
+    evolved release over release.
 
-        CREATE TABLE IF NOT EXISTS deal_tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
-            text TEXT NOT NULL,
-            team TEXT NOT NULL CHECK(team IN ('solution', 'project', 'product')),
-            source_team TEXT NOT NULL DEFAULT 'sales' CHECK(source_team IN
-                ('sales', 'solution', 'project', 'product')),
-            status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN
-                ('not_started', 'in_progress', 'blocked', 'needs_discussion', 'done')),
-            note TEXT DEFAULT '',
-            due TEXT DEFAULT '',
-            created_by TEXT DEFAULT '',
-            assigned_to TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
+    Gunicorn boots multiple worker processes, each importing this module and
+    calling init_db() independently - without serializing them, concurrent
+    `CREATE TABLE IF NOT EXISTS` calls from separate sessions can race on a
+    brand-new database (Postgres's own catalog isn't safe against that on
+    its own) and one worker crashes with a UniqueViolation on pg_type. An
+    advisory lock makes every worker but one simply wait its turn instead."""
+    with _pool.connection() as db:
+        db.execute("SELECT pg_advisory_lock(84177235)")
+        try:
+            _init_schema_and_seed(db)
+        finally:
+            db.execute("SELECT pg_advisory_unlock(84177235)")
 
-        CREATE TABLE IF NOT EXISTS login_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            username TEXT DEFAULT '',
-            full_name TEXT DEFAULT '',
-            role TEXT DEFAULT '',
-            ip_address TEXT DEFAULT '',
-            login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
 
-        CREATE TABLE IF NOT EXISTS performance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            label TEXT DEFAULT '',
-            source_file TEXT DEFAULT '',
-            am_summary TEXT DEFAULT '[]',
-            accounts TEXT DEFAULT '[]',
-            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS account_coverage (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_key TEXT UNIQUE NOT NULL,
-            account_name TEXT NOT NULL,
-            am TEXT DEFAULT '',
-            pillar TEXT DEFAULT '',
-            revenue_category TEXT DEFAULT '',
-            account_size REAL DEFAULT 0,
-            account_target REAL DEFAULT 0,
-            source TEXT NOT NULL DEFAULT 'performance' CHECK(source IN
-                ('performance', 'master', 'tracker', 'manual')),
-            is_manual BOOLEAN DEFAULT 0,
-            status TEXT NOT NULL DEFAULT 'unreviewed' CHECK(status IN
-                ('unreviewed', 'existing_customer', 'preferred', 'growth_potential',
-                 'at_risk', 'low_priority', 'no_contact', 'not_preferable')),
-            is_champion BOOLEAN DEFAULT 0,
-            notes TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS config (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            target_amount INTEGER DEFAULT 163000000000,
-            strategic_pillars TEXT,
-            squads TEXT,
-            am_targets TEXT DEFAULT '{}',
-            current_achievement INTEGER DEFAULT 0,
-            recurring_revenue INTEGER DEFAULT 0,
-            stages TEXT,
-            am_achievements TEXT DEFAULT '{}',
-            am_recurring TEXT DEFAULT '{}',
-            auto_stage INTEGER DEFAULT 1,
-            stage_rules TEXT,
-            max_login_logs INTEGER DEFAULT 100,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """
-    )
-
-    # Safe, additive migrations for databases created by an earlier version.
-    # ALTER only when the column is missing, so existing data is preserved.
-    migrate_db(db)
-
-    # Seed users if empty
-    if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
-        seed_users = [
-            ("admin", "admin123", "admin", "Administrator"),
-            ("exec", "exec123", "management", "Management Viewer"),
-        ]
-        for username, password, role, full_name in seed_users:
-            db.execute(
-                "INSERT INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)",
-                (username, _hash(password), role, full_name),
-            )
-        for username, password, full_name in SEED_AMS:
-            db.execute(
-                "INSERT INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)",
-                (username, _hash(password), "account_manager", full_name),
-            )
-
-    # Seed config if empty
-    if db.execute("SELECT COUNT(*) FROM config").fetchone()[0] == 0:
+def _init_schema_and_seed(db):
         db.execute(
-            """INSERT INTO config (target_amount, strategic_pillars, squads, am_targets, stages)
-               VALUES (?, ?, ?, ?, ?)""",
-            (163_000_000_000, json.dumps(DEFAULT_PILLARS), json.dumps(DEFAULT_SQUADS),
-             json.dumps(DEFAULT_AM_TARGETS), json.dumps(DEFAULT_STAGES)),
+            """
+            CREATE TABLE IF NOT EXISTS deals (
+                id SERIAL PRIMARY KEY,
+                deal_name TEXT NOT NULL,
+                customer TEXT DEFAULT '',
+                assigned_am TEXT DEFAULT '',
+                squad TEXT NOT NULL,
+                strategic_pillar TEXT NOT NULL,
+                estimated_value BIGINT NOT NULL,
+                revenue_2026 BIGINT DEFAULT 0,
+                target_quarter TEXT DEFAULT '',
+                stage TEXT NOT NULL,
+                progress INTEGER DEFAULT 0,
+                is_blocked BOOLEAN DEFAULT false,
+                blocker_description TEXT,
+                next_actions TEXT,
+                strategy TEXT DEFAULT '',
+                proofs TEXT DEFAULT '{}',
+                expected_po_date TEXT DEFAULT '',
+                expected_revenue_date TEXT DEFAULT '',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN
+                    ('admin', 'account_manager', 'management', 'solution', 'project', 'product')),
+                full_name TEXT DEFAULT '',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL,
+                full_name TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS deal_tasks (
+                id SERIAL PRIMARY KEY,
+                deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+                text TEXT NOT NULL,
+                team TEXT NOT NULL CHECK(team IN ('solution', 'project', 'product')),
+                source_team TEXT NOT NULL DEFAULT 'sales' CHECK(source_team IN
+                    ('sales', 'solution', 'project', 'product')),
+                status TEXT NOT NULL DEFAULT 'not_started' CHECK(status IN
+                    ('not_started', 'in_progress', 'blocked', 'needs_discussion', 'done')),
+                note TEXT DEFAULT '',
+                due TEXT DEFAULT '',
+                created_by TEXT DEFAULT '',
+                assigned_to TEXT DEFAULT '',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS login_logs (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER,
+                username TEXT DEFAULT '',
+                full_name TEXT DEFAULT '',
+                role TEXT DEFAULT '',
+                ip_address TEXT DEFAULT '',
+                login_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS performance (
+                id SERIAL PRIMARY KEY,
+                label TEXT DEFAULT '',
+                source_file TEXT DEFAULT '',
+                am_summary TEXT DEFAULT '[]',
+                accounts TEXT DEFAULT '[]',
+                uploaded_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS account_coverage (
+                id SERIAL PRIMARY KEY,
+                account_key TEXT UNIQUE NOT NULL,
+                account_name TEXT NOT NULL,
+                am TEXT DEFAULT '',
+                pillar TEXT DEFAULT '',
+                revenue_category TEXT DEFAULT '',
+                account_size REAL DEFAULT 0,
+                account_target REAL DEFAULT 0,
+                source TEXT NOT NULL DEFAULT 'performance' CHECK(source IN
+                    ('performance', 'master', 'tracker', 'manual')),
+                is_manual BOOLEAN DEFAULT false,
+                status TEXT NOT NULL DEFAULT 'unreviewed' CHECK(status IN
+                    ('unreviewed', 'existing_customer', 'preferred', 'growth_potential',
+                     'at_risk', 'low_priority', 'no_contact', 'not_preferable')),
+                is_champion BOOLEAN DEFAULT false,
+                notes TEXT DEFAULT '',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS documents (
+                id SERIAL PRIMARY KEY,
+                deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+                filename TEXT NOT NULL,
+                stored_path TEXT NOT NULL,
+                content_type TEXT DEFAULT '',
+                size_bytes INTEGER DEFAULT 0,
+                uploaded_by TEXT DEFAULT '',
+                uploaded_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS config (
+                id SERIAL PRIMARY KEY,
+                target_amount BIGINT DEFAULT 163000000000,
+                strategic_pillars TEXT,
+                squads TEXT,
+                am_targets TEXT DEFAULT '{}',
+                current_achievement BIGINT DEFAULT 0,
+                recurring_revenue BIGINT DEFAULT 0,
+                stages TEXT,
+                am_achievements TEXT DEFAULT '{}',
+                am_recurring TEXT DEFAULT '{}',
+                auto_stage INTEGER DEFAULT 1,
+                stage_rules TEXT,
+                max_login_logs INTEGER DEFAULT 100,
+                engine1_url TEXT DEFAULT '',
+                engine1_username TEXT DEFAULT '',
+                engine1_password TEXT DEFAULT '',
+                engine1_last_sync TEXT DEFAULT '',
+                v1_sync_url TEXT DEFAULT '',
+                v1_sync_username TEXT DEFAULT '',
+                v1_sync_password TEXT DEFAULT '',
+                v1_sync_last_run TEXT DEFAULT '',
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS deal_sync_map (
+                local_deal_id INTEGER PRIMARY KEY REFERENCES deals(id) ON DELETE CASCADE,
+                engine1_deal_id INTEGER NOT NULL,
+                synced_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS weekly_plans (
+                id SERIAL PRIMARY KEY,
+                am_full_name TEXT NOT NULL,
+                week_start TEXT NOT NULL,
+                day TEXT NOT NULL CHECK(day IN ('mon', 'tue', 'wed', 'thu', 'fri')),
+                customer TEXT DEFAULT '',
+                topic TEXT DEFAULT '',
+                goal TEXT DEFAULT '',
+                attachment_filename TEXT DEFAULT '',
+                attachment_stored_path TEXT DEFAULT '',
+                attachment_content_type TEXT DEFAULT '',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS notification_state (
+                id SERIAL PRIMARY KEY,
+                user_full_name TEXT NOT NULL,
+                notif_key TEXT NOT NULL,
+                first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                read_at TIMESTAMP,
+                UNIQUE(user_full_name, notif_key)
+            );
+            """
         )
 
-    # Seed deals if empty
-    if db.execute("SELECT COUNT(*) FROM deals").fetchone()[0] == 0:
-        db.executemany(
-            """INSERT INTO deals
-               (deal_name, customer, assigned_am, squad, strategic_pillar,
-                estimated_value, target_quarter, stage, progress,
-                is_blocked, blocker_description, next_actions)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            _seed_deals(),
+        # Additive, idempotent migration for columns added after this database was first
+        # created - CREATE TABLE IF NOT EXISTS above is a no-op on an existing table, so
+        # a genuinely new column needs an explicit ALTER TABLE. Safe to run on every boot.
+        db.execute(
+            """
+            ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_url TEXT DEFAULT '';
+            ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_username TEXT DEFAULT '';
+            ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_password TEXT DEFAULT '';
+            ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_last_run TEXT DEFAULT '';
+            """
         )
-        # Default 2026 realizable revenue to the full TCV; admin refines per deal.
-        db.execute("UPDATE deals SET revenue_2026 = estimated_value")
 
-    db.commit()
-    db.close()
+        # Seed users if empty
+        if db.execute("SELECT COUNT(*) FROM users").fetchone()["count"] == 0:
+            seed_users = [
+                ("admin", "admin123", "admin", "Administrator"),
+                ("exec", "exec123", "management", "Management Viewer"),
+            ]
+            for username, password, role, full_name in seed_users:
+                db.execute(
+                    "INSERT INTO users (username, password, role, full_name) VALUES (%s, %s, %s, %s)",
+                    (username, _hash(password), role, full_name),
+                )
+            for username, password, full_name in SEED_AMS:
+                db.execute(
+                    "INSERT INTO users (username, password, role, full_name) VALUES (%s, %s, %s, %s)",
+                    (username, _hash(password), "account_manager", full_name),
+                )
+
+        # Seed config if empty
+        if db.execute("SELECT COUNT(*) FROM config").fetchone()["count"] == 0:
+            db.execute(
+                """INSERT INTO config (target_amount, strategic_pillars, squads, am_targets, stages)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (163_000_000_000, json.dumps(DEFAULT_PILLARS), json.dumps(DEFAULT_SQUADS),
+                 json.dumps(DEFAULT_AM_TARGETS), json.dumps(DEFAULT_STAGES)),
+            )
+
+        # Seed deals if empty
+        if db.execute("SELECT COUNT(*) FROM deals").fetchone()["count"] == 0:
+            # _seed_deals() rows carry is_blocked as a plain 0/1 int (position 9);
+            # cast to a real bool for Postgres's boolean column.
+            seed_rows = [
+                r[:9] + (bool(r[9]),) + r[10:]
+                for r in _seed_deals()
+            ]
+            with db.cursor() as cur:
+                cur.executemany(
+                    """INSERT INTO deals
+                       (deal_name, customer, assigned_am, squad, strategic_pillar,
+                        estimated_value, target_quarter, stage, progress,
+                        is_blocked, blocker_description, next_actions)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    seed_rows,
+                )
+            # Default 2026 realizable revenue to the full TCV; admin refines per deal.
+            db.execute("UPDATE deals SET revenue_2026 = estimated_value")
+
+        db.commit()
+
+
 
 
 # --------------------------------------------------------------------------
@@ -676,7 +576,20 @@ def init_db():
 def get_current_user():
     auth = request.headers.get("Authorization", "")
     token = auth.replace("Bearer ", "").strip() if auth else request.args.get("token", "")
-    return TOKENS.get(token)
+    if not token:
+        return None
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM sessions WHERE token = %s AND expires_at > CURRENT_TIMESTAMP", (token,)
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "user_id": row["user_id"],
+        "username": row["username"],
+        "role": row["role"],
+        "full_name": row["full_name"],
+    }
 
 
 def login_required(roles=None):
@@ -711,7 +624,7 @@ def is_valid_assignee(db, name):
     if not name:
         return False
     row = db.execute(
-        "SELECT 1 FROM users WHERE full_name = ? AND role NOT IN ('admin', 'management')",
+        "SELECT 1 FROM users WHERE full_name = %s AND role NOT IN ('admin', 'management')",
         (name,),
     ).fetchone()
     return row is not None
@@ -758,13 +671,7 @@ def deal_to_dict(row):
 # --------------------------------------------------------------------------
 @app.route("/")
 def index():
-    return render_template(
-        "index.html",
-        app_version=APP_VERSION,
-        readonly_mode=is_readonly_mode(),
-        readonly_cutoff_label=READONLY_CUTOFF_LABEL,
-        new_dashboard_url=NEW_DASHBOARD_URL,
-    )
+    return render_template("index.html", app_version=APP_VERSION)
 
 
 @app.route("/api/version", methods=["GET"])
@@ -793,7 +700,7 @@ def trim_login_logs(db, max_logs):
     """Keep only the most recent `max_logs` rows so the table never grows unbounded."""
     db.execute(
         """DELETE FROM login_logs WHERE id NOT IN (
-               SELECT id FROM login_logs ORDER BY login_at DESC, id DESC LIMIT ?
+               SELECT id FROM login_logs ORDER BY login_at DESC, id DESC LIMIT %s
            )""",
         (max_logs,),
     )
@@ -804,7 +711,7 @@ def log_login(db, row):
     to the admin-configured retention limit."""
     db.execute(
         """INSERT INTO login_logs (user_id, username, full_name, role, ip_address, login_at)
-           VALUES (?, ?, ?, ?, ?, ?)""",
+           VALUES (%s, %s, %s, %s, %s, %s)""",
         (row["id"], row["username"], row["full_name"] or row["username"], row["role"],
          client_ip(), jakarta_now_str()),
     )
@@ -819,17 +726,20 @@ def api_login():
     password = data.get("password", "")
 
     db = get_db()
-    row = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    row = db.execute("SELECT * FROM users WHERE username = %s", (username,)).fetchone()
     if not row or not check_password_hash(row["password"], password):
         return jsonify({"error": "Invalid username or password"}), 401
 
     token = secrets.token_hex(24)
-    TOKENS[token] = {
-        "user_id": row["id"],
-        "username": row["username"],
-        "role": row["role"],
-        "full_name": row["full_name"] or row["username"],
-    }
+    expires_at = datetime.utcnow() + SESSION_LIFETIME
+    # Sweep expired sessions opportunistically - no separate cron needed for a
+    # table this small and low-write.
+    db.execute("DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP")
+    db.execute(
+        """INSERT INTO sessions (token, user_id, username, role, full_name, expires_at)
+           VALUES (%s, %s, %s, %s, %s, %s)""",
+        (token, row["id"], row["username"], row["role"], row["full_name"] or row["username"], expires_at),
+    )
     log_login(db, row)
     db.commit()
     return jsonify({
@@ -844,7 +754,9 @@ def api_login():
 def api_logout():
     auth = request.headers.get("Authorization", "")
     token = auth.replace("Bearer ", "").strip()
-    TOKENS.pop(token, None)
+    db = get_db()
+    db.execute("DELETE FROM sessions WHERE token = %s", (token,))
+    db.commit()
     return jsonify({"ok": True})
 
 
@@ -923,12 +835,23 @@ def get_proof_framework():
 @app.route("/api/account_managers", methods=["GET"])
 @login_required()
 def get_account_managers():
+    """Every name the Tracker filter should be able to select: registered
+    account_manager users, plus any name already carrying deals (e.g. synced in
+    from v1.9 or a bulk import before that person had a v2.0 login of their own)
+    - otherwise their opportunities exist but can never be filtered to by name."""
     db = get_db()
-    rows = db.execute(
-        "SELECT full_name FROM users WHERE role = 'account_manager' ORDER BY full_name"
-    ).fetchall()
-    names = [r["full_name"] for r in rows if r["full_name"]]
-    return jsonify(names)
+    names = {
+        r["full_name"]
+        for r in db.execute(
+            "SELECT full_name FROM users WHERE role = 'account_manager'"
+        ).fetchall()
+        if r["full_name"]
+    }
+    for r in db.execute(
+        "SELECT DISTINCT assigned_am FROM deals WHERE assigned_am != ''"
+    ).fetchall():
+        names.add(r["assigned_am"])
+    return jsonify(sorted(names))
 
 
 @app.route("/api/assignable_users", methods=["GET"])
@@ -960,7 +883,7 @@ def get_deals():
                        ("quarter", "target_quarter")):
         val = request.args.get(field)
         if val:
-            query += f" AND {col} = ?"
+            query += f" AND {col} = %s"
             params.append(val)
     query += " ORDER BY estimated_value DESC"
     rows = db.execute(query, params).fetchall()
@@ -993,7 +916,8 @@ def create_deal():
            (deal_name, customer, assigned_am, squad, strategic_pillar, estimated_value,
             revenue_2026, target_quarter, stage, progress, is_blocked, blocker_description,
             next_actions, strategy, proofs, expected_po_date, expected_revenue_date, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+           RETURNING id""",
         (
             data.get("deal_name", "Untitled Opportunity"),
             data.get("customer", ""),
@@ -1005,7 +929,7 @@ def create_deal():
             data.get("target_quarter", ""),
             stage,
             int(data.get("progress", 0) or 0),
-            1 if new_blocked else 0,
+            new_blocked,
             data.get("blocker_description", ""),
             json.dumps(data.get("next_actions", [])),
             data.get("strategy", ""),
@@ -1014,8 +938,9 @@ def create_deal():
             str(data.get("expected_revenue_date", "") or "").strip()[:10],
         ),
     )
+    new_id = cur.fetchone()["id"]
     db.commit()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (cur.lastrowid,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (new_id,)).fetchone()
     return jsonify(deal_to_dict(row)), 201
 
 
@@ -1025,7 +950,7 @@ def update_deal(deal_id):
     data = request.get_json(force=True) or {}
     user = g.current_user
     db = get_db()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     if not row:
         return jsonify({"error": "Deal not found"}), 404
     if not can_edit_deal(user, row):
@@ -1049,12 +974,12 @@ def update_deal(deal_id):
     existing_rev = row["expected_revenue_date"] if "expected_revenue_date" in row.keys() else ""
     db.execute(
         """UPDATE deals SET
-             deal_name = ?, customer = ?, assigned_am = ?, squad = ?, strategic_pillar = ?,
-             estimated_value = ?, revenue_2026 = ?, target_quarter = ?, stage = ?, progress = ?,
-             is_blocked = ?, blocker_description = ?, next_actions = ?, strategy = ?, proofs = ?,
-             expected_po_date = ?, expected_revenue_date = ?,
-             updated_at = CURRENT_TIMESTAMP
-           WHERE id = ?""",
+             deal_name = %s, customer = %s, assigned_am = %s, squad = %s, strategic_pillar = %s,
+             estimated_value = %s, revenue_2026 = %s, target_quarter = %s, stage = %s, progress = %s,
+             is_blocked = %s, blocker_description = %s, next_actions = %s, strategy = %s, proofs = %s,
+             expected_po_date = %s, expected_revenue_date = %s,
+             updated_at = CURRENT_TIMESTAMP::text
+           WHERE id = %s""",
         (
             data.get("deal_name", row["deal_name"]),
             data.get("customer", row["customer"]),
@@ -1066,7 +991,7 @@ def update_deal(deal_id):
             data.get("target_quarter", row["target_quarter"]),
             upd_stage,
             int(data.get("progress", row["progress"]) or 0),
-            1 if upd_blocked else 0,
+            upd_blocked,
             data.get("blocker_description", row["blocker_description"]),
             json.dumps(data.get("next_actions", json.loads(row["next_actions"] or "[]"))),
             data.get("strategy", existing_strategy),
@@ -1077,7 +1002,7 @@ def update_deal(deal_id):
         ),
     )
     db.commit()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     return jsonify(deal_to_dict(row))
 
 
@@ -1085,14 +1010,336 @@ def update_deal(deal_id):
 @login_required(roles=("admin", "account_manager"))
 def delete_deal(deal_id):
     db = get_db()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     if not row:
         return jsonify({"error": "Deal not found"}), 404
     if not can_edit_deal(g.current_user, row):
         return jsonify({"error": "You can only delete opportunities assigned to you"}), 403
-    db.execute("DELETE FROM deals WHERE id = ?", (deal_id,))
+    db.execute("DELETE FROM deals WHERE id = %s", (deal_id,))
     db.commit()
     return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# Documents (PDF/PPTX/etc attached to an opportunity, stored on local disk)
+# --------------------------------------------------------------------------
+ALLOWED_DOC_EXTENSIONS = {"pdf", "ppt", "pptx", "doc", "docx", "xls", "xlsx", "png", "jpg", "jpeg"}
+
+
+def doc_to_dict(row):
+    return {
+        "id": row["id"],
+        "deal_id": row["deal_id"],
+        "filename": row["filename"],
+        "content_type": row["content_type"],
+        "size_bytes": row["size_bytes"],
+        "uploaded_by": row["uploaded_by"],
+        "uploaded_at": row["uploaded_at"],
+    }
+
+
+@app.route("/api/deals/<int:deal_id>/documents", methods=["GET"])
+@login_required()
+def list_documents(deal_id):
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM documents WHERE deal_id = %s ORDER BY uploaded_at DESC", (deal_id,)
+    ).fetchall()
+    return jsonify([doc_to_dict(r) for r in rows])
+
+
+@app.route("/api/deals/<int:deal_id>/documents", methods=["POST"])
+@login_required(roles=("admin", "account_manager"))
+def upload_document(deal_id):
+    db = get_db()
+    deal = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
+    if not deal:
+        return jsonify({"error": "Deal not found"}), 404
+    if not can_edit_deal(g.current_user, deal):
+        return jsonify({"error": "You can only add documents to opportunities assigned to you"}), 403
+
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return jsonify({"error": "No file uploaded"}), 400
+    ext = upload.filename.rsplit(".", 1)[-1].lower() if "." in upload.filename else ""
+    if ext not in ALLOWED_DOC_EXTENSIONS:
+        return jsonify({"error": f"File type .{ext} isn't allowed. "
+                                  f"Allowed: {', '.join(sorted(ALLOWED_DOC_EXTENSIONS))}"}), 400
+
+    safe_name = secure_filename(upload.filename) or f"file.{ext}"
+    stored_name = f"{uuid.uuid4().hex}_{safe_name}"
+    deal_dir = os.path.join(UPLOAD_DIR, str(deal_id))
+    os.makedirs(deal_dir, exist_ok=True)
+    stored_path = os.path.join(deal_dir, stored_name)
+    upload.save(stored_path)
+    size_bytes = os.path.getsize(stored_path)
+
+    user = g.current_user
+    cur = db.execute(
+        """INSERT INTO documents (deal_id, filename, stored_path, content_type, size_bytes, uploaded_by)
+           VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+        (deal_id, safe_name, stored_path, upload.content_type or "", size_bytes,
+         user.get("full_name") or user.get("username", "")),
+    )
+    new_id = cur.fetchone()["id"]
+    db.commit()
+    row = db.execute("SELECT * FROM documents WHERE id = %s", (new_id,)).fetchone()
+    return jsonify(doc_to_dict(row)), 201
+
+
+@app.route("/api/documents/<int:doc_id>/download", methods=["GET"])
+@login_required()
+def download_document(doc_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM documents WHERE id = %s", (doc_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Document not found"}), 404
+    return send_file(row["stored_path"], as_attachment=True, download_name=row["filename"])
+
+
+@app.route("/api/documents/<int:doc_id>", methods=["DELETE"])
+@login_required(roles=("admin", "account_manager"))
+def delete_document(doc_id):
+    db = get_db()
+    row = db.execute(
+        """SELECT documents.*, deals.assigned_am FROM documents
+           JOIN deals ON deals.id = documents.deal_id WHERE documents.id = %s""",
+        (doc_id,),
+    ).fetchone()
+    if not row:
+        return jsonify({"error": "Document not found"}), 404
+    user = g.current_user
+    if user["role"] != "admin" and (row["assigned_am"] or "") != (user["full_name"] or ""):
+        return jsonify({"error": "You can only delete documents on opportunities assigned to you"}), 403
+    try:
+        os.remove(row["stored_path"])
+    except OSError:
+        pass  # already gone from disk - still clean up the DB row
+    db.execute("DELETE FROM documents WHERE id = %s", (doc_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# Weekly Plans ("My Weekly Plan" - per-AM, per-week visit plan reviewed in the
+# weekly meeting: one row per planned customer visit, Mon-Fri, with an
+# optional attached image/PDF proof of the visit)
+# --------------------------------------------------------------------------
+WEEKLY_PLAN_DAYS = ("mon", "tue", "wed", "thu", "fri")
+ALLOWED_PLAN_ATTACHMENT_EXTENSIONS = {"pdf", "png", "jpg", "jpeg"}
+
+
+def weekly_plan_to_dict(row):
+    return {
+        "id": row["id"],
+        "am_full_name": row["am_full_name"],
+        "week_start": row["week_start"],
+        "day": row["day"],
+        "customer": row["customer"] or "",
+        "topic": row["topic"] or "",
+        "goal": row["goal"] or "",
+        "attachment_filename": row["attachment_filename"] or "",
+        "has_attachment": bool(row["attachment_stored_path"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _can_view_weekly_plan(user, am_full_name):
+    if user["role"] in ("admin", "management"):
+        return True
+    return user["role"] == "account_manager" and (user["full_name"] or "") == am_full_name
+
+
+@app.route("/api/weekly_plan", methods=["GET"])
+@login_required(roles=("admin", "account_manager", "management"))
+def get_weekly_plan():
+    db = get_db()
+    user = g.current_user
+    week_start = request.args.get("week_start", "")
+    if not week_start:
+        return jsonify({"error": "week_start is required"}), 400
+    am = request.args.get("am", "")
+    if user["role"] == "account_manager":
+        am = user["full_name"] or ""
+    if am:
+        rows = db.execute(
+            "SELECT * FROM weekly_plans WHERE week_start = %s AND am_full_name = %s "
+            "ORDER BY array_position(ARRAY['mon','tue','wed','thu','fri'], day), id",
+            (week_start, am),
+        ).fetchall()
+    else:
+        # Admin/management with no am filter - the full team's plan for that week.
+        rows = db.execute(
+            "SELECT * FROM weekly_plans WHERE week_start = %s "
+            "ORDER BY am_full_name, array_position(ARRAY['mon','tue','wed','thu','fri'], day), id",
+            (week_start,),
+        ).fetchall()
+    return jsonify({"week_start": week_start, "entries": [weekly_plan_to_dict(r) for r in rows]})
+
+
+@app.route("/api/weekly_plan/customers", methods=["GET"])
+@login_required(roles=("admin", "account_manager", "management"))
+def get_weekly_plan_customers():
+    """Customer picker source for the plan form: every customer already in this
+    AM's Tracker deals or Account Coverage list, so planning a visit doesn't
+    mean retyping a name that's already tracked elsewhere."""
+    db = get_db()
+    user = g.current_user
+    am = user["full_name"] if user["role"] == "account_manager" else request.args.get("am", "")
+    if not am:
+        return jsonify([])
+    names = set()
+    for r in db.execute(
+        "SELECT DISTINCT customer FROM deals WHERE assigned_am = %s AND customer != ''", (am,)
+    ).fetchall():
+        names.add(r["customer"])
+    for r in db.execute(
+        "SELECT DISTINCT account_name FROM account_coverage WHERE am = %s AND account_name != ''", (am,)
+    ).fetchall():
+        names.add(r["account_name"])
+    return jsonify(sorted(names))
+
+
+@app.route("/api/weekly_plan", methods=["POST"])
+@login_required(roles=("account_manager",))
+def create_weekly_plan_entry():
+    db = get_db()
+    user = g.current_user
+    data = request.get_json(force=True) or {}
+    week_start = (data.get("week_start") or "").strip()
+    day = (data.get("day") or "").strip().lower()
+    if not week_start or day not in WEEKLY_PLAN_DAYS:
+        return jsonify({"error": "week_start and a valid day are required"}), 400
+    cur = db.execute(
+        """INSERT INTO weekly_plans (am_full_name, week_start, day, customer, topic, goal)
+           VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+        (user["full_name"], week_start, day,
+         (data.get("customer") or "").strip(), (data.get("topic") or "").strip(),
+         (data.get("goal") or "").strip()),
+    )
+    new_id = cur.fetchone()["id"]
+    db.commit()
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (new_id,)).fetchone()
+    return jsonify(weekly_plan_to_dict(row)), 201
+
+
+def _get_own_weekly_plan_row(db, user, plan_id):
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (plan_id,)).fetchone()
+    if not row:
+        return None, (jsonify({"error": "Plan entry not found"}), 404)
+    if row["am_full_name"] != (user["full_name"] or ""):
+        return None, (jsonify({"error": "You can only edit your own plan"}), 403)
+    return row, None
+
+
+@app.route("/api/weekly_plan/<int:plan_id>", methods=["PUT"])
+@login_required(roles=("account_manager",))
+def update_weekly_plan_entry(plan_id):
+    db = get_db()
+    row, err = _get_own_weekly_plan_row(db, g.current_user, plan_id)
+    if err:
+        return err
+    data = request.get_json(force=True) or {}
+    db.execute(
+        """UPDATE weekly_plans SET customer = %s, topic = %s, goal = %s,
+           updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
+        ((data.get("customer") or "").strip(), (data.get("topic") or "").strip(),
+         (data.get("goal") or "").strip(), plan_id),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (plan_id,)).fetchone()
+    return jsonify(weekly_plan_to_dict(row))
+
+
+@app.route("/api/weekly_plan/<int:plan_id>", methods=["DELETE"])
+@login_required(roles=("account_manager",))
+def delete_weekly_plan_entry(plan_id):
+    db = get_db()
+    row, err = _get_own_weekly_plan_row(db, g.current_user, plan_id)
+    if err:
+        return err
+    if row["attachment_stored_path"]:
+        try:
+            os.remove(row["attachment_stored_path"])
+        except OSError:
+            pass
+    db.execute("DELETE FROM weekly_plans WHERE id = %s", (plan_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/weekly_plan/<int:plan_id>/attachment", methods=["POST"])
+@login_required(roles=("account_manager",))
+def upload_weekly_plan_attachment(plan_id):
+    db = get_db()
+    row, err = _get_own_weekly_plan_row(db, g.current_user, plan_id)
+    if err:
+        return err
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return jsonify({"error": "No file uploaded"}), 400
+    ext = upload.filename.rsplit(".", 1)[-1].lower() if "." in upload.filename else ""
+    if ext not in ALLOWED_PLAN_ATTACHMENT_EXTENSIONS:
+        return jsonify({"error": f"File type .{ext} isn't allowed. "
+                                  f"Allowed: {', '.join(sorted(ALLOWED_PLAN_ATTACHMENT_EXTENSIONS))}"}), 400
+
+    if row["attachment_stored_path"]:
+        try:
+            os.remove(row["attachment_stored_path"])
+        except OSError:
+            pass
+
+    safe_name = secure_filename(upload.filename) or f"file.{ext}"
+    stored_name = f"{uuid.uuid4().hex}_{safe_name}"
+    plan_dir = os.path.join(UPLOAD_DIR, "weekly_plans", str(plan_id))
+    os.makedirs(plan_dir, exist_ok=True)
+    stored_path = os.path.join(plan_dir, stored_name)
+    upload.save(stored_path)
+
+    db.execute(
+        """UPDATE weekly_plans SET attachment_filename = %s, attachment_stored_path = %s,
+           attachment_content_type = %s, updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
+        (safe_name, stored_path, upload.content_type or "", plan_id),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (plan_id,)).fetchone()
+    return jsonify(weekly_plan_to_dict(row)), 201
+
+
+@app.route("/api/weekly_plan/<int:plan_id>/attachment", methods=["GET"])
+@login_required(roles=("admin", "account_manager", "management"))
+def download_weekly_plan_attachment(plan_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (plan_id,)).fetchone()
+    if not row or not row["attachment_stored_path"]:
+        return jsonify({"error": "Attachment not found"}), 404
+    if not _can_view_weekly_plan(g.current_user, row["am_full_name"]):
+        return jsonify({"error": "Forbidden"}), 403
+    return send_file(row["attachment_stored_path"], as_attachment=True,
+                      download_name=row["attachment_filename"])
+
+
+@app.route("/api/weekly_plan/<int:plan_id>/attachment", methods=["DELETE"])
+@login_required(roles=("account_manager",))
+def delete_weekly_plan_attachment(plan_id):
+    db = get_db()
+    row, err = _get_own_weekly_plan_row(db, g.current_user, plan_id)
+    if err:
+        return err
+    if row["attachment_stored_path"]:
+        try:
+            os.remove(row["attachment_stored_path"])
+        except OSError:
+            pass
+    db.execute(
+        """UPDATE weekly_plans SET attachment_filename = '', attachment_stored_path = '',
+           attachment_content_type = '', updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
+        (plan_id,),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM weekly_plans WHERE id = %s", (plan_id,)).fetchone()
+    return jsonify(weekly_plan_to_dict(row))
 
 
 @app.route("/api/deals/<int:deal_id>/progress", methods=["PUT"])
@@ -1101,17 +1348,17 @@ def update_progress(deal_id):
     data = request.get_json(force=True) or {}
     progress = max(0, min(100, int(data.get("progress", 0))))
     db = get_db()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     if not row:
         return jsonify({"error": "Deal not found"}), 404
     if not can_edit_deal(g.current_user, row):
         return jsonify({"error": "You can only edit opportunities assigned to you"}), 403
     db.execute(
-        "UPDATE deals SET progress = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        "UPDATE deals SET progress = %s, updated_at = CURRENT_TIMESTAMP::text WHERE id = %s",
         (progress, deal_id),
     )
     db.commit()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     return jsonify(deal_to_dict(row))
 
 
@@ -1120,7 +1367,7 @@ def update_progress(deal_id):
 def update_blocker(deal_id):
     data = request.get_json(force=True) or {}
     db = get_db()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     if not row:
         return jsonify({"error": "Deal not found"}), 404
     if not can_edit_deal(g.current_user, row):
@@ -1129,12 +1376,12 @@ def update_blocker(deal_id):
     proofs = normalize_proofs(json.loads((row["proofs"] if "proofs" in row.keys() else "") or "{}"))
     stage = resolve_stage(db, data, proofs, blocked, row["stage"], row["stage"])
     db.execute(
-        """UPDATE deals SET is_blocked = ?, blocker_description = ?, stage = ?,
-           updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
-        (1 if blocked else 0, data.get("blocker_description", ""), stage, deal_id),
+        """UPDATE deals SET is_blocked = %s, blocker_description = %s, stage = %s,
+           updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
+        (blocked, data.get("blocker_description", ""), stage, deal_id),
     )
     db.commit()
-    row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     return jsonify(deal_to_dict(row))
 
 
@@ -1173,7 +1420,7 @@ def task_to_dict(row):
 def get_deal_tasks(deal_id):
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM deal_tasks WHERE deal_id = ? ORDER BY created_at", (deal_id,)
+        "SELECT * FROM deal_tasks WHERE deal_id = %s ORDER BY created_at", (deal_id,)
     ).fetchall()
     return jsonify([task_to_dict(r) for r in rows])
 
@@ -1184,7 +1431,7 @@ def create_deal_task(deal_id):
     data = request.get_json(force=True) or {}
     user = g.current_user
     db = get_db()
-    deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    deal_row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
     if not deal_row:
         return jsonify({"error": "Deal not found"}), 404
 
@@ -1222,11 +1469,12 @@ def create_deal_task(deal_id):
     creator = user.get("full_name") or user.get("username", "")
     cur = db.execute(
         """INSERT INTO deal_tasks (deal_id, text, team, source_team, status, due, created_by, assigned_to)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (deal_id, text, team, source_team, status, due, creator, assigned_to),
     )
+    new_id = cur.fetchone()["id"]
     db.commit()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (cur.lastrowid,)).fetchone()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (new_id,)).fetchone()
     return jsonify(task_to_dict(row)), 201
 
 
@@ -1235,7 +1483,7 @@ def create_deal_task(deal_id):
 def update_task(task_id):
     data = request.get_json(force=True) or {}
     db = get_db()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (task_id,)).fetchone()
     if not row:
         return jsonify({"error": "Task not found"}), 404
 
@@ -1267,7 +1515,7 @@ def update_task(task_id):
                 return jsonify({"error": "Choose who this task is assigned to from the user list"}), 400
             assigned_to = new_assignee
     elif user["role"] in ("admin", "account_manager"):
-        deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (row["deal_id"],)).fetchone()
+        deal_row = db.execute("SELECT * FROM deals WHERE id = %s", (row["deal_id"],)).fetchone()
         if not deal_row or not can_edit_deal(user, deal_row):
             return jsonify({"error": "You can only edit tasks on opportunities assigned to you"}), 403
         if str(data.get("text", "")).strip():
@@ -1307,12 +1555,12 @@ def update_task(task_id):
         return jsonify({"error": "Forbidden"}), 403
 
     db.execute(
-        """UPDATE deal_tasks SET text = ?, team = ?, status = ?, note = ?, due = ?,
-           assigned_to = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+        """UPDATE deal_tasks SET text = %s, team = %s, status = %s, note = %s, due = %s,
+           assigned_to = %s, updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
         (text, team, status, note, due, assigned_to, task_id),
     )
     db.commit()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (task_id,)).fetchone()
     return jsonify(task_to_dict(row))
 
 
@@ -1320,7 +1568,7 @@ def update_task(task_id):
 @login_required()
 def delete_task(task_id):
     db = get_db()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = ?", (task_id,)).fetchone()
+    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (task_id,)).fetchone()
     if not row:
         return jsonify({"error": "Task not found"}), 404
     user = g.current_user
@@ -1328,12 +1576,12 @@ def delete_task(task_id):
         if row["team"] != user["role"]:
             return jsonify({"error": "You can only delete your own team's tasks"}), 403
     elif user["role"] in ("admin", "account_manager"):
-        deal_row = db.execute("SELECT * FROM deals WHERE id = ?", (row["deal_id"],)).fetchone()
+        deal_row = db.execute("SELECT * FROM deals WHERE id = %s", (row["deal_id"],)).fetchone()
         if not deal_row or not can_edit_deal(user, deal_row):
             return jsonify({"error": "You can only delete tasks on opportunities assigned to you"}), 403
     else:
         return jsonify({"error": "Forbidden"}), 403
-    db.execute("DELETE FROM deal_tasks WHERE id = ?", (task_id,))
+    db.execute("DELETE FROM deal_tasks WHERE id = %s", (task_id,))
     db.commit()
     return jsonify({"ok": True})
 
@@ -1355,20 +1603,236 @@ def list_tasks():
                FROM deal_tasks t JOIN deals d ON d.id = t.deal_id WHERE 1=1"""
     params = []
     if user["role"] in CROSS_FUNCTIONAL_ROLES and not scope_all:
-        query += " AND t.team = ?"
+        query += " AND t.team = %s"
         params.append(user["role"])
     else:
         team = request.args.get("team")
         if team in CROSS_FUNCTIONAL_ROLES:
-            query += " AND t.team = ?"
+            query += " AND t.team = %s"
             params.append(team)
     status = request.args.get("status")
     if status in TASK_STATUSES:
-        query += " AND t.status = ?"
+        query += " AND t.status = %s"
         params.append(status)
     query += " ORDER BY t.updated_at DESC"
     rows = db.execute(query, params).fetchall()
     return jsonify([task_to_dict(r) for r in rows])
+
+
+NOTIFY_WINDOW_DAYS = 3
+NOTIFY_SEVERITY_RANK = {"overdue": 0, "due_soon": 1, "mention": 2}
+
+
+def _days_until(value):
+    """Parse a `YYYY-MM-DD`-ish text date column and return days-from-today, or
+    None if unset/unparseable (never surfaced as a notification either way)."""
+    if not value:
+        return None
+    try:
+        return (date.fromisoformat(str(value)[:10]) - date.today()).days
+    except ValueError:
+        return None
+
+
+@app.route("/api/notifications", methods=["GET"])
+@login_required()
+def get_notifications():
+    """Per-user notifications: tasks assigned to me (or @mentioning me) that are
+    overdue or due soon, plus - for account managers - their own opportunities'
+    target PO/revenue dates coming up. Computed fresh on every call rather than
+    stored, since it's cheap and always exactly reflects current data."""
+    db = get_db()
+    user = g.current_user
+    full_name = (user.get("full_name") or "").strip()
+    if not full_name:
+        return jsonify([])
+
+    notifications = []
+    mention_needle = f"@{full_name}".lower()
+
+    rows = db.execute(
+        """SELECT t.*, d.deal_name, d.customer
+           FROM deal_tasks t JOIN deals d ON d.id = t.deal_id
+           WHERE t.status != 'done'
+             AND (t.assigned_to = %s OR t.text ILIKE %s OR t.note ILIKE %s)""",
+        (full_name, f"%{mention_needle}%", f"%{mention_needle}%"),
+    ).fetchall()
+    for r in rows:
+        mine = (r["assigned_to"] or "") == full_name
+        mentioned = mention_needle in (r["text"] or "").lower() or mention_needle in (r["note"] or "").lower()
+        delta = _days_until(r["due"]) if mine else None
+
+        severity = None
+        if delta is not None:
+            if delta < 0:
+                severity = "overdue"
+            elif delta <= NOTIFY_WINDOW_DAYS:
+                severity = "due_soon"
+        if severity is None and mentioned:
+            severity = "mention"
+        if severity is None:
+            continue
+
+        notifications.append({
+            "id": f"task-{r['id']}",
+            "type": severity,
+            "task_id": r["id"],
+            "deal_id": r["deal_id"],
+            "title": r["text"],
+            "deal_name": r["deal_name"],
+            "customer": r["customer"] or "",
+            "due": r["due"] or "",
+            "days": delta,
+            "mentioned": mentioned,
+        })
+
+    if user["role"] == "account_manager":
+        deal_rows = db.execute(
+            "SELECT id, deal_name, customer, expected_po_date, expected_revenue_date "
+            "FROM deals WHERE assigned_am = %s",
+            (full_name,),
+        ).fetchall()
+        for dr in deal_rows:
+            for field, label in (
+                ("expected_po_date", "Target PO date approaching"),
+                ("expected_revenue_date", "Target revenue date approaching"),
+            ):
+                delta = _days_until(dr[field])
+                if delta is None:
+                    continue
+                if delta < 0:
+                    severity = "overdue"
+                elif delta <= NOTIFY_WINDOW_DAYS:
+                    severity = "due_soon"
+                else:
+                    continue
+                notifications.append({
+                    "id": f"deal-{dr['id']}-{field}",
+                    "type": severity,
+                    "task_id": None,
+                    "deal_id": dr["id"],
+                    "title": label,
+                    "deal_name": dr["deal_name"],
+                    "customer": dr["customer"] or "",
+                    "due": dr[field] or "",
+                    "days": delta,
+                    "mentioned": False,
+                })
+
+    keys = [n["id"] for n in notifications]
+
+    # Drop tracked state for anything no longer live (task done, date moved
+    # outside the notify window, etc.) so this table never accumulates rows
+    # for notifications that can't come back.
+    if keys:
+        db.execute(
+            "DELETE FROM notification_state WHERE user_full_name = %s AND NOT (notif_key = ANY(%s))",
+            (full_name, keys),
+        )
+    else:
+        db.execute("DELETE FROM notification_state WHERE user_full_name = %s", (full_name,))
+
+    # "Birth" any notification seen for the first time - first_seen_at only ever
+    # gets set once per key, via ON CONFLICT DO NOTHING.
+    for key in keys:
+        db.execute(
+            """INSERT INTO notification_state (user_full_name, notif_key) VALUES (%s, %s)
+               ON CONFLICT (user_full_name, notif_key) DO NOTHING""",
+            (full_name, key),
+        )
+
+    state_rows = db.execute(
+        "SELECT notif_key, first_seen_at, read_at FROM notification_state "
+        "WHERE user_full_name = %s AND notif_key = ANY(%s)",
+        (full_name, keys),
+    ).fetchall() if keys else []
+    state_by_key = {r["notif_key"]: r for r in state_rows}
+
+    # A notification that's sat around for 2 weeks - read or not - is deleted
+    # outright rather than left to linger forever.
+    cutoff = datetime.utcnow() - timedelta(days=14)
+    kept, stale_keys = [], []
+    for n in notifications:
+        st = state_by_key.get(n["id"])
+        if st and st["first_seen_at"] and st["first_seen_at"] < cutoff:
+            stale_keys.append(n["id"])
+            continue
+        n["read"] = bool(st and st["read_at"])
+        kept.append(n)
+    if stale_keys:
+        db.execute(
+            "DELETE FROM notification_state WHERE user_full_name = %s AND notif_key = ANY(%s)",
+            (full_name, stale_keys),
+        )
+    db.commit()
+
+    kept.sort(key=lambda n: (NOTIFY_SEVERITY_RANK.get(n["type"], 9), n["days"] if n["days"] is not None else 999))
+    return jsonify(kept[:50])
+
+
+@app.route("/api/notifications/read", methods=["POST"])
+@login_required()
+def mark_notification_read():
+    data = request.get_json(force=True) or {}
+    key = str(data.get("id") or "").strip()
+    if not key:
+        return jsonify({"error": "id is required"}), 400
+    db = get_db()
+    full_name = (g.current_user.get("full_name") or "").strip()
+    db.execute(
+        """INSERT INTO notification_state (user_full_name, notif_key, read_at)
+           VALUES (%s, %s, CURRENT_TIMESTAMP)
+           ON CONFLICT (user_full_name, notif_key) DO UPDATE SET read_at = CURRENT_TIMESTAMP""",
+        (full_name, key),
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# My Profile (any logged-in role) - self-service username/password change,
+# distinct from the admin-only /api/users/<id> below which can touch anyone.
+# --------------------------------------------------------------------------
+@app.route("/api/me", methods=["PUT"])
+@login_required()
+def update_me():
+    db = get_db()
+    user = g.current_user
+    row = db.execute("SELECT * FROM users WHERE id = %s", (user["user_id"],)).fetchone()
+    if not row:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json(force=True) or {}
+    current_password = data.get("current_password", "")
+    if not current_password or not check_password_hash(row["password"], current_password):
+        return jsonify({"error": "Current password is incorrect"}), 403
+
+    new_username = (data.get("username") or "").strip()
+    new_password = data.get("new_password", "")
+    username = new_username or row["username"]
+    if username != row["username"]:
+        existing = db.execute(
+            "SELECT id FROM users WHERE username = %s AND id != %s", (username, row["id"])
+        ).fetchone()
+        if existing:
+            return jsonify({"error": "Username already exists"}), 409
+
+    password_hash = row["password"]
+    if new_password:
+        if len(new_password) < 6:
+            return jsonify({"error": "New password must be at least 6 characters"}), 400
+        password_hash = _hash(new_password)
+
+    db.execute("UPDATE users SET username = %s, password = %s WHERE id = %s",
+               (username, password_hash, row["id"]))
+    # Keep this same active session's denormalized username in sync so the UI
+    # doesn't show a stale name until the next login.
+    auth = request.headers.get("Authorization", "")
+    token = auth.replace("Bearer ", "").strip()
+    if token:
+        db.execute("UPDATE sessions SET username = %s WHERE token = %s", (username, token))
+    db.commit()
+    return jsonify({"username": username})
 
 
 # --------------------------------------------------------------------------
@@ -1397,20 +1861,61 @@ def create_user():
         return jsonify({"error": "username, password and a valid role are required"}), 400
 
     db = get_db()
-    existing = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    existing = db.execute("SELECT id FROM users WHERE username = %s", (username,)).fetchone()
     if existing:
         return jsonify({"error": "Username already exists"}), 409
 
     cur = db.execute(
-        "INSERT INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)",
+        "INSERT INTO users (username, password, role, full_name) VALUES (%s, %s, %s, %s) RETURNING id",
         (username, _hash(password), role, full_name),
     )
+    new_id = cur.fetchone()["id"]
     db.commit()
     row = db.execute(
-        "SELECT id, username, role, full_name, created_at FROM users WHERE id = ?",
-        (cur.lastrowid,),
+        "SELECT id, username, role, full_name, created_at FROM users WHERE id = %s",
+        (new_id,),
     ).fetchone()
     return jsonify(dict(row)), 201
+
+
+def _cascade_rename_am(db, old_name, new_name):
+    """A person's name is denormalized as plain text into every place that
+    references them (a deal's assigned_am, a task's assigned_to, an
+    account_coverage row's am, and the AM-keyed JSON figures in config) rather
+    than a live foreign key. Used both when a user is renamed and as a
+    standalone admin tool for merging stray name text that never went through
+    a user record at all (e.g. a deal typed with a short name before the
+    person's real full name was ever registered)."""
+    old_name = (old_name or "").strip()
+    new_name = (new_name or "").strip()
+    counts = {"deals": 0, "deal_tasks": 0, "account_coverage": 0, "weekly_plans": 0, "config": 0}
+    if not old_name or not new_name or old_name == new_name:
+        return counts
+    counts["deals"] = db.execute(
+        "UPDATE deals SET assigned_am = %s WHERE assigned_am = %s", (new_name, old_name)).rowcount
+    counts["deal_tasks"] = db.execute(
+        "UPDATE deal_tasks SET assigned_to = %s WHERE assigned_to = %s", (new_name, old_name)).rowcount
+    counts["account_coverage"] = db.execute(
+        "UPDATE account_coverage SET am = %s WHERE am = %s", (new_name, old_name)).rowcount
+    counts["weekly_plans"] = db.execute(
+        "UPDATE weekly_plans SET am_full_name = %s WHERE am_full_name = %s", (new_name, old_name)).rowcount
+    cfg_row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    if cfg_row:
+        cols = {}
+        changed = False
+        for col in ("am_targets", "am_achievements", "am_recurring"):
+            d = json.loads(cfg_row[col] or "{}")
+            if old_name in d:
+                d[new_name] = d.pop(old_name)
+                changed = True
+            cols[col] = json.dumps(d)
+        if changed:
+            db.execute(
+                "UPDATE config SET am_targets=%s, am_achievements=%s, am_recurring=%s WHERE id=%s",
+                (cols["am_targets"], cols["am_achievements"], cols["am_recurring"], cfg_row["id"]),
+            )
+            counts["config"] = 1
+    return counts
 
 
 @app.route("/api/users/<int:user_id>", methods=["PUT"])
@@ -1418,7 +1923,7 @@ def create_user():
 def update_user(user_id):
     data = request.get_json(force=True) or {}
     db = get_db()
-    row = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    row = db.execute("SELECT * FROM users WHERE id = %s", (user_id,)).fetchone()
     if not row:
         return jsonify({"error": "User not found"}), 404
 
@@ -1432,15 +1937,89 @@ def update_user(user_id):
         password_hash = _hash(data["password"])
 
     db.execute(
-        "UPDATE users SET role = ?, full_name = ?, password = ? WHERE id = ?",
+        "UPDATE users SET role = %s, full_name = %s, password = %s WHERE id = %s",
         (role, full_name, password_hash, user_id),
     )
+    _cascade_rename_am(db, row["full_name"], full_name)
     db.commit()
     row = db.execute(
-        "SELECT id, username, role, full_name, created_at FROM users WHERE id = ?",
+        "SELECT id, username, role, full_name, created_at FROM users WHERE id = %s",
         (user_id,),
     ).fetchone()
     return jsonify(dict(row))
+
+
+@app.route("/api/admin/am_name_mismatches", methods=["GET"])
+@login_required(roles=("admin",))
+def am_name_mismatches():
+    """Every distinct name found in a deal's assigned_am, a task's assigned_to,
+    an account_coverage row's am, or a config JSON key that doesn't match any
+    currently-registered user's full name - the "stray text" this often needs
+    a Merge Account Manager Name pass to clean up, independent of any user
+    record (e.g. a deal typed with a short name before the person's real full
+    name was ever registered, so there's no wrongly-named user to rename)."""
+    db = get_db()
+    known = {r["full_name"] for r in db.execute(
+        "SELECT full_name FROM users WHERE full_name != ''").fetchall()}
+    found = {}
+
+    def add(name, source):
+        name = (name or "").strip()
+        if not name or name in known:
+            return
+        found.setdefault(name, {"name": name, "sources": set(), "count": 0})
+        found[name]["sources"].add(source)
+        found[name]["count"] += 1
+
+    for r in db.execute(
+        "SELECT assigned_am, COUNT(*) AS c FROM deals WHERE assigned_am != '' GROUP BY assigned_am").fetchall():
+        if (r["assigned_am"] or "").strip() not in known:
+            found.setdefault(r["assigned_am"], {"name": r["assigned_am"], "sources": set(), "count": 0})
+            found[r["assigned_am"]]["sources"].add("deals")
+            found[r["assigned_am"]]["count"] += r["c"]
+    for r in db.execute(
+        "SELECT assigned_to, COUNT(*) AS c FROM deal_tasks WHERE assigned_to != '' GROUP BY assigned_to").fetchall():
+        if (r["assigned_to"] or "").strip() not in known:
+            found.setdefault(r["assigned_to"], {"name": r["assigned_to"], "sources": set(), "count": 0})
+            found[r["assigned_to"]]["sources"].add("deal_tasks")
+            found[r["assigned_to"]]["count"] += r["c"]
+    for r in db.execute(
+        "SELECT am, COUNT(*) AS c FROM account_coverage WHERE am != '' GROUP BY am").fetchall():
+        if (r["am"] or "").strip() not in known:
+            found.setdefault(r["am"], {"name": r["am"], "sources": set(), "count": 0})
+            found[r["am"]]["sources"].add("account_coverage")
+            found[r["am"]]["count"] += r["c"]
+    for r in db.execute(
+        "SELECT am_full_name, COUNT(*) AS c FROM weekly_plans WHERE am_full_name != '' "
+        "GROUP BY am_full_name").fetchall():
+        if (r["am_full_name"] or "").strip() not in known:
+            found.setdefault(r["am_full_name"], {"name": r["am_full_name"], "sources": set(), "count": 0})
+            found[r["am_full_name"]]["sources"].add("weekly_plans")
+            found[r["am_full_name"]]["count"] += r["c"]
+    cfg_row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    if cfg_row:
+        for col in ("am_targets", "am_achievements", "am_recurring"):
+            for name in json.loads(cfg_row[col] or "{}"):
+                add(name, "config")
+
+    return jsonify(sorted(
+        [{"name": v["name"], "sources": sorted(v["sources"]), "count": v["count"]} for v in found.values()],
+        key=lambda x: -x["count"],
+    ))
+
+
+@app.route("/api/admin/rename_am", methods=["POST"])
+@login_required(roles=("admin",))
+def rename_am():
+    data = request.get_json(force=True) or {}
+    old_name = str(data.get("old_name") or "").strip()
+    new_name = str(data.get("new_name") or "").strip()
+    if not old_name or not new_name:
+        return jsonify({"error": "Both old_name and new_name are required"}), 400
+    db = get_db()
+    counts = _cascade_rename_am(db, old_name, new_name)
+    db.commit()
+    return jsonify({"ok": True, "counts": counts})
 
 
 @app.route("/api/users/<int:user_id>", methods=["DELETE"])
@@ -1449,7 +2028,7 @@ def delete_user(user_id):
     if g.current_user["user_id"] == user_id:
         return jsonify({"error": "Cannot delete your own account while logged in"}), 400
     db = get_db()
-    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db.execute("DELETE FROM users WHERE id = %s", (user_id,))
     db.commit()
     return jsonify({"ok": True})
 
@@ -1518,10 +2097,10 @@ def update_config():
     max_login_logs = max(10, min(max_login_logs, 2000))
 
     db.execute(
-        """UPDATE config SET target_amount = ?, strategic_pillars = ?, squads = ?,
-           stages = ?, am_targets = ?, am_achievements = ?, am_recurring = ?,
-           current_achievement = ?, recurring_revenue = ?,
-           max_login_logs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+        """UPDATE config SET target_amount = %s, strategic_pillars = %s, squads = %s,
+           stages = %s, am_targets = %s, am_achievements = %s, am_recurring = %s,
+           current_achievement = %s, recurring_revenue = %s,
+           max_login_logs = %s, updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
         (target_amount, json.dumps(strategic_pillars), json.dumps(squads),
          json.dumps(stages), json.dumps(am_targets), json.dumps(am_achievements),
          json.dumps(am_recurring), current_achievement, recurring_revenue,
@@ -1529,7 +2108,7 @@ def update_config():
     )
     trim_login_logs(db, max_login_logs)
     db.commit()
-    row = db.execute("SELECT * FROM config WHERE id = ?", (row["id"],)).fetchone()
+    row = db.execute("SELECT * FROM config WHERE id = %s", (row["id"],)).fetchone()
     return jsonify(config_to_dict(row))
 
 
@@ -1574,7 +2153,7 @@ def update_engine1_config():
     username = str(data.get("username", current["username"]) or "").strip()
     password = str(data["password"]) if data.get("password") else current["password"]
     db.execute(
-        "UPDATE config SET engine1_url = ?, engine1_username = ?, engine1_password = ? WHERE id = ?",
+        "UPDATE config SET engine1_url = %s, engine1_username = %s, engine1_password = %s WHERE id = %s",
         (url, username, password, row["id"]),
     )
     db.commit()
@@ -1622,6 +2201,188 @@ def _deal_to_engine1_payload(d):
         "expected_po_date": d["expected_po_date"],
         "expected_revenue_date": d["expected_revenue_date"],
     }
+
+
+
+# --------------------------------------------------------------------------
+# Sync from legacy v1.9 (SQLite, PythonAnywhere) - admin only
+#
+# v1.9 stays the live system for real day-to-day work until it's fully
+# retired (planned Oct/Nov 2026); this lets an admin repeatedly pull its
+# latest state into v2.0 in the meantime without wiping out anything already
+# created directly in v2.0. Unlike the one-time migrate_from_sqlite.py
+# (which TRUNCATEs first, for a brand-new database), this UPSERTs by id:
+# a row that exists in v1.9 is inserted or refreshed here; a row that only
+# exists in v2.0 is left alone. On a matching id, v1.9's version wins - it's
+# still the source of truth for this transition period.
+# --------------------------------------------------------------------------
+V1_SYNC_TABLES = [
+    "users", "deals", "deal_tasks", "login_logs",
+    "performance", "account_coverage", "config", "deal_sync_map",
+]
+V1_SYNC_BOOL_COLUMNS = {
+    "deals": {"is_blocked"},
+    "account_coverage": {"is_manual", "is_champion"},
+}
+# Every synced table's primary key is a plain SERIAL "id" - except deal_sync_map,
+# which is keyed off the deal it maps (no id column, no sequence to bump).
+V1_SYNC_PK = {
+    "deal_sync_map": "local_deal_id",
+}
+
+
+def _sync_table_upsert(db, sconn, table):
+    bool_cols = V1_SYNC_BOOL_COLUMNS.get(table, set())
+    pk = V1_SYNC_PK.get(table, "id")
+    src_rows = sconn.execute(f"SELECT * FROM {table}").fetchall()
+    if not src_rows:
+        return 0
+    cols = src_rows[0].keys()
+    non_pk_cols = [c for c in cols if c != pk]
+    col_list = ", ".join(cols)
+    placeholders = ", ".join(["%s"] * len(cols))
+    update_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in non_pk_cols)
+    sql = (f"INSERT INTO {table} ({col_list}) VALUES ({placeholders}) "
+           f"ON CONFLICT ({pk}) DO UPDATE SET {update_clause}")
+    for r in src_rows:
+        values = [bool(r[c]) if c in bool_cols else r[c] for c in cols]
+        db.execute(sql, values)
+    if pk == "id" and "id" in cols:
+        db.execute(
+            f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+            f"GREATEST((SELECT MAX(id) FROM {table}), 1))"
+        )
+    return len(src_rows)
+
+
+def sync_from_v1_sqlite(db, sqlite_path):
+    sconn = sqlite3.connect(sqlite_path)
+    sconn.row_factory = sqlite3.Row
+    try:
+        summary = {}
+        for table in V1_SYNC_TABLES:
+            summary[table] = _sync_table_upsert(db, sconn, table)
+        db.commit()
+        return summary
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        sconn.close()
+
+
+def _v1sync_config(row):
+    return {
+        "url": (row["v1_sync_url"] if "v1_sync_url" in row.keys() else "") or "",
+        "username": (row["v1_sync_username"] if "v1_sync_username" in row.keys() else "") or "",
+        "password": (row["v1_sync_password"] if "v1_sync_password" in row.keys() else "") or "",
+        "last_run": (row["v1_sync_last_run"] if "v1_sync_last_run" in row.keys() else "") or "",
+    }
+
+
+@app.route("/api/config/v1sync", methods=["GET"])
+@login_required(roles=("admin",))
+def get_v1sync_config():
+    db = get_db()
+    row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    cfg = _v1sync_config(row)
+    return jsonify({
+        "url": cfg["url"],
+        "username": cfg["username"],
+        "password_set": bool(cfg["password"]),
+        "last_run": cfg["last_run"],
+    })
+
+
+@app.route("/api/config/v1sync", methods=["PUT"])
+@login_required(roles=("admin",))
+def update_v1sync_config():
+    data = request.get_json(force=True) or {}
+    db = get_db()
+    row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    current = _v1sync_config(row)
+    url = str(data.get("url", current["url"]) or "").strip().rstrip("/")
+    username = str(data.get("username", current["username"]) or "").strip()
+    password = str(data["password"]) if data.get("password") else current["password"]
+    db.execute(
+        "UPDATE config SET v1_sync_url = %s, v1_sync_username = %s, v1_sync_password = %s WHERE id = %s",
+        (url, username, password, row["id"]),
+    )
+    db.commit()
+    return jsonify({"ok": True, "url": url, "username": username, "password_set": bool(password)})
+
+
+def _http_get_bytes(url, token=None, timeout=60):
+    """Raw binary GET (unlike _engine1_request, which expects a JSON body) -
+    used to download v1.9's db.sqlite3 straight into memory."""
+    req = urllib.request.Request(url, method="GET")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read()
+    except urllib.error.URLError as exc:
+        raise ConnectionError(str(exc.reason)) from exc
+
+
+@app.route("/api/admin/sync_v1", methods=["POST"])
+@login_required(roles=("admin",))
+def sync_v1():
+    db = get_db()
+    row = db.execute("SELECT * FROM config ORDER BY id DESC LIMIT 1").fetchone()
+    cfg = _v1sync_config(row)
+    if not cfg["url"] or not cfg["username"] or not cfg["password"]:
+        return jsonify({"error": "Set the v1.9 URL, username and password first"}), 400
+
+    try:
+        status, body = _engine1_request(
+            "POST", f"{cfg['url']}/api/login",
+            payload={"username": cfg["username"], "password": cfg["password"]},
+        )
+    except ConnectionError as exc:
+        return jsonify({"error": f"Could not reach v1.9 at {cfg['url']}: {exc}"}), 502
+    if status != 200 or not body.get("token"):
+        return jsonify({"error": f"v1.9 login failed: {body.get('error', 'invalid credentials')}"}), 400
+    token = body["token"]
+
+    try:
+        status, content = _http_get_bytes(f"{cfg['url']}/api/admin/export_db", token=token, timeout=60)
+    except ConnectionError as exc:
+        return jsonify({"error": f"Could not reach v1.9 at {cfg['url']}: {exc}"}), 502
+    if status != 200:
+        try:
+            err = json.loads(content.decode("utf-8"))["error"]
+        except Exception:
+            err = f"HTTP {status}"
+        return jsonify({"error": f"v1.9 export failed: {err}"}), 400
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".sqlite3") as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            sqlite3.connect(tmp_path).execute("SELECT 1 FROM deals LIMIT 1")
+        except sqlite3.DatabaseError as exc:
+            return jsonify({"error": f"v1.9 did not return a readable database: {exc}"}), 400
+
+        db.execute("SELECT pg_advisory_lock(84177236)")
+        try:
+            summary = sync_from_v1_sqlite(db, tmp_path)
+        finally:
+            db.execute("SELECT pg_advisory_unlock(84177236)")
+    except Exception as exc:
+        return jsonify({"error": f"Sync failed: {exc}"}), 400
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+    db.execute("UPDATE config SET v1_sync_last_run = %s WHERE id = %s", (jakarta_now_str(), row["id"]))
+    db.commit()
+
+    return jsonify({"ok": True, "summary": summary, "synced_at": jakarta_now_str()})
 
 
 @app.route("/api/sync/engine1", methods=["POST"])
@@ -1674,9 +2435,9 @@ def sync_engine1():
                 engine1_id = body["id"]
                 db.execute(
                     """INSERT INTO deal_sync_map (local_deal_id, engine1_deal_id, synced_at)
-                       VALUES (?, ?, CURRENT_TIMESTAMP)
+                       VALUES (%s, %s, CURRENT_TIMESTAMP)
                        ON CONFLICT(local_deal_id) DO UPDATE SET
-                         engine1_deal_id = excluded.engine1_deal_id, synced_at = CURRENT_TIMESTAMP""",
+                         engine1_deal_id = excluded.engine1_deal_id, synced_at = CURRENT_TIMESTAMP::text""",
                     (d["id"], engine1_id),
                 )
                 created.append(d["deal_name"])
@@ -1684,7 +2445,7 @@ def sync_engine1():
             failed.append({"deal_name": d["deal_name"], "error": str(exc)})
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    db.execute("UPDATE config SET engine1_last_sync = ? WHERE id = ?", (now, row["id"]))
+    db.execute("UPDATE config SET engine1_last_sync = %s WHERE id = %s", (now, row["id"]))
     db.commit()
     return jsonify({
         "ok": True, "total": len(deals), "created": len(created), "updated": len(updated),
@@ -1747,22 +2508,6 @@ def export_engine1_xlsx():
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True, download_name=filename,
     )
-
-
-# --------------------------------------------------------------------------
-# Export the raw database (ADMIN only)
-#
-# Lets v2.0's "Sync from v1.9" feature pull this app's current data straight
-# over the network - logs in here with its own admin credentials (stored in
-# its own Settings) the same way it talks to Engine 1, then downloads this
-# file - instead of an admin manually downloading it from the Files tab and
-# re-uploading it on the other end.
-# --------------------------------------------------------------------------
-@app.route("/api/admin/export_db", methods=["GET"])
-@login_required(roles=("admin",))
-def export_db():
-    return send_file(DB_PATH, as_attachment=True, download_name="db.sqlite3",
-                      mimetype="application/octet-stream")
 
 
 # --------------------------------------------------------------------------
@@ -1917,7 +2662,7 @@ def export_xlsx():
         ["Execution Framework sheet (the 8 Enterprise Proofs):"],
         ["  - One row per opportunity per proof. Keep Deal ID and Proof name unchanged."],
         ["  - Status accepts: not_started / in_progress / done / na"],
-        ["  - Target Date is YYYY-MM-DD and shows up on the Calendar."],
+        ["  - Target Date is YYYY-MM-DD."],
         ["  - Evidence: one item per line. Optional date prefix, e.g."],
         ["        2026-08-01 | Workshop held with DAOP ops team"],
         ["        Budget letter received"],
@@ -1992,22 +2737,22 @@ def import_xlsx():
             payload = (
                 name, s(r[2]), s(r[3]), s(r[4]), s(r[5]), n(r[6]), n(r[7]), s(r[8]),
                 s(r[9]) or "Prospecting", max(0, min(100, n(r[10]))),
-                1 if s(r[11]).lower() in ("yes", "true", "1") else 0,
+                s(r[11]).lower() in ("yes", "true", "1"),
                 s(r[12]), s(r[13]), json.dumps(text_to_actions(r[14])),
             )
             existing = None
             if deal_id not in (None, ""):
                 try:
-                    existing = db.execute("SELECT id FROM deals WHERE id = ?",
+                    existing = db.execute("SELECT id FROM deals WHERE id = %s",
                                           (int(deal_id),)).fetchone()
                 except (TypeError, ValueError):
                     existing = None
             if existing:
                 db.execute(
-                    """UPDATE deals SET deal_name=?, customer=?, assigned_am=?, squad=?,
-                       strategic_pillar=?, estimated_value=?, revenue_2026=?, target_quarter=?,
-                       stage=?, progress=?, is_blocked=?, blocker_description=?, strategy=?,
-                       next_actions=?, updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                    """UPDATE deals SET deal_name=%s, customer=%s, assigned_am=%s, squad=%s,
+                       strategic_pillar=%s, estimated_value=%s, revenue_2026=%s, target_quarter=%s,
+                       stage=%s, progress=%s, is_blocked=%s, blocker_description=%s, strategy=%s,
+                       next_actions=%s, updated_at=CURRENT_TIMESTAMP::text WHERE id=%s""",
                     payload + (int(deal_id),),
                 )
                 seen_ids.add(int(deal_id))
@@ -2018,14 +2763,15 @@ def import_xlsx():
                        strategic_pillar, estimated_value, revenue_2026, target_quarter, stage,
                        progress, is_blocked, blocker_description, strategy, next_actions,
                        updated_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)""",
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP)
+                       RETURNING id""",
                     payload,
                 )
-                seen_ids.add(cur.lastrowid)
+                seen_ids.add(cur.fetchone()["id"])
                 summary["created"] += 1
 
         if replace_all and seen_ids:
-            placeholders = ",".join("?" * len(seen_ids))
+            placeholders = ",".join(["%s"] * len(seen_ids))
             cur = db.execute(f"DELETE FROM deals WHERE id NOT IN ({placeholders})",
                              tuple(seen_ids))
             summary["deleted"] = cur.rowcount
@@ -2071,12 +2817,12 @@ def import_xlsx():
                 "entries": entries,
             }
         for deal_id, proofs in by_deal.items():
-            existing = db.execute("SELECT proofs FROM deals WHERE id = ?", (deal_id,)).fetchone()
+            existing = db.execute("SELECT proofs FROM deals WHERE id = %s", (deal_id,)).fetchone()
             if not existing:
                 continue
             merged = normalize_proofs(json.loads(existing["proofs"] or "{}"))
             merged.update(normalize_proofs(proofs))
-            db.execute("UPDATE deals SET proofs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            db.execute("UPDATE deals SET proofs = %s, updated_at = CURRENT_TIMESTAMP::text WHERE id = %s",
                        (json.dumps(merged), deal_id))
         summary["proofs_updated"] = len(by_deal)
 
@@ -2102,9 +2848,9 @@ def import_xlsx():
             merged = config_to_dict(row)
             merged.update(incoming)
             db.execute(
-                """UPDATE config SET target_amount=?, strategic_pillars=?, squads=?, stages=?,
-                   am_targets=?, am_achievements=?, am_recurring=?, current_achievement=?,
-                   recurring_revenue=?, updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                """UPDATE config SET target_amount=%s, strategic_pillars=%s, squads=%s, stages=%s,
+                   am_targets=%s, am_achievements=%s, am_recurring=%s, current_achievement=%s,
+                   recurring_revenue=%s, updated_at=CURRENT_TIMESTAMP::text WHERE id=%s""",
                 (int(merged["target_amount"] or 0), json.dumps(merged["strategic_pillars"]),
                  json.dumps(merged["squads"]), json.dumps(merged["stages"]),
                  json.dumps(merged["am_targets"]), json.dumps(merged["am_achievements"]),
@@ -2120,14 +2866,14 @@ def import_xlsx():
             role = str(role or "").strip()
             if not username or role not in VALID_ROLES:
                 continue
-            existing = db.execute("SELECT id FROM users WHERE username = ?",
+            existing = db.execute("SELECT id FROM users WHERE username = %s",
                                   (username,)).fetchone()
             if existing:
-                db.execute("UPDATE users SET full_name = ?, role = ? WHERE id = ?",
+                db.execute("UPDATE users SET full_name = %s, role = %s WHERE id = %s",
                            (str(fname or "").strip() or username, role, existing["id"]))
             else:
                 db.execute(
-                    "INSERT INTO users (username, password, role, full_name) VALUES (?,?,?,?)",
+                    "INSERT INTO users (username, password, role, full_name) VALUES (%s,%s,%s,%s)",
                     (username, _hash("changeme123"), role,
                      str(fname or "").strip() or username),
                 )
@@ -2207,14 +2953,14 @@ def parse_performance_workbook(wb):
                 "mrc_monthly": series(41),        # AO..AZ
                 "pipeline_monthly": series(55),   # BC..BN
                 "po_monthly": series(69),         # BQ..CB
-                "target_fy": _num(sheet.cell(row=r, column=85).value),   # CG
-                "actual_ytd": _num(sheet.cell(row=r, column=86).value),  # CH
-                "mrc_rest": _num(sheet.cell(row=r, column=87).value),    # CI
-                "po_hand": _num(sheet.cell(row=r, column=88).value),     # CJ
-                "forecast_fy": _num(sheet.cell(row=r, column=89).value),  # CK
-                "gap": _num(sheet.cell(row=r, column=90).value),          # CL
-                "conservative_pipeline": _num(sheet.cell(row=r, column=91).value),  # CM
-                "current_pipeline": _num(sheet.cell(row=r, column=93).value),       # CO
+                "target_fy": _num(sheet.cell(row=r, column=84).value),   # CF: Target FY 2026
+                "actual_ytd": _num(sheet.cell(row=r, column=85).value),  # CG: Actual YTD
+                "mrc_rest": _num(sheet.cell(row=r, column=86).value),    # CH: MRC (Sep-Dec)
+                "po_hand": _num(sheet.cell(row=r, column=87).value),     # CI: PO on Hand (Sep-Dec)
+                "forecast_fy": _num(sheet.cell(row=r, column=88).value),  # CJ: Total Forecast FY 2026
+                "gap": _num(sheet.cell(row=r, column=89).value),          # CK: Gap
+                "conservative_pipeline": _num(sheet.cell(row=r, column=90).value),  # CL: Conservative Pipeline
+                "current_pipeline": _num(sheet.cell(row=r, column=92).value),       # CN: Current Pipeline (CM/91 is a blank spacer column)
             })
 
     # ---- Sheet 2: account-level monthly revenue
@@ -2235,6 +2981,12 @@ def parse_performance_workbook(wb):
         for r in range(4, acc_sheet.max_row + 1):
             account = acc_sheet.cell(row=r, column=7).value
             if not account:
+                continue
+            # This sheet carries every Business Engine 1 pod's accounts (Head 1/2/3),
+            # not just PODS 2's (Head 2) - without this filter, Account Coverage gets
+            # polluted with other teams' accounts and AMs.
+            pods_val = str(acc_sheet.cell(row=r, column=9).value or "")
+            if not _HEAD2_RE.search(pods_val):
                 continue
             months = {}
             for c, label in month_cols:
@@ -2319,12 +3071,12 @@ def import_am_targets():
         updated.append(dash_am)
 
     db.execute(
-        """UPDATE config SET am_targets = ?, am_achievements = ?, am_recurring = ?,
-           updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+        """UPDATE config SET am_targets = %s, am_achievements = %s, am_recurring = %s,
+           updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
         (json.dumps(am_targets), json.dumps(am_achievements), json.dumps(am_recurring), row["id"]),
     )
     db.commit()
-    row = db.execute("SELECT * FROM config WHERE id = ?", (row["id"],)).fetchone()
+    row = db.execute("SELECT * FROM config WHERE id = %s", (row["id"],)).fetchone()
     return jsonify({"ok": True, "updated": updated, "unmatched": unmatched, "config": config_to_dict(row)})
 
 
@@ -2354,7 +3106,7 @@ def import_performance():
 
     db = get_db()
     db.execute(
-        "INSERT INTO performance (label, source_file, am_summary, accounts) VALUES (?, ?, ?, ?)",
+        "INSERT INTO performance (label, source_file, am_summary, accounts) VALUES (%s, %s, %s, %s)",
         (label or datetime.now().strftime("%b %Y"),
          getattr(upload, "filename", "") or "",
          json.dumps(am_rows), json.dumps(accounts)),
@@ -2362,9 +3114,9 @@ def import_performance():
     # keep the last 12 snapshots
     db.execute("""DELETE FROM performance WHERE id NOT IN
                   (SELECT id FROM performance ORDER BY id DESC LIMIT 12)""")
-    _sync_account_coverage(db, accounts)
+    removed = _sync_account_coverage(db, accounts)
     db.commit()
-    return jsonify({"ok": True, "am_count": len(am_rows), "account_rows": len(accounts)})
+    return jsonify({"ok": True, "am_count": len(am_rows), "account_rows": len(accounts), "removed": removed})
 
 
 def normalize_account_name(name):
@@ -2377,11 +3129,16 @@ def normalize_account_name(name):
 
 
 def _sync_account_coverage(db, accounts):
-    """Upsert the monthly ACH import's account list into account_coverage,
-    refreshing the import-sourced fields (AM, pillar, size) while leaving any
-    status/champion/notes an AM already set untouched. A row already sourced
-    from the (richer) master import keeps that source; only a tracker/manual
-    row gets upgraded to 'performance' by this."""
+    """Sync the monthly ACH import's account list into account_coverage:
+    upsert every account this import produced, refreshing the import-sourced
+    fields (AM, pillar, size) while leaving any status/champion/notes an AM
+    already set untouched, and remove any account_coverage row that was
+    previously created by *this same import path* (source='performance')
+    but isn't in the current file - e.g. it belonged to another pod that a
+    parsing bug used to let through, or it simply dropped off this month's
+    workbook. A row sourced from the (richer) master import, added manually,
+    or picked up from the Tracker is never touched here, regardless of
+    whether it's in this file."""
     agg = {}
     for a in accounts:
         name = str(a.get("account") or "").strip()
@@ -2398,12 +3155,12 @@ def _sync_account_coverage(db, accounts):
         if a.get("revenue_category"):
             entry["revenue_category"] = a["revenue_category"]
     for key, e in agg.items():
-        existing = db.execute("SELECT id, source FROM account_coverage WHERE account_key = ?", (key,)).fetchone()
+        existing = db.execute("SELECT id, source FROM account_coverage WHERE account_key = %s", (key,)).fetchone()
         if existing:
             new_source = existing["source"] if existing["source"] in ("performance", "master") else "performance"
             db.execute(
-                """UPDATE account_coverage SET account_name=?, am=?, pillar=?, revenue_category=?,
-                       account_size=?, source=?, is_manual=0, updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                """UPDATE account_coverage SET account_name=%s, am=%s, pillar=%s, revenue_category=%s,
+                       account_size=%s, source=%s, is_manual=false, updated_at=CURRENT_TIMESTAMP::text WHERE id=%s""",
                 (e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], new_source, existing["id"]),
             )
         else:
@@ -2413,9 +3170,21 @@ def _sync_account_coverage(db, accounts):
             db.execute(
                 """INSERT INTO account_coverage
                        (account_key, account_name, am, pillar, revenue_category, account_size, source, status, is_manual)
-                   VALUES (?, ?, ?, ?, ?, ?, 'performance', ?, 0)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, 'performance', %s, false)""",
                 (key, e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], initial_status),
             )
+
+    # Only ever prune rows this same import path created - never master/manual/tracker
+    # rows - and only when this import actually produced accounts, so a parsing hiccup
+    # that returns zero rows can't wipe out everything that's already there.
+    if not agg:
+        return 0
+    current_keys = list(agg.keys())
+    cur = db.execute(
+        "DELETE FROM account_coverage WHERE source = 'performance' AND NOT (account_key = ANY(%s))",
+        (current_keys,),
+    )
+    return cur.rowcount
 
 
 _HEAD2_RE = re.compile(r"head\s*2\b", re.I)
@@ -2482,8 +3251,22 @@ def parse_master_account_workbook(wb):
     if revenue_sheet is not None:
         header_rows = list(revenue_sheet.iter_rows(min_row=3, max_row=3, values_only=True))
         header = header_rows[0] if header_rows else ()
-        month_idxs = [i for i in range(9, len(header))
-                      if hasattr(header[i], "strftime") or (isinstance(header[i], str) and header[i].strip())]
+        # Only the first contiguous run of dated columns (the real monthly revenue
+        # block, e.g. J-N) - this sheet repeats the same month dates again for a
+        # "Same"/"OTC" status block and then a numeric "movement" (delta) block
+        # further right, each separated by one blank column. Scanning the whole
+        # row for anything date-like (rather than stopping at the first blank
+        # once a run has started) would silently sum all three blocks together,
+        # corrupting the real revenue figure with unrelated status/delta values.
+        month_idxs = []
+        for i in range(9, len(header)):
+            h = header[i]
+            is_month = hasattr(h, "strftime") or (isinstance(h, str) and h.strip())
+            if not is_month:
+                if month_idxs:
+                    break
+                continue
+            month_idxs.append(i)
         blanks = 0
         for row in revenue_sheet.iter_rows(min_row=4, values_only=True):
             if not any(v is not None for v in row):
@@ -2531,7 +3314,7 @@ def _sync_tracker_only_accounts(db):
             continue
         seen.add(key)
         db.execute(
-            "INSERT INTO account_coverage (account_key, account_name, am, source, is_manual) VALUES (?, ?, ?, 'tracker', 0)",
+            "INSERT INTO account_coverage (account_key, account_name, am, source, is_manual) VALUES (%s, %s, %s, 'tracker', false)",
             (key, name, r["assigned_am"] or ""),
         )
         added = True
@@ -2565,12 +3348,12 @@ def import_master_accounts():
     db = get_db()
     created = updated = 0
     for key, e in accounts.items():
-        existing = db.execute("SELECT id FROM account_coverage WHERE account_key = ?", (key,)).fetchone()
+        existing = db.execute("SELECT id FROM account_coverage WHERE account_key = %s", (key,)).fetchone()
         if existing:
             db.execute(
-                """UPDATE account_coverage SET account_name=?, am=?, pillar=?, revenue_category=?,
-                       account_size=?, account_target=?, source='master', is_manual=0,
-                       updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                """UPDATE account_coverage SET account_name=%s, am=%s, pillar=%s, revenue_category=%s,
+                       account_size=%s, account_target=%s, source='master', is_manual=false,
+                       updated_at=CURRENT_TIMESTAMP::text WHERE id=%s""",
                 (e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], e["target"], existing["id"]),
             )
             updated += 1
@@ -2579,12 +3362,29 @@ def import_master_accounts():
             db.execute(
                 """INSERT INTO account_coverage
                        (account_key, account_name, am, pillar, revenue_category, account_size, account_target, source, status, is_manual)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'master', ?, 0)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, 'master', %s, false)""",
                 (key, e["account_name"], e["am"], e["pillar"], e["revenue_category"], e["size"], e["target"], initial_status),
             )
             created += 1
+
+    # This file is the authoritative PODS 2 account list (per its own description in
+    # Settings), so it prunes both master- and performance-sourced strays that aren't
+    # in it - not just rows it created itself. A performance-only import is a narrower
+    # monthly snapshot (only accounts with billed revenue that month) and can't safely
+    # make that call, but the master list is a complete account registry, so anything
+    # import-sourced and missing from it genuinely doesn't belong (e.g. it belonged to
+    # another pod that a parsing bug used to let through). Tracker/manual rows - real
+    # local work, not an import artifact - are never touched here.
+    removed = 0
+    if accounts:
+        current_keys = list(accounts.keys())
+        cur = db.execute(
+            "DELETE FROM account_coverage WHERE source IN ('master', 'performance') AND NOT (account_key = ANY(%s))",
+            (current_keys,),
+        )
+        removed = cur.rowcount
     db.commit()
-    return jsonify({"ok": True, "created": created, "updated": updated, "total": len(accounts)})
+    return jsonify({"ok": True, "created": created, "updated": updated, "removed": removed, "total": len(accounts)})
 
 
 def _deals_by_account_key(db):
@@ -2648,13 +3448,13 @@ def create_account_coverage():
         if not am:
             return jsonify({"error": "AM is required"}), 400
     db = get_db()
-    existing = db.execute("SELECT id FROM account_coverage WHERE account_key = ?", (key,)).fetchone()
+    existing = db.execute("SELECT id FROM account_coverage WHERE account_key = %s", (key,)).fetchone()
     if existing:
         return jsonify({"error": "This account is already tracked", "id": existing["id"]}), 409
     pillar = str(data.get("pillar") or "").strip()
     db.execute(
         """INSERT INTO account_coverage (account_key, account_name, am, pillar, source, is_manual, status)
-           VALUES (?, ?, ?, ?, 'manual', 1, 'unreviewed')""",
+           VALUES (%s, %s, %s, %s, 'manual', true, 'unreviewed')""",
         (key, account_name, am, pillar),
     )
     db.commit()
@@ -2666,7 +3466,7 @@ def create_account_coverage():
 def update_account_coverage(cov_id):
     user = g.current_user
     db = get_db()
-    row = db.execute("SELECT * FROM account_coverage WHERE id = ?", (cov_id,)).fetchone()
+    row = db.execute("SELECT * FROM account_coverage WHERE id = %s", (cov_id,)).fetchone()
     if not row:
         return jsonify({"error": "Not found"}), 404
     if user["role"] == "account_manager" and not _perf_am_matches(row["am"], user["full_name"]):
@@ -2678,7 +3478,7 @@ def update_account_coverage(cov_id):
     is_champion = bool(data.get("is_champion", row["is_champion"]))
     notes = str(data.get("notes", row["notes"] or ""))[:2000]
     db.execute(
-        "UPDATE account_coverage SET status=?, is_champion=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        "UPDATE account_coverage SET status=%s, is_champion=%s, notes=%s, updated_at=CURRENT_TIMESTAMP::text WHERE id=%s",
         (status, is_champion, notes, cov_id),
     )
     db.commit()
@@ -2690,14 +3490,14 @@ def update_account_coverage(cov_id):
 def delete_account_coverage(cov_id):
     user = g.current_user
     db = get_db()
-    row = db.execute("SELECT * FROM account_coverage WHERE id = ?", (cov_id,)).fetchone()
+    row = db.execute("SELECT * FROM account_coverage WHERE id = %s", (cov_id,)).fetchone()
     if not row:
         return jsonify({"error": "Not found"}), 404
     if not row["is_manual"]:
         return jsonify({"error": "Imported accounts can't be deleted, only re-tagged"}), 400
     if user["role"] == "account_manager" and not _perf_am_matches(row["am"], user["full_name"]):
         return jsonify({"error": "Not your account"}), 403
-    db.execute("DELETE FROM account_coverage WHERE id = ?", (cov_id,))
+    db.execute("DELETE FROM account_coverage WHERE id = %s", (cov_id,))
     db.commit()
     return jsonify({"ok": True})
 
@@ -2921,7 +3721,7 @@ def export_tracker_xlsx():
     params = []
     am = request.args.get("am")
     if am:
-        query += " WHERE assigned_am = ?"
+        query += " WHERE assigned_am = %s"
         params.append(am)
     query += " ORDER BY assigned_am, deal_name"
     deals = [deal_to_dict(r) for r in db.execute(query, params).fetchall()]
@@ -3266,6 +4066,18 @@ def export_pdf():
     buf.seek(0)
     filename = f"deal_tracker_report_{date.today().isoformat()}.pdf"
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=filename)
+
+
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    """Unauthenticated liveness probe for Docker's healthcheck - confirms the
+    app can actually reach Postgres, not just that the process is up."""
+    try:
+        with _pool.connection(timeout=3) as db:
+            db.execute("SELECT 1")
+        return jsonify({"ok": True}), 200
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
 
 
 # --------------------------------------------------------------------------
