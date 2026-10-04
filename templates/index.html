@@ -1551,7 +1551,8 @@ function fmtThousands(v){ const n=String(v==null?'':v).replace(/[^\d]/g,''); ret
 function parseThousands(v){ const n=String(v==null?'':v).replace(/[^\d]/g,''); return n ? parseInt(n,10) : 0; }
 function attachMoney(el){ if(!el||el._money) return; el._money=true; el.addEventListener('input',()=>{ const s=el.selectionStart, before=el.value.length; el.value=fmtThousands(el.value); const after=el.value.length; try{ el.selectionStart=el.selectionEnd=Math.max(0,(s||0)+(after-before)); }catch(e){} }); }
 function showToast(msg, err=false){ const t=document.getElementById('toast'); t.textContent=msg; t.style.background = err?'var(--danger)':'#323639'; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'),2800); }
-function canEditDeal(d){ return ROLE==='admin' || (ROLE==='account_manager' && d.assigned_am===FULLNAME); }
+// v1.9 is permanently read-only: nothing is editable, so no edit controls are ever shown.
+function canEditDeal(d){ return false; }
 function initials(name){ return (name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
 
 async function api(path, opts={}) {
@@ -1606,7 +1607,7 @@ async function enterApp(){
   document.getElementById('perfUploadWrap').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('amTargetsImportWrap').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('covMasterImportWrap').style.display = ROLE==='admin' ? '' : 'none';
-  document.getElementById('addDealBtn').style.display = (ROLE==='admin'||ROLE==='account_manager') ? '' : 'none';
+  document.getElementById('addDealBtn').style.display = 'none';
   // Solution / Project / Product can see every opportunity (read-only, for context) and
   // their own task inbox, but not Calendar / Analytics / Performance / any edit control.
   const isCrossFunctional = CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
@@ -1809,7 +1810,7 @@ function renderDealsTable(){
         ${editable
           ? `<button class="edit-btn" data-id="${deal.id}" style="color:var(--primary)" onclick="event.stopPropagation()"><i class="fa-solid fa-pen text-xs"></i></button>
              <button class="del-btn ml-3" data-id="${deal.id}" style="color:var(--danger)" onclick="event.stopPropagation()"><i class="fa-solid fa-trash text-xs"></i></button>`
-          : CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)
+          : false
           ? `<button class="tasks-btn" data-id="${deal.id}" style="color:var(--primary)" onclick="event.stopPropagation()" title="Team Tasks"><i class="fa-solid fa-list-check text-xs"></i></button>`
           : `<span class="text-xs" style="color:var(--text-faint)"><i class="fa-solid fa-lock"></i></span>`}
       </td>`;
@@ -1902,8 +1903,8 @@ function openDetail(id){
       <div class="space-y-1.5">${timelineItems.map(a=>{const done=a.status==='done';return `<div class="flex items-center gap-2 text-sm" style="color:var(--text)"><i class="fa-${done?'solid fa-circle-check':'regular fa-circle'}" style="color:${done?'var(--success)':'var(--text-faint)'}"></i><span class="flex-1 ${done?'line-through':''}" style="${done?'color:var(--text-faint)':''}">${escapeHtml(a.text)}</span>${a.date?`<span class="chip" style="color:${(!done&&a.date<todayStr())?'var(--danger)':'var(--text-muted)'}">${a.date}</span>`:''}</div>`;}).join('')||'<p class="text-xs" style="color:var(--text-faint)">No timeline items yet.</p>'}</div>
     </div>
     ${editable?`<button onclick="closeDetail();openDealModal(${d.id})" class="btn-primary w-full text-sm py-2.5 rounded-lg"><i class="fa-solid fa-pen mr-1.5"></i>Edit Opportunity</button>`
-      :CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)?`<button onclick="closeDetail();openDealModal(${d.id})" class="btn-primary w-full text-sm py-2.5 rounded-lg"><i class="fa-solid fa-list-check mr-1.5"></i>Team Tasks</button>`
-      :`<p class="text-xs text-center" style="color:var(--text-faint)"><i class="fa-solid fa-lock mr-1"></i>${ROLE==='management'?'View-only role':'Assigned to another AM'}</p>`}
+      :false?`<button onclick="closeDetail();openDealModal(${d.id})" class="btn-primary w-full text-sm py-2.5 rounded-lg"><i class="fa-solid fa-list-check mr-1.5"></i>Team Tasks</button>`
+      :`<p class="text-xs text-center" style="color:var(--text-faint)"><i class="fa-solid fa-lock mr-1"></i>Read-only (system retired)</p>`}
   `;
   document.getElementById('detailBackdrop').classList.remove('hidden');
   document.getElementById('detailDrawer').style.transform='translateX(0)';
@@ -2292,6 +2293,7 @@ async function renderWeeklyMeeting(){
   const today=todayStr();
 
   const canEditTask=t=>{
+    return false;
     if(CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return t.team===ROLE;
     if(ROLE==='admin') return true;
     if(ROLE==='account_manager') return (t.assigned_am||'')===FULLNAME;
@@ -3354,7 +3356,7 @@ function amNameMatches(a,b){
   if(!an||!bn) return false;
   return an===bn || an.startsWith(bn) || bn.startsWith(an);
 }
-function covCanEdit(row){ return ROLE==='admin' || (ROLE==='account_manager' && amNameMatches(row.am, FULLNAME)); }
+function covCanEdit(row){ return false; }
 
 function covPercentile(arr, p){
   if(!arr.length) return 0;
@@ -4247,7 +4249,7 @@ async function persistConfig(){ try { CONFIG=await api('/api/config',{method:'PU
 async function loadUsers(){ USERS=await api('/api/users'); }
 function renderUsersTable(){
   const tbody=document.getElementById('usersTableBody');
-  tbody.innerHTML=USERS.map(u=>`<tr style="border-top:1px solid var(--border)"><td class="py-2.5 font-medium" style="color:var(--text)">${escapeHtml(u.username)}</td><td class="py-2.5" style="color:var(--text-muted)">${escapeHtml(u.full_name||'')}</td><td class="py-2.5"><span class="chip" style="color:var(--text-muted)">${u.role.replace('_',' ')}</span></td><td class="py-2.5 text-right"><button class="eu-btn" data-id="${u.id}" style="color:var(--primary)"><i class="fa-solid fa-pen text-xs"></i></button><button class="du-btn ml-3" data-id="${u.id}" style="color:var(--danger)"><i class="fa-solid fa-trash text-xs"></i></button></td></tr>`).join('');
+  tbody.innerHTML=USERS.map(u=>`<tr style="border-top:1px solid var(--border)"><td class="py-2.5 font-medium" style="color:var(--text)">${escapeHtml(u.username)}</td><td class="py-2.5" style="color:var(--text-muted)">${escapeHtml(u.full_name||'')}</td><td class="py-2.5"><span class="chip" style="color:var(--text-muted)">${u.role.replace('_',' ')}</span></td><td class="py-2.5 text-right"></td></tr>`).join('');
   tbody.querySelectorAll('.eu-btn').forEach(b=>b.addEventListener('click',()=>openUserModal(parseInt(b.dataset.id))));
   tbody.querySelectorAll('.du-btn').forEach(b=>b.addEventListener('click',()=>confirmDeleteUser(parseInt(b.dataset.id))));
 }

@@ -6,6 +6,17 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [1.9.5] - 2026-10-04
+### Changed
+- **Edit controls removed everywhere.** No edit pencil, delete trash, "Edit
+  Opportunity", Team Tasks, Add Opportunity, or user edit/delete buttons are
+  shown to any role; inline status/note/slider/champion inputs are disabled.
+  (The API already rejected every write since 1.9.4 - this removes the buttons
+  that would have led to an error.)
+
+Verified locally as admin and as an account manager: 0 edit/delete buttons,
+detail drawer shows "Read-only", no console errors.
+
 ## [1.9.4] - 2026-10-04
 ### Changed
 - **Permanently read-only, unconditionally.** The 1.9.3 lockdown was
