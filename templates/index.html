@@ -158,14 +158,9 @@
 <body>
 
 <!-- ===================== MIGRATION NOTICE ===================== -->
-<div style="background:{{ '#b91c1c' if readonly_mode else '#b45309' }};color:#fff;padding:9px 16px;text-align:center;font-size:12.5px;line-height:1.5;position:relative;z-index:80">
-  {% if readonly_mode %}
-    <strong>This system has been retired and is now read-only.</strong>
-    All data has already been migrated &mdash; please switch to the new Dashboard Tracker at
-  {% else %}
-    <strong>Heads up:</strong> this system is being retired on {{ readonly_cutoff_label }} and will become read-only.
-    All data has already been migrated &mdash; please switch to the new Dashboard Tracker at
-  {% endif %}
+<div style="background:#b91c1c;color:#fff;padding:9px 16px;text-align:center;font-size:12.5px;line-height:1.5;position:relative;z-index:80">
+  <strong>This system has been retired and is permanently read-only.</strong>
+  Nothing can be added or edited here. All data has been migrated &mdash; please use the new Dashboard Tracker at
   <a href="{{ new_dashboard_url }}" target="_blank" rel="noopener" style="color:#fff;text-decoration:underline;font-weight:600">{{ new_dashboard_url }}</a>.
 </div>
 

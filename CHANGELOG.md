@@ -6,6 +6,19 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [1.9.4] - 2026-10-04
+### Changed
+- **Permanently read-only, unconditionally.** The 1.9.3 lockdown was
+  date-gated (October 1, 2026); it is now always on, so a wrong server clock
+  or a missed reload can't leave writes open. Every non-read request
+  (anything other than GET/HEAD/OPTIONS) is rejected with a 403 except
+  login/logout, and sign-ins no longer write a login-history row, so the
+  database does not change at all. Banner reworded to "permanently read-only".
+
+Verified locally: GET endpoints and login work; POST/PUT/DELETE/PATCH on
+deals, tasks, users, config, imports and sync endpoints all return 403; row
+counts in every table were identical before and after the test.
+
 ## [1.9.3] - 2026-09-30
 ### Added
 - **Sunset notice and automatic read-only lockdown.** This deployment is

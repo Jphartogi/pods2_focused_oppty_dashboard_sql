@@ -22,7 +22,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "1.9.3"
+APP_VERSION = "1.9.4"
 
 # Keep the database next to app.py so it persists in a predictable location
 # regardless of the host's working directory (Render, PythonAnywhere, Docker, etc.).
@@ -32,30 +32,26 @@ DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "db.sqlite3"))
 app = Flask(__name__)
 
 # --------------------------------------------------------------------------
-# Sunset notice: this v1.9 deployment is retired in favor of v2.0
-# (https://pods2.jphartogi.com). The UI shows a migration banner well before
-# the cutoff so nobody is surprised; from READONLY_CUTOFF onward every write
-# request is also blocked at the API level (not just hidden in the UI, so it
-# can't be bypassed by calling the API directly). Login/logout stay open so
-# anyone who still needs to look something up here can still sign in.
+# Retired deployment: v1.9 is permanently READ-ONLY. It has been replaced by
+# v2.0 (https://pods2.jphartogi.com), which holds the migrated data. Every
+# request that isn't a plain read is rejected at the API level (not just
+# hidden in the UI), unconditionally - no date check, so a wrong server clock
+# or a missed reload can't leave writes open. Only login/logout stay open so
+# anyone who still needs to look something up can sign in.
 # --------------------------------------------------------------------------
-READONLY_CUTOFF = date(2026, 10, 1)
 READONLY_CUTOFF_LABEL = "October 1, 2026"
 NEW_DASHBOARD_URL = "https://pods2.jphartogi.com"
 _READONLY_EXEMPT_PATHS = {"/api/login", "/api/logout"}
+_READ_METHODS = ("GET", "HEAD", "OPTIONS")
 
 
 def is_readonly_mode():
-    return date.today() >= READONLY_CUTOFF
+    return True
 
 
 @app.before_request
-def _enforce_readonly_after_cutoff():
-    if (
-        is_readonly_mode()
-        and request.method in ("POST", "PUT", "DELETE", "PATCH")
-        and request.path not in _READONLY_EXEMPT_PATHS
-    ):
+def _enforce_readonly():
+    if request.method not in _READ_METHODS and request.path not in _READONLY_EXEMPT_PATHS:
         return jsonify({
             "error": f"This version was retired on {READONLY_CUTOFF_LABEL} and is now read-only. "
                      f"Please use the new Dashboard Tracker at {NEW_DASHBOARD_URL} - "
@@ -830,7 +826,7 @@ def api_login():
         "role": row["role"],
         "full_name": row["full_name"] or row["username"],
     }
-    log_login(db, row)
+    # read-only: no login_logs row written
     db.commit()
     return jsonify({
         "token": token,
