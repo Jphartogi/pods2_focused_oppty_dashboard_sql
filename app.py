@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.11.0"
+APP_VERSION = "2.12.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -336,6 +336,31 @@ def init_db():
             db.execute("SELECT pg_advisory_unlock(84177235)")
 
 
+def _seed_visit_tracker(db):
+    """First boot only: load the 6 AMs and 104 accounts for the Visit Tracker."""
+    if db.execute("SELECT COUNT(*) FROM visit_accounts").fetchone()["count"] > 0:
+        return
+    seed_path = os.path.join(BASE_DIR, "seed", "visit_accounts_seed.json")
+    if not os.path.exists(seed_path):
+        return
+    with open(seed_path, encoding="utf-8") as f:
+        seed = json.load(f)
+    am_ids = {}
+    for name in seed["account_managers"]:
+        row = db.execute(
+            "INSERT INTO visit_account_managers (name) VALUES (%s) "
+            "ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id", (name,)
+        ).fetchone()
+        am_ids[name] = row["id"]
+    for a in seed["accounts"]:
+        db.execute(
+            """INSERT INTO visit_accounts (am_id, name, type, cadence, target_idr_mn, mrc_idr_mn, anchor, note)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (name) DO NOTHING""",
+            (am_ids[a["am"]], a["name"], a["type"], a["cad"], a.get("target"), a.get("mrc"),
+             a.get("anchor") or "", a.get("note") or ""),
+        )
+
+
 def _init_schema_and_seed(db):
         db.execute(
             """
@@ -504,6 +529,47 @@ def _init_schema_and_seed(db):
                 read_at TIMESTAMP,
                 UNIQUE(user_full_name, notif_key)
             );
+
+            CREATE TABLE IF NOT EXISTS visit_account_managers (
+                id SERIAL PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS visit_accounts (
+                id SERIAL PRIMARY KEY,
+                am_id INTEGER NOT NULL REFERENCES visit_account_managers(id),
+                name TEXT UNIQUE NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('Priority', 'Other')),
+                cadence TEXT NOT NULL CHECK(cadence IN ('Weekly', 'Fortnightly', 'Monthly', 'Quarterly')),
+                target_idr_mn REAL,
+                mrc_idr_mn REAL,
+                anchor TEXT DEFAULT '',
+                note TEXT DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS visit_tasks (
+                id SERIAL PRIMARY KEY,
+                task_date TEXT NOT NULL,
+                am_id INTEGER NOT NULL REFERENCES visit_account_managers(id),
+                account_id INTEGER NOT NULL REFERENCES visit_accounts(id),
+                activity TEXT NOT NULL,
+                topic TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'Planned',
+                outcome TEXT DEFAULT '',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
+            );
+
+            CREATE TABLE IF NOT EXISTS visit_blockers (
+                id SERIAL PRIMARY KEY,
+                date_raised TEXT NOT NULL,
+                am_id INTEGER NOT NULL REFERENCES visit_account_managers(id),
+                text TEXT NOT NULL,
+                escalate_to TEXT NOT NULL,
+                due_date TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'Open'
+            );
             """
         )
 
@@ -544,6 +610,8 @@ def _init_schema_and_seed(db):
                 (163_000_000_000, json.dumps(DEFAULT_PILLARS), json.dumps(DEFAULT_SQUADS),
                  json.dumps(DEFAULT_AM_TARGETS), json.dumps(DEFAULT_STAGES)),
             )
+
+        _seed_visit_tracker(db)
 
         # Seed deals if empty
         if db.execute("SELECT COUNT(*) FROM deals").fetchone()["count"] == 0:
@@ -1785,6 +1853,447 @@ def mark_notification_read():
            ON CONFLICT (user_full_name, notif_key) DO UPDATE SET read_at = CURRENT_TIMESTAMP""",
         (full_name, key),
     )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# Visit Tracker: priority-account visit cadence, daily plan/log, blockers.
+# All status/plan/overdue values are computed here, never typed.
+# --------------------------------------------------------------------------
+VISIT_SETTINGS = {
+    "tracking_start_date": date(2026, 10, 15),
+    "end_date": date(2026, 12, 31),
+    "hard_limit_multiple": 2,
+    "cadence_days": {"Weekly": 7, "Fortnightly": 14, "Monthly": 30, "Quarterly": 90},
+    "holidays": {date(2026, 12, 24), date(2026, 12, 25)},
+}
+VISIT_ACTIVITIES = ("Visit (in person)", "Video meeting", "Call / WhatsApp",
+                    "Proposal / quotation", "Internal / admin")
+VISIT_COUNTED_ACTIVITIES = ("Visit (in person)", "Video meeting")
+VISIT_TASK_STATUSES = ("Planned", "Done", "Moved", "Cancelled")
+VISIT_ESCALATE_TO = ("PODS Lead", "Group Head", "Management / BOD", "Solution team",
+                     "Pricing / finance", "Other")
+VISIT_BLOCKER_STATUSES = ("Open", "Escalated", "Resolved")
+VISIT_ACCOUNT_TYPES = ("Priority", "Other")
+VISIT_ROLES = ("admin", "management", "account_manager")
+
+
+def visit_today():
+    return datetime.now(JAKARTA_TZ).date()
+
+
+def _parse_iso_date(value):
+    try:
+        return date.fromisoformat(str(value or "").strip())
+    except ValueError:
+        return None
+
+
+def _is_visit_working_day(d):
+    s = VISIT_SETTINGS
+    return (s["tracking_start_date"] <= d <= s["end_date"]
+            and d.weekday() < 5 and d not in s["holidays"])
+
+
+def _name_tokens(name):
+    return {t for t in re.split(r"[^a-z0-9]+", (name or "").lower()) if t}
+
+
+def _names_match(a, b):
+    ta, tb = _name_tokens(a), _name_tokens(b)
+    return bool(ta and tb and (ta <= tb or tb <= ta))
+
+
+def _visit_am_for_user(db, user):
+    """The visit-tracker AM this login is: an explicit link wins, otherwise a
+    name match (tolerates 'Dimas Aradzna' vs 'Dimas Aradzna Himawan Nugroho')."""
+    ams = db.execute("SELECT * FROM visit_account_managers ORDER BY id").fetchall()
+    for am in ams:
+        if am["user_id"] == user["user_id"]:
+            return am
+    linked_ids = {am["user_id"] for am in ams if am["user_id"]}
+    if user["user_id"] in linked_ids:
+        return None
+    for am in ams:
+        if not am["user_id"] and _names_match(am["name"], user["full_name"]):
+            return am
+    return None
+
+
+def _visit_scope(db, user):
+    """-> (my_am_row_or_None, sees_all, may_write_any)."""
+    if user["role"] == "account_manager":
+        return _visit_am_for_user(db, user), False, False
+    return None, True, user["role"] == "admin"
+
+
+def compute_visit_metrics(accounts, tasks, today):
+    s = VISIT_SETTINGS
+    last, nxt = {}, {}
+    for t in tasks:
+        if t["activity"] not in VISIT_COUNTED_ACTIVITIES:
+            continue
+        d = _parse_iso_date(t["task_date"])
+        if not d:
+            continue
+        aid = t["account_id"]
+        if t["status"] == "Done":
+            if aid not in last or d > last[aid]:
+                last[aid] = d
+        elif t["status"] == "Planned" and d >= today:
+            if aid not in nxt or d < nxt[aid]:
+                nxt[aid] = d
+    out = {}
+    for a in accounts:
+        lv, np_ = last.get(a["id"]), nxt.get(a["id"])
+        base = lv or s["tracking_start_date"]
+        days_since = max(0, (today - base).days)
+        cd = s["cadence_days"][a["cadence"]]
+        mult = s["hard_limit_multiple"]
+        status = "On track" if days_since <= cd else ("Slipping" if days_since <= cd * mult else "Overdue")
+        hard = base + timedelta(days=cd * mult)
+        plan = None
+        if a["type"] == "Priority":
+            plan = "No visit planned" if not np_ else ("Beyond limit" if np_ > hard else "OK")
+        out[a["id"]] = {
+            "last_visit": lv.isoformat() if lv else None,
+            "days_since": days_since,
+            "cadence_days": cd,
+            "status": status,
+            "next_planned_visit": np_.isoformat() if np_ else None,
+            "hard_limit_date": hard.isoformat(),
+            "plan_check": plan,
+            "needs_attention": status != "On track" or plan not in (None, "OK"),
+        }
+    return out
+
+
+def _visit_account_dict(a, m):
+    return {"id": a["id"], "am_id": a["am_id"], "name": a["name"], "type": a["type"],
+            "cadence": a["cadence"], "target_idr_mn": a["target_idr_mn"],
+            "mrc_idr_mn": a["mrc_idr_mn"], "note": a["note"] or "", **m}
+
+
+def _visit_blocker_dict(b, am_name, today):
+    due = _parse_iso_date(b["due_date"])
+    return {"id": b["id"], "date_raised": b["date_raised"], "am_id": b["am_id"], "am_name": am_name,
+            "text": b["text"], "escalate_to": b["escalate_to"], "due_date": b["due_date"] or "",
+            "status": b["status"],
+            "overdue": bool(due and due < today and b["status"] != "Resolved")}
+
+
+@app.route("/api/visit/overview", methods=["GET"])
+@login_required(roles=VISIT_ROLES)
+def visit_overview():
+    db = get_db()
+    user = g.current_user
+    my_am, sees_all, may_write_any = _visit_scope(db, user)
+    today = visit_today()
+    ams = db.execute("SELECT * FROM visit_account_managers ORDER BY id").fetchall()
+    if not sees_all:
+        ams = [a for a in ams if my_am and a["id"] == my_am["id"]]
+    am_ids = [a["id"] for a in ams]
+    accounts = db.execute(
+        "SELECT * FROM visit_accounts WHERE am_id = ANY(%s) ORDER BY am_id, "
+        "CASE type WHEN 'Priority' THEN 0 ELSE 1 END, id", (am_ids,)).fetchall() if am_ids else []
+    tasks = db.execute(
+        "SELECT account_id, activity, status, task_date FROM visit_tasks WHERE am_id = ANY(%s)",
+        (am_ids,)).fetchall() if am_ids else []
+    metrics = compute_visit_metrics(accounts, tasks, today)
+    logged_ids = {r["am_id"] for r in db.execute(
+        "SELECT DISTINCT am_id FROM visit_tasks WHERE task_date = %s", (today.isoformat(),)).fetchall()}
+    blockers = db.execute(
+        "SELECT * FROM visit_blockers WHERE am_id = ANY(%s) AND status != 'Resolved'",
+        (am_ids,)).fetchall() if am_ids else []
+    acct_out = [_visit_account_dict(a, metrics[a["id"]]) for a in accounts]
+    am_out, tot = [], {"priority": 0, "on_track": 0, "slipping": 0, "overdue": 0, "no_plan": 0, "open_blockers": 0}
+    for am in ams:
+        pri = [a for a in acct_out if a["am_id"] == am["id"] and a["type"] == "Priority"]
+        row = {"id": am["id"], "name": am["name"], "user_id": am["user_id"],
+               "priority": len(pri),
+               "on_track": sum(1 for a in pri if a["status"] == "On track"),
+               "slipping": sum(1 for a in pri if a["status"] == "Slipping"),
+               "overdue": sum(1 for a in pri if a["status"] == "Overdue"),
+               "no_plan": sum(1 for a in pri if a["plan_check"] == "No visit planned"),
+               "logged_today": am["id"] in logged_ids,
+               "open_blockers": sum(1 for b in blockers if b["am_id"] == am["id"])}
+        for k, tk in (("priority", "priority"), ("on_track", "on_track"), ("slipping", "slipping"),
+                      ("overdue", "overdue"), ("no_plan", "no_plan"), ("open_blockers", "open_blockers")):
+            tot[k] += row[tk]
+        am_out.append(row)
+    return jsonify({
+        "today": today.isoformat(), "tracking_start_date": VISIT_SETTINGS["tracking_start_date"].isoformat(),
+        "me": {"am_id": my_am["id"] if my_am else None, "can_write": bool(my_am) or may_write_any,
+               "is_admin": user["role"] == "admin", "sees_all": sees_all},
+        "enums": {"activities": VISIT_ACTIVITIES, "task_statuses": VISIT_TASK_STATUSES,
+                  "escalate_to": VISIT_ESCALATE_TO, "blocker_statuses": VISIT_BLOCKER_STATUSES,
+                  "cadences": list(VISIT_SETTINGS["cadence_days"]), "types": VISIT_ACCOUNT_TYPES},
+        "ams": am_out, "accounts": acct_out, "totals": tot,
+    })
+
+
+def _visit_task_dict(t, today):
+    d = _parse_iso_date(t["task_date"])
+    return {"id": t["id"], "task_date": t["task_date"], "am_id": t["am_id"], "am_name": t["am_name"],
+            "account_id": t["account_id"], "account_name": t["account_name"], "activity": t["activity"],
+            "topic": t["topic"] or "", "status": t["status"], "outcome": t["outcome"] or "",
+            "not_updated": bool(d and d < today and t["status"] == "Planned")}
+
+
+_VISIT_TASK_SELECT = """SELECT t.*, a.name AS account_name, m.name AS am_name FROM visit_tasks t
+    JOIN visit_accounts a ON a.id = t.account_id JOIN visit_account_managers m ON m.id = t.am_id"""
+
+
+@app.route("/api/visit/tasks", methods=["GET"])
+@login_required(roles=VISIT_ROLES)
+def visit_list_tasks():
+    db = get_db()
+    my_am, sees_all, _ = _visit_scope(db, g.current_user)
+    where, params = [], []
+    if not sees_all:
+        if not my_am:
+            return jsonify([])
+        where.append("t.am_id = %s"); params.append(my_am["id"])
+    args = request.args
+    for key, col in (("am_id", "t.am_id"), ("account_id", "t.account_id"),
+                     ("status", "t.status"), ("activity", "t.activity")):
+        if args.get(key):
+            where.append(f"{col} = %s"); params.append(args[key])
+    if args.get("date_from"):
+        where.append("t.task_date >= %s"); params.append(args["date_from"])
+    if args.get("date_to"):
+        where.append("t.task_date <= %s"); params.append(args["date_to"])
+    sql = _VISIT_TASK_SELECT + (" WHERE " + " AND ".join(where) if where else "") + \
+        " ORDER BY t.task_date DESC, t.id DESC LIMIT 500"
+    today = visit_today()
+    return jsonify([_visit_task_dict(r, today) for r in db.execute(sql, params).fetchall()])
+
+
+def _visit_write_guard(db, user, am_id_requested):
+    """-> (am_id, error_response). AMs write only as themselves; admin as anyone."""
+    if user["role"] == "management":
+        return None, (jsonify({"error": "Management is read-only here"}), 403)
+    if user["role"] == "account_manager":
+        my_am = _visit_am_for_user(db, user)
+        if not my_am:
+            return None, (jsonify({"error": "Your login isn't linked to a Visit Tracker account manager yet - ask the admin"}), 403)
+        return my_am["id"], None
+    if not am_id_requested:
+        return None, (jsonify({"error": "am_id is required"}), 400)
+    return int(am_id_requested), None
+
+
+def _validate_visit_task(db, data, am_id):
+    task_date = _parse_iso_date(data.get("task_date"))
+    if not task_date:
+        return None, "A valid date is required"
+    activity, status = data.get("activity"), data.get("status") or "Planned"
+    if activity not in VISIT_ACTIVITIES:
+        return None, "Pick an activity from the list"
+    if status not in VISIT_TASK_STATUSES:
+        return None, "Pick a status from the list"
+    acct = db.execute("SELECT * FROM visit_accounts WHERE id = %s", (data.get("account_id"),)).fetchone()
+    if not acct or acct["am_id"] != am_id:
+        return None, "Pick one of this account manager's own accounts"
+    return {"task_date": task_date, "activity": activity, "status": status, "account_id": acct["id"],
+            "topic": (data.get("topic") or "").strip(), "outcome": (data.get("outcome") or "").strip()}, None
+
+
+@app.route("/api/visit/tasks", methods=["POST"])
+@login_required(roles=VISIT_ROLES)
+def visit_create_task():
+    db = get_db()
+    data = request.get_json(force=True) or {}
+    am_id, err = _visit_write_guard(db, g.current_user, data.get("am_id"))
+    if err:
+        return err
+    v, msg = _validate_visit_task(db, data, am_id)
+    if msg:
+        return jsonify({"error": msg}), 400
+    new_id = db.execute(
+        """INSERT INTO visit_tasks (task_date, am_id, account_id, activity, topic, status, outcome)
+           VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+        (v["task_date"].isoformat(), am_id, v["account_id"], v["activity"], v["topic"], v["status"], v["outcome"]),
+    ).fetchone()["id"]
+    db.commit()
+    row = db.execute(_VISIT_TASK_SELECT + " WHERE t.id = %s", (new_id,)).fetchone()
+    resp = _visit_task_dict(row, visit_today())
+    if not _is_visit_working_day(v["task_date"]):
+        resp["warning"] = "That date is outside the tracked working days (15 Oct - 31 Dec, Mon-Fri, excl. 24-25 Dec)"
+    return jsonify(resp), 201
+
+
+def _own_visit_task(db, user, task_id):
+    row = db.execute("SELECT * FROM visit_tasks WHERE id = %s", (task_id,)).fetchone()
+    if not row:
+        return None, (jsonify({"error": "Task not found"}), 404)
+    am_id, err = _visit_write_guard(db, user, row["am_id"])
+    if err:
+        return None, err
+    if am_id != row["am_id"]:
+        return None, (jsonify({"error": "You can only change your own tasks"}), 403)
+    return row, None
+
+
+@app.route("/api/visit/tasks/<int:task_id>", methods=["PUT"])
+@login_required(roles=VISIT_ROLES)
+def visit_update_task(task_id):
+    db = get_db()
+    row, err = _own_visit_task(db, g.current_user, task_id)
+    if err:
+        return err
+    data = request.get_json(force=True) or {}
+    v, msg = _validate_visit_task(db, data, row["am_id"])
+    if msg:
+        return jsonify({"error": msg}), 400
+    db.execute(
+        """UPDATE visit_tasks SET task_date=%s, account_id=%s, activity=%s, topic=%s, status=%s,
+           outcome=%s, updated_at=CURRENT_TIMESTAMP::text WHERE id=%s""",
+        (v["task_date"].isoformat(), v["account_id"], v["activity"], v["topic"], v["status"], v["outcome"], task_id))
+    db.commit()
+    r = db.execute(_VISIT_TASK_SELECT + " WHERE t.id = %s", (task_id,)).fetchone()
+    resp = _visit_task_dict(r, visit_today())
+    if not _is_visit_working_day(v["task_date"]):
+        resp["warning"] = "That date is outside the tracked working days (15 Oct - 31 Dec, Mon-Fri, excl. 24-25 Dec)"
+    return jsonify(resp)
+
+
+@app.route("/api/visit/tasks/<int:task_id>", methods=["DELETE"])
+@login_required(roles=VISIT_ROLES)
+def visit_delete_task(task_id):
+    db = get_db()
+    _, err = _own_visit_task(db, g.current_user, task_id)
+    if err:
+        return err
+    db.execute("DELETE FROM visit_tasks WHERE id = %s", (task_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/visit/blockers", methods=["GET"])
+@login_required(roles=VISIT_ROLES)
+def visit_list_blockers():
+    db = get_db()
+    my_am, sees_all, _ = _visit_scope(db, g.current_user)
+    if not sees_all and not my_am:
+        return jsonify([])
+    rows = db.execute(
+        """SELECT b.*, m.name AS am_name FROM visit_blockers b JOIN visit_account_managers m ON m.id = b.am_id
+           WHERE (%s OR b.am_id = %s) ORDER BY (b.status = 'Resolved'), b.due_date, b.id DESC""",
+        (sees_all, my_am["id"] if my_am else 0)).fetchall()
+    today = visit_today()
+    return jsonify([_visit_blocker_dict(r, r["am_name"], today) for r in rows])
+
+
+def _validate_visit_blocker(data):
+    text = (data.get("text") or "").strip()
+    if not text:
+        return None, "Describe the blocker (one sentence, include the account)"
+    esc, status = data.get("escalate_to"), data.get("status") or "Open"
+    if esc not in VISIT_ESCALATE_TO:
+        return None, "Pick who to escalate to from the list"
+    if status not in VISIT_BLOCKER_STATUSES:
+        return None, "Pick a status from the list"
+    due = (data.get("due_date") or "").strip()
+    if due and not _parse_iso_date(due):
+        return None, "Due date is not a valid date"
+    return {"text": text, "escalate_to": esc, "status": status, "due_date": due}, None
+
+
+@app.route("/api/visit/blockers", methods=["POST"])
+@login_required(roles=VISIT_ROLES)
+def visit_create_blocker():
+    db = get_db()
+    data = request.get_json(force=True) or {}
+    am_id, err = _visit_write_guard(db, g.current_user, data.get("am_id"))
+    if err:
+        return err
+    v, msg = _validate_visit_blocker(data)
+    if msg:
+        return jsonify({"error": msg}), 400
+    new_id = db.execute(
+        """INSERT INTO visit_blockers (date_raised, am_id, text, escalate_to, due_date, status)
+           VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+        (visit_today().isoformat(), am_id, v["text"], v["escalate_to"], v["due_date"], v["status"])).fetchone()["id"]
+    db.commit()
+    return jsonify({"id": new_id}), 201
+
+
+def _own_visit_blocker(db, user, blocker_id):
+    row = db.execute("SELECT * FROM visit_blockers WHERE id = %s", (blocker_id,)).fetchone()
+    if not row:
+        return None, (jsonify({"error": "Blocker not found"}), 404)
+    am_id, err = _visit_write_guard(db, user, row["am_id"])
+    if err:
+        return None, err
+    if am_id != row["am_id"]:
+        return None, (jsonify({"error": "You can only change your own blockers"}), 403)
+    return row, None
+
+
+@app.route("/api/visit/blockers/<int:blocker_id>", methods=["PUT"])
+@login_required(roles=VISIT_ROLES)
+def visit_update_blocker(blocker_id):
+    db = get_db()
+    row, err = _own_visit_blocker(db, g.current_user, blocker_id)
+    if err:
+        return err
+    v, msg = _validate_visit_blocker(request.get_json(force=True) or {})
+    if msg:
+        return jsonify({"error": msg}), 400
+    db.execute("UPDATE visit_blockers SET text=%s, escalate_to=%s, due_date=%s, status=%s WHERE id=%s",
+               (v["text"], v["escalate_to"], v["due_date"], v["status"], blocker_id))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/visit/blockers/<int:blocker_id>", methods=["DELETE"])
+@login_required(roles=VISIT_ROLES)
+def visit_delete_blocker(blocker_id):
+    db = get_db()
+    _, err = _own_visit_blocker(db, g.current_user, blocker_id)
+    if err:
+        return err
+    db.execute("DELETE FROM visit_blockers WHERE id = %s", (blocker_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/visit/accounts/<int:account_id>", methods=["PUT"])
+@login_required(roles=("admin",))
+def visit_update_account(account_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM visit_accounts WHERE id = %s", (account_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Account not found"}), 404
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or row["name"]).strip()
+    typ = data.get("type", row["type"])
+    cad = data.get("cadence", row["cadence"])
+    if typ not in VISIT_ACCOUNT_TYPES or cad not in VISIT_SETTINGS["cadence_days"] or not name:
+        return jsonify({"error": "Invalid name, type or cadence"}), 400
+    if db.execute("SELECT 1 FROM visit_accounts WHERE name = %s AND id != %s", (name, account_id)).fetchone():
+        return jsonify({"error": "Another account already has that name"}), 409
+    db.execute("UPDATE visit_accounts SET name=%s, type=%s, cadence=%s, note=%s WHERE id=%s",
+               (name, typ, cad, (data.get("note", row["note"]) or "").strip(), account_id))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/visit/ams/<int:am_id>", methods=["PUT"])
+@login_required(roles=("admin",))
+def visit_link_am(am_id):
+    db = get_db()
+    data = request.get_json(force=True) or {}
+    user_id = data.get("user_id") or None
+    if user_id and not db.execute("SELECT 1 FROM users WHERE id = %s", (user_id,)).fetchone():
+        return jsonify({"error": "User not found"}), 404
+    if not db.execute("SELECT 1 FROM visit_account_managers WHERE id = %s", (am_id,)).fetchone():
+        return jsonify({"error": "Account manager not found"}), 404
+    if user_id:
+        db.execute("UPDATE visit_account_managers SET user_id = NULL WHERE user_id = %s", (user_id,))
+    db.execute("UPDATE visit_account_managers SET user_id = %s WHERE id = %s", (user_id, am_id))
     db.commit()
     return jsonify({"ok": True})
 
