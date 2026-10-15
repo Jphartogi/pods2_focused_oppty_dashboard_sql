@@ -6,6 +6,19 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.12.0] - 2026-10-15 (branch: v2.0)
+### Added
+- **Visit Tracker** (new nav item): priority-account visit cadence, daily plan/log and blockers, built from `PODS2_Visit_Tracker_Feature_Spec.md`.
+  - **Summary** (admin/management): 6 KPI tiles, per-AM table (priority, on track, slipping, overdue, no visit planned, logged today?, open blockers; names link to the AM page) and a Priority account monitor with AM and "only needing attention" filters.
+  - **AM page**: priority accounts with last visit, status, plan check, days since and next planned visit; a "no visit planned" reminder for the 16:45 deadline; Daily log with filters, add/edit/delete and one-click "mark done"; planned tasks dated in the past are flagged "not updated".
+  - **Accounts**: all 104 accounts with computed columns; target/MRC/notes hidden behind a toggle; admin can edit name, type, cadence and note, and link an AM to a login.
+  - **Blockers**: raise/edit/resolve, escalate-to, due date, computed Overdue.
+  - Rules computed server-side: only a Done Visit (in person) or Video meeting counts as a visit; status On track/Slipping/Overdue from cadence (7/14/30/90 days) with a 2x hard limit; plan check OK/No visit planned/Beyond limit for priority accounts. Dates outside 15 Oct-31 Dec working days are accepted with a warning.
+  - Role scoping: an AM sees and edits only their own page; management is read-only; admin edits for anyone. AMs are matched to logins by name (e.g. "Ashari" to "Ashari Asrar"), with an explicit link as override.
+  - New tables `visit_account_managers`, `visit_accounts`, `visit_tasks`, `visit_blockers`; seeded once from `seed/visit_accounts_seed.json` (6 AMs, 104 accounts).
+
+Verified locally: seed counts (6/104, 32 priority), all four spec test cases (call does not change last visit, planned visit 30 days out is "Beyond limit", days-since from tracking start), AM can't log against another AM's account, management write rejected, weekend/holiday warning, overdue blocker; UI checked as admin, AM and management with no console errors.
+
 ## [2.11.0] - 2026-09-30 (branch: v2.0)
 ### Added
 - **Weekly Plan's "Goal of the visit" is now multiple points**, not one

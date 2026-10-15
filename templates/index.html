@@ -348,6 +348,18 @@
   .cov-seg { transition: width .6s cubic-bezier(.22,.9,.35,1); }
   .cov-pill { display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:4px 10px 4px 8px; border-radius:9999px; background:var(--surface-2); color:var(--text-muted); }
   .metric-context-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; padding-top:16px; border-top:1px solid var(--border); }
+  .vt-chip { display:inline-block; padding:2px 9px; border-radius:9999px; font-size:11px; font-weight:600; white-space:nowrap; }
+  .vt-ok { background:#D1E7DD; color:#146C43; } .vt-warn { background:#FFF3CD; color:#9A6700; } .vt-bad { background:#F8D7DA; color:#842029; }
+  [data-theme="dark"] .vt-ok { background:rgba(46,160,106,.18); color:#5fd39a; }
+  [data-theme="dark"] .vt-warn { background:rgba(230,170,40,.18); color:#f0c35a; }
+  [data-theme="dark"] .vt-bad { background:rgba(230,80,90,.18); color:#f08a92; }
+  .vt-table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  .vt-table th { text-align:left; font-weight:600; font-size:11px; letter-spacing:.03em; text-transform:uppercase; color:var(--text-muted); padding:8px 10px; border-bottom:1px solid var(--border); }
+  .vt-table td { padding:9px 10px; border-top:1px solid var(--border); color:var(--text); vertical-align:top; }
+  .vt-table tr.vt-stale td { background:rgba(230,170,40,.10); }
+  .vt-tabbtn { padding:7px 14px; font-size:13px; border-radius:8px; color:var(--text-muted); }
+  .vt-tabbtn.active { background:var(--primary-soft); color:var(--primary); font-weight:600; }
+  .vt-link { color:var(--primary); cursor:pointer; text-decoration:underline; }
   .metric-context-item { display:inline-flex; align-items:center; gap:7px; font-size:12px; padding:5px 12px; border-radius:9999px; background:var(--surface-2); }
 </style>
 </head>
@@ -488,6 +500,7 @@
           <div class="nav-group-items space-y-1">
             <button data-tab="tracker" id="trackerNavBtn" title="My Tracker" class="nav-link active w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-table-cells-large w-4"></i> <span class="rail-label">My Tracker</span></button>
             <button data-tab="weeklyplan" id="weeklyPlanNavBtn" title="My Weekly Plan" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-calendar-week w-4"></i> <span class="rail-label">My Weekly Plan</span></button>
+            <button data-tab="visits" id="visitNavBtn" title="Visit Tracker" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-route w-4"></i> <span class="rail-label">Visit Tracker</span></button>
           </div>
         </div>
         <!-- Analytics -->
@@ -851,6 +864,77 @@
             <div id="wpEntryReadFooter" class="flex justify-end pt-2" style="display:none">
               <button type="button" data-close-modal="wpEntryModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Close</button>
             </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ============ VISIT TRACKER ============ -->
+      <section id="tab-visits" class="tab-panel px-8 py-7">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
+          <div>
+            <p class="section-label mb-1">Sales Cadence</p>
+            <p class="page-title">Visit Tracker</p>
+          </div>
+          <p id="vtAsOf" class="text-[11px]" style="color:var(--text-faint)"></p>
+        </div>
+        <div id="vtTabs" class="flex flex-wrap gap-1.5 mb-4"></div>
+        <div id="vtBody"></div>
+      </section>
+
+      <div id="vtTaskModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
+        <div class="card w-full max-w-lg elev p-6" style="contain:none">
+          <div class="flex items-start justify-between mb-4"><p id="vtTaskTitle" class="text-sm font-semibold" style="color:var(--text)">Log / plan a task</p><button data-close-modal="vtTaskModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+          <form id="vtTaskForm" class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Date</label><input id="vtTaskDate" type="date" required class="field w-full px-3 py-2 text-sm"></div>
+              <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Account manager</label><select id="vtTaskAm" class="field w-full px-3 py-2 text-sm"></select></div>
+            </div>
+            <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Account</label><select id="vtTaskAccount" required class="field w-full px-3 py-2 text-sm"></select></div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Activity</label><select id="vtTaskActivity" class="field w-full px-3 py-2 text-sm"></select></div>
+              <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Status</label><select id="vtTaskStatus" class="field w-full px-3 py-2 text-sm"></select></div>
+            </div>
+            <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Task / topic</label><input id="vtTaskTopic" type="text" class="field w-full px-3 py-2 text-sm"></div>
+            <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Outcome / next step</label><textarea id="vtTaskOutcome" rows="2" class="field w-full px-3 py-2 text-sm"></textarea></div>
+            <p class="text-[10px]" style="color:var(--text-faint)">Only a Done visit (in person) or video meeting counts as a visit - calls and WhatsApp are logged but don't reset the clock.</p>
+            <div class="flex items-center gap-2 pt-1">
+              <button type="button" id="vtTaskDeleteBtn" class="text-sm px-3 py-2 rounded-lg" style="color:var(--danger);display:none"><i class="fa-solid fa-trash mr-1"></i>Delete</button>
+              <div class="flex gap-2 ml-auto"><button type="button" data-close-modal="vtTaskModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button></div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div id="vtBlockerModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
+        <div class="card w-full max-w-lg elev p-6" style="contain:none">
+          <div class="flex items-start justify-between mb-4"><p id="vtBlockerTitle" class="text-sm font-semibold" style="color:var(--text)">Raise a blocker</p><button data-close-modal="vtBlockerModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+          <form id="vtBlockerForm" class="space-y-3">
+            <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Account manager</label><select id="vtBlockerAm" class="field w-full px-3 py-2 text-sm"></select></div>
+            <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Blocker <span style="color:var(--text-faint)">(one sentence, include the account)</span></label><textarea id="vtBlockerText" rows="2" required class="field w-full px-3 py-2 text-sm"></textarea></div>
+            <div class="grid grid-cols-3 gap-3">
+              <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Escalate to</label><select id="vtBlockerEsc" class="field w-full px-3 py-2 text-sm"></select></div>
+              <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Due date</label><input id="vtBlockerDue" type="date" class="field w-full px-3 py-2 text-sm"></div>
+              <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Status</label><select id="vtBlockerStatus" class="field w-full px-3 py-2 text-sm"></select></div>
+            </div>
+            <div class="flex items-center gap-2 pt-1">
+              <button type="button" id="vtBlockerDeleteBtn" class="text-sm px-3 py-2 rounded-lg" style="color:var(--danger);display:none"><i class="fa-solid fa-trash mr-1"></i>Delete</button>
+              <div class="flex gap-2 ml-auto"><button type="button" data-close-modal="vtBlockerModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button></div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div id="vtAccountModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
+        <div class="card w-full max-w-md elev p-6" style="contain:none">
+          <div class="flex items-start justify-between mb-4"><p class="text-sm font-semibold" style="color:var(--text)">Edit account</p><button data-close-modal="vtAccountModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+          <form id="vtAccountForm" class="space-y-3">
+            <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Account name</label><input id="vtAccName" type="text" required class="field w-full px-3 py-2 text-sm"></div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Type</label><select id="vtAccType" class="field w-full px-3 py-2 text-sm"></select></div>
+              <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Cadence</label><select id="vtAccCadence" class="field w-full px-3 py-2 text-sm"></select></div>
+            </div>
+            <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Note</label><input id="vtAccNote" type="text" class="field w-full px-3 py-2 text-sm"></div>
+            <div class="flex justify-end gap-2 pt-1"><button type="button" data-close-modal="vtAccountModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button></div>
           </form>
         </div>
       </div>
@@ -1955,7 +2039,7 @@ async function enterApp(){
   // their own task inbox, but not Weekly Plan / Analytics / Performance / any edit control.
   const isCrossFunctional = CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
   document.getElementById('myTeamTasksNavBtn').style.display = isCrossFunctional ? '' : 'none';
-  ['weeklyPlanNavBtn','analyticsNavBtn','perfNavBtn','coverageNavBtn'].forEach(id=>{
+  ['weeklyPlanNavBtn','visitNavBtn','analyticsNavBtn','perfNavBtn','coverageNavBtn'].forEach(id=>{
     document.getElementById(id).style.display = isCrossFunctional ? 'none' : '';
   });
   // Admin/management get an AM picker on Weekly Plan (to review anyone's plan, or
@@ -1990,7 +2074,7 @@ function switchTab(tab){
   if((tab==='settings'||tab==='configuration'||tab==='loginlogs') && ROLE!=='admin') return;
   if(tab==='management' && !(ROLE==='admin'||ROLE==='management')) return;
   if(tab==='myteamtasks' && !CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
-  if(['weeklyplan','analytics','performance','coverage'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
+  if(['weeklyplan','visits','analytics','performance','coverage'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
@@ -2005,6 +2089,7 @@ function switchTab(tab){
   if(tab==='configuration') renderConfiguration();
   if(tab==='loginlogs') renderLoginLogs();
   if(tab==='weeklyplan') renderWeeklyPlan();
+  if(tab==='visits') renderVisits();
   if(tab==='management') renderManagement();
   if(tab==='performance') renderPerformance();
   // Re-fetch (not just re-render) every time this tab opens - Account Coverage is
@@ -4006,6 +4091,214 @@ document.getElementById('wpNextBtn').addEventListener('click', ()=>{ WP_WEEK_STA
 document.getElementById('wpTodayBtn').addEventListener('click', ()=>{ WP_WEEK_START = ymd(startOfWeek(new Date())); renderWeeklyPlan(); });
 document.getElementById('wpAmFilter').addEventListener('change', renderWeeklyPlan);
 
+/* ================= VISIT TRACKER ================= */
+const VT = {data:null, tab:'summary', amId:null, tasks:[], blockers:[], mon:{am:'',show:'all'},
+            log:{status:'',account:'',activity:'',from:'',to:''}, showFin:false, editTask:null, editBlocker:null, editAcc:null};
+const VT_STATUS_CLS = {'On track':'vt-ok','Slipping':'vt-warn','Overdue':'vt-bad'};
+const VT_PLAN_CLS = {'OK':'vt-ok','No visit planned':'vt-warn','Beyond limit':'vt-bad'};
+const VT_TASK_CLS = {'Done':'vt-ok','Planned':'vt-warn','Moved':'','Cancelled':''};
+const vtChip=(t,c)=>`<span class="vt-chip ${c||''}" ${c?'':'style="background:var(--surface-2);color:var(--text-muted)"'}>${escapeHtml(t)}</span>`;
+function vtDate(d){ if(!d) return '—'; const [y,m,dd]=d.split('-'); return new Date(+y,+m-1,+dd).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
+const vtOpts=(arr,sel)=>arr.map(v=>`<option value="${escapeHtml(v)}" ${v===sel?'selected':''}>${escapeHtml(v)}</option>`).join('');
+const vtAmName=id=>{ const a=VT.data.ams.find(x=>x.id===id); return a?a.name:''; };
+const vtSel=(id,opts,val,extra)=>`<select id="${id}" class="field text-xs px-2 py-1.5" ${extra||''}>${opts}</select>`;
+function vtCanEdit(amId){ const me=VT.data.me; return me.is_admin || (me.am_id && me.am_id===amId); }
+
+async function renderVisits(){
+  const body=document.getElementById('vtBody');
+  try{ VT.data = await api('/api/visit/overview'); }
+  catch(e){ body.innerHTML=`<p class="text-sm" style="color:var(--danger)">${escapeHtml(e.message)}</p>`; return; }
+  const d=VT.data, me=d.me;
+  document.getElementById('vtAsOf').textContent = `Today ${vtDate(d.today)} · tracking since ${vtDate(d.tracking_start_date)}`;
+  const tabs = me.sees_all ? [['summary','Summary'],['am','AM page'],['accounts','Accounts'],['blockers','Blockers']] : [['am','My page'],['blockers','Blockers']];
+  if(!tabs.some(t=>t[0]===VT.tab)) VT.tab=tabs[0][0];
+  if(!VT.amId || !d.ams.some(a=>a.id===VT.amId)) VT.amId = me.am_id || (d.ams[0] && d.ams[0].id) || null;
+  document.getElementById('vtTabs').innerHTML = tabs.map(([k,l])=>`<button type="button" class="vt-tabbtn ${VT.tab===k?'active':''}" data-vt="${k}">${l}</button>`).join('');
+  document.querySelectorAll('#vtTabs .vt-tabbtn').forEach(b=>b.addEventListener('click',()=>{ VT.tab=b.dataset.vt; renderVisits(); }));
+  if(!me.sees_all && !me.am_id){
+    body.innerHTML=`<div class="card elev p-5 text-sm" style="color:var(--text-muted)">Your login isn't linked to a Visit Tracker account manager yet. Ask the admin to link it (Visit Tracker → Accounts).</div>`; return;
+  }
+  if(VT.tab==='summary') vtSummary(body);
+  else if(VT.tab==='am') await vtAmPage(body);
+  else if(VT.tab==='accounts') vtAccounts(body);
+  else await vtBlockers(body);
+}
+
+function vtSummary(body){
+  const d=VT.data, t=d.totals;
+  const tiles=[['Priority accounts',t.priority,'var(--primary)'],['On track',t.on_track,'var(--success)'],['Slipping',t.slipping,'var(--warning)'],
+               ['Overdue',t.overdue,'var(--danger)'],['No visit planned',t.no_plan,'var(--warning)'],['Open blockers',t.open_blockers,'var(--danger)']];
+  const rank={Overdue:0,Slipping:1,'On track':2};
+  const rows=d.accounts.filter(a=>a.type==='Priority' && (!VT.mon.am || String(a.am_id)===VT.mon.am) && (VT.mon.show==='all'||a.needs_attention))
+    .sort((a,b)=>rank[a.status]-rank[b.status] || b.days_since-a.days_since);
+  body.innerHTML=`
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">${tiles.map(([l,v,c])=>`<div class="stat-card" style="--stat-accent:${c}"><p class="stat-label">${l}</p><p class="stat-value">${v}</p></div>`).join('')}</div>
+    <div class="card elev p-5 mb-4"><p class="text-sm font-medium mb-3" style="color:var(--text)">By account manager</p>
+      <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account manager</th><th>Priority</th><th>On track</th><th>Slipping</th><th>Overdue</th><th>No visit planned</th><th>Logged today?</th><th>Open blockers</th></tr></thead><tbody>
+      ${d.ams.map(a=>`<tr><td><span class="vt-link" data-am="${a.id}">${escapeHtml(a.name)}</span></td><td>${a.priority}</td><td>${a.on_track}</td><td>${a.slipping}</td><td>${a.overdue}</td><td>${a.no_plan}</td>
+        <td>${a.logged_today?vtChip('Yes','vt-ok'):vtChip('Not yet','vt-warn')}</td><td>${a.open_blockers}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="card elev p-5"><div class="flex flex-wrap items-center gap-3 mb-3"><p class="text-sm font-medium" style="color:var(--text)">Priority account monitor</p><div class="flex-1"></div>
+      <label class="text-xs" style="color:var(--text-muted)">AM ${vtSel('vtMonAm',`<option value="">All</option>`+d.ams.map(a=>`<option value="${a.id}" ${String(a.id)===VT.mon.am?'selected':''}>${escapeHtml(a.name)}</option>`).join(''))}</label>
+      <label class="text-xs" style="color:var(--text-muted)">Show ${vtSel('vtMonShow',`<option value="all" ${VT.mon.show==='all'?'selected':''}>All priority accounts</option><option value="attn" ${VT.mon.show==='attn'?'selected':''}>Only needing attention</option>`)}</label></div>
+      <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account</th><th>AM</th><th>Last visit</th><th>Days since</th><th>Status</th><th>Next planned visit</th><th>Plan check</th></tr></thead><tbody>
+      ${rows.map(a=>`<tr><td class="font-medium">${escapeHtml(a.name)}</td><td>${escapeHtml(vtAmName(a.am_id))}</td><td>${a.last_visit?vtDate(a.last_visit):'<span style="color:var(--text-faint)">none yet</span>'}</td><td>${a.days_since}</td>
+        <td>${vtChip(a.status,VT_STATUS_CLS[a.status])}</td><td>${a.next_planned_visit?vtDate(a.next_planned_visit):'<span style="color:var(--text-faint)">none</span>'}</td><td>${vtChip(a.plan_check,VT_PLAN_CLS[a.plan_check])}</td></tr>`).join('')
+        || `<tr><td colspan="7" style="color:var(--text-faint)">Nothing needs attention.</td></tr>`}</tbody></table></div></div>`;
+  body.querySelectorAll('.vt-link').forEach(l=>l.addEventListener('click',()=>{ VT.amId=parseInt(l.dataset.am); VT.tab='am'; renderVisits(); }));
+  document.getElementById('vtMonAm').addEventListener('change',e=>{ VT.mon.am=e.target.value; vtSummary(body); });
+  document.getElementById('vtMonShow').addEventListener('change',e=>{ VT.mon.show=e.target.value; vtSummary(body); });
+}
+
+async function vtAmPage(body){
+  const d=VT.data, me=d.me, amId=VT.amId;
+  if(!amId){ body.innerHTML='<p class="text-sm" style="color:var(--text-faint)">No account manager.</p>'; return; }
+  const f=VT.log, q=new URLSearchParams({am_id:amId});
+  if(f.status) q.set('status',f.status); if(f.account) q.set('account_id',f.account); if(f.activity) q.set('activity',f.activity);
+  if(f.from) q.set('date_from',f.from); if(f.to) q.set('date_to',f.to);
+  VT.tasks = await api('/api/visit/tasks?'+q);
+  const accts=d.accounts.filter(a=>a.am_id===amId), pri=accts.filter(a=>a.type==='Priority');
+  const noPlan=pri.filter(a=>a.plan_check==='No visit planned');
+  const canEdit=vtCanEdit(amId);
+  const picker = me.sees_all ? `<label class="text-xs" style="color:var(--text-muted)">Account manager ${vtSel('vtAmPick',d.ams.map(a=>`<option value="${a.id}" ${a.id===amId?'selected':''}>${escapeHtml(a.name)}</option>`).join(''))}</label>` : '';
+  body.innerHTML=`
+    <div class="flex flex-wrap items-center gap-3 mb-3"><p class="text-lg font-semibold" style="color:var(--text)">${escapeHtml(vtAmName(amId))}</p><div class="flex-1"></div>${picker}</div>
+    ${noPlan.length?`<div class="rounded-lg px-4 py-3 mb-3 text-sm" style="background:rgba(230,170,40,.12);color:var(--text)"><i class="fa-solid fa-triangle-exclamation mr-1.5" style="color:var(--warning)"></i><b>${noPlan.length} priority account${noPlan.length>1?'s':''} still ha${noPlan.length>1?'ve':'s'} no visit planned</b> &mdash; plan before 16:45 for the 17:00 sync: ${noPlan.map(a=>escapeHtml(a.name)).join(', ')}</div>`:''}
+    <div class="card elev p-5 mb-4"><p class="text-sm font-medium mb-3" style="color:var(--text)">${me.sees_all?'Priority accounts':'My priority accounts'}</p>
+      <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Last visit</th><th>Account</th><th>Status</th><th>Plan check</th><th>Days since</th><th>Next planned visit</th></tr></thead><tbody>
+      ${pri.map(a=>`<tr><td>${a.last_visit?vtDate(a.last_visit):'<span style="color:var(--text-faint)">none yet</span>'}</td><td class="font-medium">${escapeHtml(a.name)}</td><td>${vtChip(a.status,VT_STATUS_CLS[a.status])}</td><td>${vtChip(a.plan_check,VT_PLAN_CLS[a.plan_check])}</td><td>${a.days_since}</td><td>${a.next_planned_visit?vtDate(a.next_planned_visit):'<span style="color:var(--text-faint)">none</span>'}</td></tr>`).join('')||'<tr><td colspan="6" style="color:var(--text-faint)">No priority accounts.</td></tr>'}</tbody></table></div></div>
+    <div class="card elev p-5"><div class="flex flex-wrap items-center gap-2 mb-3"><p class="text-sm font-medium" style="color:var(--text)">Daily log</p><div class="flex-1"></div>
+      ${vtSel('vtLfStatus',`<option value="">All statuses</option>`+vtOpts(d.enums.task_statuses,f.status))}
+      ${vtSel('vtLfAcc',`<option value="">All accounts</option>`+accts.map(a=>`<option value="${a.id}" ${String(a.id)===String(f.account)?'selected':''}>${escapeHtml(a.name)}</option>`).join(''))}
+      ${vtSel('vtLfAct',`<option value="">All activities</option>`+vtOpts(d.enums.activities,f.activity))}
+      <input id="vtLfFrom" type="date" value="${f.from}" class="field text-xs px-2 py-1.5" title="From"><input id="vtLfTo" type="date" value="${f.to}" class="field text-xs px-2 py-1.5" title="To">
+      ${canEdit?`<button type="button" id="vtAddTask" class="btn-primary text-xs px-3 py-1.5 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>Log / plan task</button>`:''}</div>
+      <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Date</th><th>Account</th><th>Activity</th><th>Task / topic</th><th>Status</th><th>Outcome / next step</th><th></th></tr></thead><tbody>
+      ${VT.tasks.map(t=>`<tr class="${t.not_updated?'vt-stale':''}"><td class="whitespace-nowrap">${vtDate(t.task_date)}</td><td>${escapeHtml(t.account_name)}</td><td>${escapeHtml(t.activity)}</td><td>${escapeHtml(t.topic)}</td>
+        <td>${vtChip(t.status,VT_TASK_CLS[t.status])}${t.not_updated?' '+vtChip('not updated','vt-warn'):''}</td><td>${escapeHtml(t.outcome)}</td>
+        <td class="whitespace-nowrap text-right">${canEdit?`${t.status==='Planned'?`<button type="button" class="vt-done text-xs mr-2" data-id="${t.id}" style="color:var(--success)" title="Mark done"><i class="fa-solid fa-check"></i></button>`:''}<button type="button" class="vt-edit text-xs" data-id="${t.id}" style="color:var(--primary)" title="Edit"><i class="fa-solid fa-pen"></i></button>`:''}</td></tr>`).join('')
+        || '<tr><td colspan="7" style="color:var(--text-faint)">Nothing logged for these filters yet.</td></tr>'}</tbody></table></div></div>`;
+  const re=()=>vtAmPage(body);
+  const pick=document.getElementById('vtAmPick'); if(pick) pick.addEventListener('change',e=>{ VT.amId=parseInt(e.target.value); VT.log.account=''; re(); });
+  [['vtLfStatus','status'],['vtLfAcc','account'],['vtLfAct','activity'],['vtLfFrom','from'],['vtLfTo','to']].forEach(([id,k])=>document.getElementById(id).addEventListener('change',e=>{ VT.log[k]=e.target.value; re(); }));
+  const add=document.getElementById('vtAddTask'); if(add) add.addEventListener('click',()=>vtOpenTask(null));
+  body.querySelectorAll('.vt-edit').forEach(b=>b.addEventListener('click',()=>vtOpenTask(VT.tasks.find(t=>String(t.id)===b.dataset.id))));
+  body.querySelectorAll('.vt-done').forEach(b=>b.addEventListener('click',async()=>{
+    const t=VT.tasks.find(x=>String(x.id)===b.dataset.id);
+    try{ await api('/api/visit/tasks/'+t.id,{method:'PUT',body:JSON.stringify({...t,status:'Done'})}); showToast('Marked done'); renderVisits(); }catch(e){ showToast(e.message,true); }
+  }));
+}
+
+function vtAccounts(body){
+  const d=VT.data, me=d.me;
+  body.innerHTML=`<div class="card elev p-5 mb-4"><div class="flex flex-wrap items-center gap-3 mb-3"><p class="text-sm font-medium" style="color:var(--text)">All accounts (${d.accounts.length})</p><div class="flex-1"></div>
+      <label class="text-xs flex items-center gap-1.5" style="color:var(--text-muted)"><input type="checkbox" id="vtFin" ${VT.showFin?'checked':''}> Show target, MRC &amp; notes</label></div>
+    <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account</th><th>AM</th><th>Type</th><th>Cadence</th><th>Last visit</th><th>Days since</th><th>Status</th><th>Next planned</th><th>Plan check</th>${VT.showFin?'<th>2026 target (Mn)</th><th>MRC (Mn)</th><th>Note</th>':''}${me.is_admin?'<th></th>':''}</tr></thead><tbody>
+    ${d.accounts.map(a=>`<tr><td class="font-medium">${escapeHtml(a.name)}</td><td>${escapeHtml(vtAmName(a.am_id))}</td><td>${vtChip(a.type,a.type==='Priority'?'vt-ok':'')}</td><td>${a.cadence}</td><td>${a.last_visit?vtDate(a.last_visit):'—'}</td><td>${a.days_since}</td><td>${vtChip(a.status,VT_STATUS_CLS[a.status])}</td><td>${a.next_planned_visit?vtDate(a.next_planned_visit):'—'}</td><td>${a.plan_check?vtChip(a.plan_check,VT_PLAN_CLS[a.plan_check]):'—'}</td>
+      ${VT.showFin?`<td>${a.target_idr_mn==null?'—':a.target_idr_mn.toLocaleString()}</td><td>${a.mrc_idr_mn==null?'—':a.mrc_idr_mn}</td><td style="color:var(--text-muted)">${escapeHtml(a.note)}</td>`:''}
+      ${me.is_admin?`<td><button type="button" class="vt-acc-edit text-xs" data-id="${a.id}" style="color:var(--primary)"><i class="fa-solid fa-pen"></i></button></td>`:''}</tr>`).join('')}</tbody></table></div></div>
+    ${me.is_admin?`<div class="card elev p-5"><p class="text-sm font-medium mb-1" style="color:var(--text)">Account manager &harr; login</p><p class="text-[11px] mb-3" style="color:var(--text-faint)">Matched automatically by name. Set a login explicitly only if an AM can't see their own page.</p>
+      <div class="grid md:grid-cols-2 gap-2">${d.ams.map(a=>`<div class="flex items-center gap-2 text-xs"><span class="flex-1" style="color:var(--text)">${escapeHtml(a.name)}</span>
+        <select class="vt-link-sel field text-xs px-2 py-1.5" data-id="${a.id}"><option value="">Auto-match by name</option>${USERS.filter(u=>u.role==='account_manager').map(u=>`<option value="${u.id}" ${u.id===a.user_id?'selected':''}>${escapeHtml(u.full_name||u.username)}</option>`).join('')}</select></div>`).join('')}</div></div>`:''}`;
+  document.getElementById('vtFin').addEventListener('change',e=>{ VT.showFin=e.target.checked; vtAccounts(body); });
+  body.querySelectorAll('.vt-acc-edit').forEach(b=>b.addEventListener('click',()=>vtOpenAccount(d.accounts.find(a=>String(a.id)===b.dataset.id))));
+  body.querySelectorAll('.vt-link-sel').forEach(sel=>sel.addEventListener('change',async()=>{
+    try{ await api('/api/visit/ams/'+sel.dataset.id,{method:'PUT',body:JSON.stringify({user_id:sel.value?parseInt(sel.value):null})}); showToast('Link saved'); renderVisits(); }catch(e){ showToast(e.message,true); }
+  }));
+}
+
+async function vtBlockers(body){
+  const d=VT.data, me=d.me;
+  VT.blockers = await api('/api/visit/blockers');
+  const canAdd = me.can_write;
+  body.innerHTML=`<div class="card elev p-5"><div class="flex items-center gap-3 mb-3"><p class="text-sm font-medium" style="color:var(--text)">Blockers needing escalation</p><div class="flex-1"></div>
+    ${canAdd?`<button type="button" id="vtAddBlocker" class="btn-primary text-xs px-3 py-1.5 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>Raise blocker</button>`:''}</div>
+    <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Date raised</th><th>AM</th><th>Blocker</th><th>Escalate to</th><th>Due date</th><th>Status</th><th>Overdue?</th><th></th></tr></thead><tbody>
+    ${VT.blockers.map(b=>`<tr><td class="whitespace-nowrap">${vtDate(b.date_raised)}</td><td>${escapeHtml(b.am_name)}</td><td>${escapeHtml(b.text)}</td><td>${escapeHtml(b.escalate_to)}</td><td>${vtDate(b.due_date)}</td>
+      <td>${vtChip(b.status,b.status==='Resolved'?'vt-ok':(b.status==='Escalated'?'vt-warn':''))}</td><td>${b.overdue?vtChip('Overdue','vt-bad'):'—'}</td>
+      <td>${vtCanEdit(b.am_id)?`<button type="button" class="vt-b-edit text-xs" data-id="${b.id}" style="color:var(--primary)"><i class="fa-solid fa-pen"></i></button>`:''}</td></tr>`).join('')||'<tr><td colspan="8" style="color:var(--text-faint)">No blockers raised.</td></tr>'}</tbody></table></div></div>`;
+  const add=document.getElementById('vtAddBlocker'); if(add) add.addEventListener('click',()=>vtOpenBlocker(null));
+  body.querySelectorAll('.vt-b-edit').forEach(b=>b.addEventListener('click',()=>vtOpenBlocker(VT.blockers.find(x=>String(x.id)===b.dataset.id))));
+}
+
+/* ---- task modal ---- */
+function vtFillAccounts(amId, sel){
+  document.getElementById('vtTaskAccount').innerHTML = VT.data.accounts.filter(a=>a.am_id===amId)
+    .map(a=>`<option value="${a.id}" ${a.id===sel?'selected':''}>${a.type==='Priority'?'★ ':''}${escapeHtml(a.name)}</option>`).join('');
+}
+function vtOpenTask(t){
+  const d=VT.data, me=d.me; VT.editTask=t;
+  document.getElementById('vtTaskTitle').textContent = t?'Edit task':'Log / plan a task';
+  const amSel=document.getElementById('vtTaskAm');
+  amSel.innerHTML=d.ams.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+  const amId=t?t.am_id:(VT.amId||me.am_id); amSel.value=amId; amSel.disabled=!me.is_admin || !!t;
+  vtFillAccounts(amId, t&&t.account_id);
+  document.getElementById('vtTaskDate').value=t?t.task_date:d.today;
+  document.getElementById('vtTaskActivity').innerHTML=vtOpts(d.enums.activities,t&&t.activity);
+  document.getElementById('vtTaskStatus').innerHTML=vtOpts(d.enums.task_statuses,t?t.status:'Planned');
+  document.getElementById('vtTaskTopic').value=t?t.topic:'';
+  document.getElementById('vtTaskOutcome').value=t?t.outcome:'';
+  document.getElementById('vtTaskDeleteBtn').style.display=t?'':'none';
+  openModal('vtTaskModal');
+}
+document.getElementById('vtTaskAm').addEventListener('change',e=>vtFillAccounts(parseInt(e.target.value)));
+document.getElementById('vtTaskForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const body={task_date:vtv('vtTaskDate'), am_id:parseInt(vtv('vtTaskAm')), account_id:parseInt(vtv('vtTaskAccount')), activity:vtv('vtTaskActivity'),
+              status:vtv('vtTaskStatus'), topic:vtv('vtTaskTopic'), outcome:vtv('vtTaskOutcome')};
+  try{
+    const r = VT.editTask ? await api('/api/visit/tasks/'+VT.editTask.id,{method:'PUT',body:JSON.stringify(body)})
+                          : await api('/api/visit/tasks',{method:'POST',body:JSON.stringify(body)});
+    closeModal('vtTaskModal'); showToast(r.warning||'Task saved', !!r.warning); renderVisits();
+  }catch(e){ showToast(e.message,true); }
+});
+function vtv(id){ return document.getElementById(id).value.trim(); }
+document.getElementById('vtTaskDeleteBtn').addEventListener('click',()=>openConfirm('Delete this task?',async()=>{
+  try{ await api('/api/visit/tasks/'+VT.editTask.id,{method:'DELETE'}); closeModal('vtTaskModal'); showToast('Task deleted'); renderVisits(); }catch(e){ showToast(e.message,true); }
+}));
+
+/* ---- blocker modal ---- */
+function vtOpenBlocker(b){
+  const d=VT.data, me=d.me; VT.editBlocker=b;
+  document.getElementById('vtBlockerTitle').textContent=b?'Edit blocker':'Raise a blocker';
+  const amSel=document.getElementById('vtBlockerAm');
+  amSel.innerHTML=d.ams.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+  amSel.value=b?b.am_id:(VT.amId||me.am_id); amSel.disabled=!me.is_admin || !!b;
+  document.getElementById('vtBlockerText').value=b?b.text:'';
+  document.getElementById('vtBlockerEsc').innerHTML=vtOpts(d.enums.escalate_to,b&&b.escalate_to);
+  document.getElementById('vtBlockerDue').value=b?b.due_date:'';
+  document.getElementById('vtBlockerStatus').innerHTML=vtOpts(d.enums.blocker_statuses,b?b.status:'Open');
+  document.getElementById('vtBlockerDeleteBtn').style.display=b?'':'none';
+  openModal('vtBlockerModal');
+}
+document.getElementById('vtBlockerForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const body={am_id:parseInt(vtv('vtBlockerAm')), text:vtv('vtBlockerText'), escalate_to:vtv('vtBlockerEsc'), due_date:vtv('vtBlockerDue'), status:vtv('vtBlockerStatus')};
+  try{
+    if(VT.editBlocker) await api('/api/visit/blockers/'+VT.editBlocker.id,{method:'PUT',body:JSON.stringify(body)});
+    else await api('/api/visit/blockers',{method:'POST',body:JSON.stringify(body)});
+    closeModal('vtBlockerModal'); showToast('Blocker saved'); renderVisits();
+  }catch(e){ showToast(e.message,true); }
+});
+document.getElementById('vtBlockerDeleteBtn').addEventListener('click',()=>openConfirm('Delete this blocker?',async()=>{
+  try{ await api('/api/visit/blockers/'+VT.editBlocker.id,{method:'DELETE'}); closeModal('vtBlockerModal'); showToast('Blocker deleted'); renderVisits(); }catch(e){ showToast(e.message,true); }
+}));
+
+/* ---- account modal (admin) ---- */
+function vtOpenAccount(a){
+  VT.editAcc=a; const en=VT.data.enums;
+  document.getElementById('vtAccName').value=a.name; document.getElementById('vtAccNote').value=a.note||'';
+  document.getElementById('vtAccType').innerHTML=vtOpts(en.types,a.type);
+  document.getElementById('vtAccCadence').innerHTML=vtOpts(en.cadences,a.cadence);
+  openModal('vtAccountModal');
+}
+document.getElementById('vtAccountForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  try{
+    await api('/api/visit/accounts/'+VT.editAcc.id,{method:'PUT',body:JSON.stringify({name:vtv('vtAccName'),type:vtv('vtAccType'),cadence:vtv('vtAccCadence'),note:vtv('vtAccNote')})});
+    closeModal('vtAccountModal'); showToast('Account saved'); renderVisits();
+  }catch(e){ showToast(e.message,true); }
+});
+
 /* ================= ANALYTICS ================= */
 function analyticsDeals(){
   return ALL_DEALS.filter(d=>Object.entries(analyticsFilters).every(([k,v])=>!v||d[k]===v));
@@ -5192,6 +5485,7 @@ document.getElementById('perfExportPdfBtn').addEventListener('click',async()=>{
 const CMD_FEATURES = [
   {label:'Management View', desc:'Executive briefing — headline, blockers, AM performance & insights', icon:'fa-briefcase', tab:'management', roles:['admin','management']},
   {label:'My Tracker', desc:'Search, filter, sort and edit opportunities', icon:'fa-table-cells-large', tab:'tracker'},
+  {label:'Visit Tracker', desc:'Priority-account visit cadence, daily plan/log and blockers', icon:'fa-route', tab:'visits'},
   {label:'My Weekly Plan', desc:'Plan customer visits Mon-Fri for the weekly meeting', icon:'fa-calendar-week', tab:'weeklyplan'},
   {label:'Pipeline Analytics', desc:'Gap & targets, breakdown, execution framework, strategy, leaderboard', icon:'fa-chart-line', tab:'analytics'},
   {label:'Performance', desc:'Monthly ACH actuals, targets, pipeline cover, churn watch', icon:'fa-gauge-high', tab:'performance'},

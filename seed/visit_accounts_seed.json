@@ -1,0 +1,1052 @@
+{
+ "account_managers": [
+  "Ruly Achsandi",
+  "Anisa Rahmy",
+  "Ashari Asrar",
+  "Vidyakirana Dwi Julita",
+  "Dimas Aradzna",
+  "Arie Prabowo"
+ ],
+ "accounts": [
+  {
+   "am": "Ruly Achsandi",
+   "name": "PT Meta Telekomunikasi Asia",
+   "type": "Priority",
+   "target": 4670,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Mon",
+   "note": ""
+  },
+  {
+   "am": "Ruly Achsandi",
+   "name": "PT System Integrated Asia",
+   "type": "Priority",
+   "target": 4160,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Tue",
+   "note": ""
+  },
+  {
+   "am": "Ruly Achsandi",
+   "name": "PT Lalamove Teknologi Indonesia",
+   "type": "Priority",
+   "target": 1000,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Wed",
+   "note": ""
+  },
+  {
+   "am": "Ruly Achsandi",
+   "name": "PT Nusantara Ekspres Kilat",
+   "type": "Priority",
+   "target": null,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Thu",
+   "note": ""
+  },
+  {
+   "am": "Ruly Achsandi",
+   "name": "PT Komunika Jaya Nusantara",
+   "type": "Priority",
+   "target": null,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Fri",
+   "note": ""
+  },
+  {
+   "am": "Ruly Achsandi",
+   "name": "PT Go-jek Indonesia",
+   "type": "Other",
+   "target": 46243.7,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": "Largest single 2026 target in the mapping (46.2 Bn), still in Other: consider promoting to Priority"
+  },
+  {
+   "am": "Ruly Achsandi",
+   "name": "PT Paxel Anggorita Unggul",
+   "type": "Other",
+   "target": 750.0,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ruly Achsandi",
+   "name": "PT Avia Avian Tbk",
+   "type": "Other",
+   "target": 750.0,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ruly Achsandi",
+   "name": "PT Multi Bintang Indonesia Tbk",
+   "type": "Other",
+   "target": 750.0,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ruly Achsandi",
+   "name": "PT Sreeya Sewu Indonesia,Tbk HQ",
+   "type": "Other",
+   "target": 660.1,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Anisa Rahmy",
+   "name": "PT Kereta Api Indonesia (Persero)",
+   "type": "Priority",
+   "target": 26070,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Mon",
+   "note": ""
+  },
+  {
+   "am": "Anisa Rahmy",
+   "name": "PT Transportasi Jakarta",
+   "type": "Priority",
+   "target": 4200,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Wed",
+   "note": "Spelled 'Tranportasi Jakarata' in the source"
+  },
+  {
+   "am": "Anisa Rahmy",
+   "name": "PT Kereta Commuter Indonesia",
+   "type": "Priority",
+   "target": 5920,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Tue",
+   "note": ""
+  },
+  {
+   "am": "Anisa Rahmy",
+   "name": "PT Paragon Technology and Innovation",
+   "type": "Priority",
+   "target": null,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Thu",
+   "note": ""
+  },
+  {
+   "am": "Anisa Rahmy",
+   "name": "PT Kereta Api Logistik",
+   "type": "Priority",
+   "target": null,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Fri",
+   "note": ""
+  },
+  {
+   "am": "Anisa Rahmy",
+   "name": "PT Cemindo Gemilang",
+   "type": "Other",
+   "target": 813.1,
+   "mrc": 7.7,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Anisa Rahmy",
+   "name": "PT Sarinah",
+   "type": "Other",
+   "target": null,
+   "mrc": 1.2,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Anisa Rahmy",
+   "name": "PT Paragon Asia Teknologi",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.9,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Anisa Rahmy",
+   "name": "Sekretariat BPSDM ESDM",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.4,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Anisa Rahmy",
+   "name": "PT Garuda Indonesia",
+   "type": "Other",
+   "target": 1006.4,
+   "mrc": 1.7,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Arthatech Selaras",
+   "type": "Priority",
+   "target": 6730,
+   "mrc": 274.1,
+   "cad": "Weekly",
+   "anchor": "Mon",
+   "note": "MRC shown for May-26 in the source"
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Ingenico International Indonesia",
+   "type": "Priority",
+   "target": 2730,
+   "mrc": 114.0,
+   "cad": "Weekly",
+   "anchor": "Tue",
+   "note": "MRC shown for May-26 in the source"
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Cikarang Listrindo",
+   "type": "Priority",
+   "target": 980,
+   "mrc": 36.6,
+   "cad": "Weekly",
+   "anchor": "Thu",
+   "note": "MRC shown for May-26 in the source"
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Tri Adi Bersama",
+   "type": "Priority",
+   "target": 830,
+   "mrc": 9.9,
+   "cad": "Weekly",
+   "anchor": "Fri",
+   "note": "MRC shown for May-26 in the source"
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Adi Sarana Armada Tbk",
+   "type": "Priority",
+   "target": 2250,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Wed",
+   "note": ""
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Trias Sentosa",
+   "type": "Other",
+   "target": 413.0,
+   "mrc": 0.2,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Hawlett Packard Indonesia",
+   "type": "Other",
+   "target": 1005.2,
+   "mrc": 0.4,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Hajaya Mandala Sampoerna, Tbk.",
+   "type": "Other",
+   "target": 1000.0,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "Phillip Moris Group",
+   "type": "Other",
+   "target": 690.3,
+   "mrc": 1.8,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Mayora Indah Tbk",
+   "type": "Other",
+   "target": 684.8,
+   "mrc": 0.0,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Satu Akses Indonesia",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.2,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Azure Link Indonesia",
+   "type": "Other",
+   "target": null,
+   "mrc": 4.3,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Biforst Logistics",
+   "type": "Other",
+   "target": null,
+   "mrc": null,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT indo Lysaght",
+   "type": "Other",
+   "target": null,
+   "mrc": null,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Ashari Asrar",
+   "name": "PT Integrasi Multi Persada",
+   "type": "Other",
+   "target": null,
+   "mrc": null,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "PT Kalbe Farma Tbk",
+   "type": "Priority",
+   "target": 6270,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Mon",
+   "note": ""
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "PT Dharma Polimetal Tbk",
+   "type": "Priority",
+   "target": 750,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Thu",
+   "note": ""
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "PT Kimia Farma Tbk",
+   "type": "Priority",
+   "target": 410,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Fri",
+   "note": "Also listed under Other as PT Kimia Farma (Persero) Tbk: possible duplicate"
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "PT Indomobil Sukses Internasional Tbk",
+   "type": "Priority",
+   "target": 2750,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Tue",
+   "note": ""
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "PT Samsung Electronics Indonesia",
+   "type": "Priority",
+   "target": 1980,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Wed",
+   "note": ""
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "PT Kimia Farma (Persero) Tbk",
+   "type": "Other",
+   "target": 410.3,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": "Possible duplicate of priority account PT Kimia Farma Tbk"
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "PT Samsung Biopharm Indo",
+   "type": "Other",
+   "target": 14.5,
+   "mrc": 0.1,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "PT Samsung Print & Pack Indonesia",
+   "type": "Other",
+   "target": 11.5,
+   "mrc": 0.5,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "PT Samsung Pharm Indo",
+   "type": "Other",
+   "target": 1.6,
+   "mrc": 0.1,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "PT Topindo Atlas Indonesia",
+   "type": "Other",
+   "target": 2252.5,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "PT Sayap Mas Utama",
+   "type": "Other",
+   "target": 3195.7,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "MidPlaza Holding",
+   "type": "Other",
+   "target": null,
+   "mrc": null,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Vidyakirana Dwi Julita",
+   "name": "Koperasi Karyawan Indonesia Power - Rusamas",
+   "type": "Other",
+   "target": null,
+   "mrc": null,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT XanhSM Green",
+   "type": "Priority",
+   "target": 6350,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Mon",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Dexa Medica",
+   "type": "Priority",
+   "target": 2610,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Tue",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "Orang Tua Group",
+   "type": "Priority",
+   "target": 660,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Wed",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Vinfast Automobile",
+   "type": "Priority",
+   "target": null,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Fri",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Supra Boga Lestari Tbk",
+   "type": "Priority",
+   "target": 610,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Thu",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Via Yotta Byte",
+   "type": "Priority",
+   "target": null,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Mon",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "(Priority #7: name to be confirmed)",
+   "type": "Priority",
+   "target": null,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Tue",
+   "note": "The source says 7 priority accounts but names only 6"
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "Perseroan Terbatas - Badan Ferron Par",
+   "type": "Other",
+   "target": 70.3,
+   "mrc": 6.8,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Belitung Distribusindo Raya",
+   "type": "Other",
+   "target": 46.8,
+   "mrc": 3.9,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Wahana Internet Nusantara",
+   "type": "Other",
+   "target": null,
+   "mrc": 3.4,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Perusahaan Dagang & Industri Panamas",
+   "type": "Other",
+   "target": 1027.7,
+   "mrc": 0.3,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Anugrah Argon Medica",
+   "type": "Other",
+   "target": null,
+   "mrc": null,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Ultra Jaya Milk Industry",
+   "type": "Other",
+   "target": 1026.3,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "Djabesmen, Pt",
+   "type": "Other",
+   "target": 750.0,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Insight Asia",
+   "type": "Other",
+   "target": null,
+   "mrc": null,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Kino Indonesia Tbk",
+   "type": "Other",
+   "target": 750.0,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Dimas Aradzna",
+   "name": "PT Kawan Lama Sejahtera",
+   "type": "Other",
+   "target": 671.0,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Easygo Indonesia",
+   "type": "Priority",
+   "target": 4100,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Tue",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Yamaha Indonesia Motor Manufacturing",
+   "type": "Priority",
+   "target": 5230,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Mon",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Primafood International",
+   "type": "Priority",
+   "target": 850,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Thu",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Charoen Pokphand Indonesia",
+   "type": "Priority",
+   "target": 1370,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Wed",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Triputra Agro Persada Tbk",
+   "type": "Priority",
+   "target": 750,
+   "mrc": null,
+   "cad": "Weekly",
+   "anchor": "Fri",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Yamaha Motor Electronics Indonesia",
+   "type": "Other",
+   "target": 457.5,
+   "mrc": 1.5,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Mulia Industrindo Tbk",
+   "type": "Other",
+   "target": 456.5,
+   "mrc": 1.8,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Wijaya Karya Beton Tbk",
+   "type": "Other",
+   "target": 412.1,
+   "mrc": null,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Otto Menara Globalindo (McEasy)",
+   "type": "Other",
+   "target": null,
+   "mrc": 2.3,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT LG Electronics Indonesia",
+   "type": "Other",
+   "target": null,
+   "mrc": 5.2,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Hikmah Cakra Mulia",
+   "type": "Other",
+   "target": null,
+   "mrc": 3.3,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT LG Electronics Display Devices Indo",
+   "type": "Other",
+   "target": null,
+   "mrc": 2.3,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Prima Sehat Makmur Utama",
+   "type": "Other",
+   "target": null,
+   "mrc": 1.5,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Yami Digital Solution",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.5,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Rayindo Toropma Abadi",
+   "type": "Other",
+   "target": null,
+   "mrc": 1.3,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Investasi Hijau Satu",
+   "type": "Other",
+   "target": null,
+   "mrc": 1.6,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Muliapack",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.6,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Tunas Mobilindo Parama",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.9,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "Bio Mitra Indonesia",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.2,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Duta Generasi Mandiri",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.7,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Quiksilver Indonesia",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.5,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Media Sinergi Tritama",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.3,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "UMKM Matrix Store",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.5,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Asia Propertindo Building",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.2,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "UMKM Sinergi Inti Komunikasi",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.3,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Amerta Asa Media",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.6,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Thai Seng Indonesia",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.4,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Wong Hang Bersaudara",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.3,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Multi Cafe Sentosa",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.3,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Akar Generasi Aktif",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.1,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Iskopi Boga Lestari",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.1,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT PolarisWeb",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.2,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Primafood International Bali (Sme)",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.0,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "Fortuna Cake",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.1,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Alam Desa Jaya",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.0,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Wirakom Sistem",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.0,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT Ferbos Kreasi Digital",
+   "type": "Other",
+   "target": null,
+   "mrc": 9.6,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT. Aixxy Code Technology",
+   "type": "Other",
+   "target": null,
+   "mrc": 0.9,
+   "cad": "Quarterly",
+   "anchor": "",
+   "note": ""
+  },
+  {
+   "am": "Arie Prabowo",
+   "name": "PT. Fajar Surya Wisesa",
+   "type": "Other",
+   "target": 670.0,
+   "mrc": 0.5,
+   "cad": "Monthly",
+   "anchor": "",
+   "note": ""
+  }
+ ]
+}
