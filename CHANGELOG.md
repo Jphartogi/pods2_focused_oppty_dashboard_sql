@@ -6,6 +6,21 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.13.0] - 2026-10-16 (branch: v2.0)
+### Changed - the app is now a sales dashboard
+- **Removed Weekly Meeting and Team Tasks** (assigning follow-ups to Solution / Project / Product / Delivery) - those live in Salesforce. Gone: the Weekly Meeting and My Team Tasks pages, the Team Tasks tab on opportunities, the task-based notifications, and the Solution/Project/Product role options. Existing task rows stay in the database untouched; any legacy Solution/Project/Product login is now a read-only viewer.
+- **Account Coverage and the Visit Tracker are one menu: "Accounts & Visits"** (the separate Account Coverage page and AM Workload are gone). Its account list comes from the same Master Account list import; importing it now also adds any new account to the visit list.
+  - **Overview**: analytics first - KPI tiles plus charts (priority status per AM, visits done per week, plan check, activity mix, daily logging). Double-click a tile, a chart bar/slice or an AM row for the detail behind it.
+  - **AM page**: priority accounts with **logos**, status, plan check, last visit, what was done yesterday and what is planned for the next working day, open opportunities - plus a **month calendar**: click a day to see its tasks and add one in a single line (activity, status, topic, Enter); one-click "mark done".
+  - **Accounts**: one list with visit status, relationship status and champion (editable), open opportunities and value; target/MRC/notes behind a toggle.
+  - Logos: 30 priority-account logos were extracted from the Account Mapping PDF; admins or the account's own AM can upload or replace any logo (account edit, or click the logo on the AM page).
+  - Admin can import the MLTR_Sales_Tracker xlsx daily log (one sheet per AM); re-importing skips duplicates.
+### Added
+- **The top search bar now finds opportunities and accounts**: type a name and get matching opportunities (click to open) and accounts with their ongoing opportunities and value, plus the existing feature shortcuts.
+- **Tracker has an Accounts view** (toggle next to the title): one row per account with ongoing opportunities, TCV, Rev 2026, average progress and stages; click to expand the opportunities, double-click for the full account view. Accounts with no opportunity yet are listed too, and customers in the tracker that aren't in the account list are flagged.
+
+Verified locally: logos 30/32 priority, seeded + uploaded, AM can change only their own account's logo (other AM 403, non-image 400); xlsx daily log imports 33 of 36 rows (3 blank-account rows skipped) and re-import adds 0; overview/analytics/AM page/accounts/blockers render as admin, AM and management with no console errors; search and Tracker Accounts view; removed endpoints return 404; notifications still work. (A test caught and fixed a notifications helper removed by mistake before release.)
+
 ## [2.12.0] - 2026-10-15 (branch: v2.0)
 ### Added
 - **Visit Tracker** (new nav item): priority-account visit cadence, daily plan/log and blockers, built from `PODS2_Visit_Tracker_Feature_Spec.md`.
