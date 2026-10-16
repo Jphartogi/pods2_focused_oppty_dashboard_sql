@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.14.0"
+APP_VERSION = "2.15.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -624,6 +624,7 @@ def _init_schema_and_seed(db):
             ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_last_run TEXT DEFAULT '';
             ALTER TABLE visit_accounts ADD COLUMN IF NOT EXISTS logo BYTEA;
             ALTER TABLE visit_accounts ADD COLUMN IF NOT EXISTS logo_type TEXT DEFAULT '';
+            ALTER TABLE visit_accounts ADD COLUMN IF NOT EXISTS is_manual BOOLEAN DEFAULT false;
             """
         )
 
@@ -1263,24 +1264,40 @@ def get_weekly_plan():
 @app.route("/api/weekly_plan/customers", methods=["GET"])
 @login_required(roles=("admin", "account_manager", "management"))
 def get_weekly_plan_customers():
-    """Customer picker source for the plan form: every customer already in this
-    AM's Tracker deals or Account Coverage list, so planning a visit doesn't
-    mean retyping a name that's already tracked elsewhere."""
+    """Customer picker source for the plan form: this AM's managed accounts (whether or not
+    they have an opportunity yet), plus any customer on their Tracker deals or Account
+    Coverage list. Returns [{name, opp_count}] so the UI can flag accounts with no pipeline."""
     db = get_db()
     user = g.current_user
     am = user["full_name"] if user["role"] == "account_manager" else request.args.get("am", "")
     if not am:
         return jsonify([])
-    names = set()
+    deal_names = {}
     for r in db.execute(
-        "SELECT DISTINCT customer FROM deals WHERE assigned_am = %s AND customer != ''", (am,)
+        "SELECT customer, COUNT(*) AS c FROM deals WHERE assigned_am = %s AND customer != '' GROUP BY customer", (am,)
     ).fetchall():
-        names.add(r["customer"])
+        deal_names[r["customer"]] = r["c"]
+    deals = [(n, _acct_tokens(n), c) for n, c in deal_names.items()]
+    out, toks = {}, []
+
+    def add(name, count=None):
+        tk = _acct_tokens(name)
+        if any(_acct_names_match(tk, t) for t in toks):
+            return
+        toks.append(tk)
+        out[name] = count if count is not None else sum(c for _, dt, c in deals if _acct_names_match(tk, dt))
+
+    my = _visit_am_for_user(db, user) if user["role"] == "account_manager" else None
+    if my:  # managed accounts first, so their canonical names win over deal-name variants
+        for r in db.execute("SELECT name FROM visit_accounts WHERE am_id = %s ORDER BY id", (my["id"],)).fetchall():
+            add(r["name"])
+    for n, _, c in deals:
+        add(n, c)
     for r in db.execute(
         "SELECT DISTINCT account_name FROM account_coverage WHERE am = %s AND account_name != ''", (am,)
     ).fetchall():
-        names.add(r["account_name"])
-    return jsonify(sorted(names))
+        add(r["account_name"])
+    return jsonify([{"name": n, "opp_count": out[n]} for n in sorted(out, key=str.lower)])
 
 
 @app.route("/api/weekly_plan", methods=["POST"])
@@ -1745,7 +1762,7 @@ def compute_visit_metrics(accounts, tasks, today):
 def _visit_account_dict(a, m):
     return {"id": a["id"], "am_id": a["am_id"], "name": a["name"], "type": a["type"],
             "cadence": a["cadence"], "target_idr_mn": a["target_idr_mn"],
-            "mrc_idr_mn": a["mrc_idr_mn"], "note": a["note"] or "", **m}
+            "mrc_idr_mn": a["mrc_idr_mn"], "note": a["note"] or "", "is_manual": bool(a["is_manual"]), **m}
 
 
 def _visit_blocker_dict(b, am_name, today):
@@ -1822,7 +1839,7 @@ def visit_overview():
         ams = [a for a in ams if my_am and a["id"] == my_am["id"]]
     am_ids = [a["id"] for a in ams]
     accounts = db.execute(
-        "SELECT id, am_id, name, type, cadence, target_idr_mn, mrc_idr_mn, note, (logo IS NOT NULL) AS has_logo "
+        "SELECT id, am_id, name, type, cadence, target_idr_mn, mrc_idr_mn, note, (logo IS NOT NULL) AS has_logo, is_manual "
         "FROM visit_accounts WHERE am_id = ANY(%s) ORDER BY am_id, "
         "CASE type WHEN 'Priority' THEN 0 ELSE 1 END, id", (am_ids,)).fetchall() if am_ids else []
     tasks = db.execute(
@@ -2418,6 +2435,65 @@ def visit_set_priority():
         changed += 1
     db.commit()
     return jsonify({"ok": True, "changed": changed, "priority": len(chosen)})
+
+
+@app.route("/api/visit/accounts", methods=["POST"])
+@login_required(roles=("admin", "account_manager"))
+def visit_create_account():
+    """Add an account by hand - e.g. a prospect that has no opportunity yet. The AM is
+    always the caller; the admin picks the AM. Also registers it in Account Coverage so
+    its relationship status can be tracked like any other account."""
+    db = get_db()
+    user = g.current_user
+    data = request.get_json(force=True) or {}
+    am_id, err = _visit_write_guard(db, user, data.get("am_id"))
+    if err:
+        return err
+    name = (data.get("name") or "").strip()
+    typ = data.get("type") or "Other"
+    cad = data.get("cadence") or ("Weekly" if typ == "Priority" else "Quarterly")
+    if not name:
+        return jsonify({"error": "Account name is required"}), 400
+    if typ not in VISIT_ACCOUNT_TYPES or cad not in VISIT_SETTINGS["cadence_days"]:
+        return jsonify({"error": "Invalid type or cadence"}), 400
+    toks = _acct_tokens(name)
+    for r in db.execute("SELECT va.id, va.name, va.am_id, m.name AS am_name FROM visit_accounts va "
+                        "JOIN visit_account_managers m ON m.id = va.am_id").fetchall():
+        if _acct_names_match(toks, _acct_tokens(r["name"])):
+            return jsonify({"error": f"\"{r['name']}\" is already in the account list ({r['am_name']})",
+                            "existing": {"id": r["id"], "name": r["name"], "mine": r["am_id"] == am_id}}), 409
+    new_id = db.execute(
+        """INSERT INTO visit_accounts (am_id, name, type, cadence, note, is_manual)
+           VALUES (%s, %s, %s, %s, %s, true) RETURNING id""",
+        (am_id, name, typ, cad, (data.get("note") or "Added manually").strip())).fetchone()["id"]
+    am_row = db.execute("SELECT name FROM visit_account_managers WHERE id = %s", (am_id,)).fetchone()
+    cov_am = user["full_name"] if user["role"] == "account_manager" else am_row["name"]
+    key = normalize_account_name(name)
+    if key and not db.execute("SELECT 1 FROM account_coverage WHERE account_key = %s", (key,)).fetchone():
+        db.execute(
+            """INSERT INTO account_coverage (account_key, account_name, am, source, is_manual, status)
+               VALUES (%s, %s, %s, 'manual', true, 'unreviewed')""", (key, name, cov_am))
+    db.commit()
+    return jsonify({"id": new_id, "name": name}), 201
+
+
+@app.route("/api/visit/accounts/<int:account_id>", methods=["DELETE"])
+@login_required(roles=("admin", "account_manager"))
+def visit_delete_account(account_id):
+    db = get_db()
+    ok, err = _can_edit_visit_account(db, g.current_user, account_id)
+    if not ok:
+        return err
+    row = db.execute("SELECT * FROM visit_accounts WHERE id = %s", (account_id,)).fetchone()
+    if not row["is_manual"]:
+        return jsonify({"error": "Only accounts added by hand can be removed"}), 400
+    if db.execute("SELECT 1 FROM visit_tasks WHERE account_id = %s LIMIT 1", (account_id,)).fetchone():
+        return jsonify({"error": "This account already has logged or planned tasks, so it can't be removed"}), 409
+    db.execute("DELETE FROM visit_accounts WHERE id = %s", (account_id,))
+    db.execute("DELETE FROM account_coverage WHERE account_key = %s AND is_manual = true",
+               (normalize_account_name(row["name"]),))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/visit/accounts/<int:account_id>", methods=["PUT"])
