@@ -6,6 +6,10 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.15.0] - 2026-10-16 (branch: v2.0)
+### Added
+- **Add accounts by hand - no opportunity needed.** In My Weekly Plan, the Customer picker now lists every account the AM manages (accounts with no pipeline are labelled "no opportunity yet", not just ones with deals) and ends with "+ Add a new customer / account…": type a name and it's saved as a real account (plus an Account Coverage entry), so it's pickable next time and shows up in Accounts & Visits and the Tracker's Accounts view with 0 opportunities. Accounts & Visits -> Accounts also gets an "Add account" button (admin picks the AM). Duplicates are caught by loose name match; an account added by hand can be removed while it has no tasks.
+
 ## [2.14.0] - 2026-10-16 (branch: v2.0)
 ### Added
 - **Editable dropdown wording for visits.** Admin can rename (or add/remove) the Activity options ("Visit (in person)", "Video meeting", ...) and Status options ("Planned", "Done", ...) under Accounts & Visits -> Accounts -> "Dropdown wording". Each option carries a behavior (counts as a visit / planned / done / moved / cancelled) that the rules use, so renaming never breaks status or plan checks; renaming updates every existing task, and an option still in use can't be deleted.

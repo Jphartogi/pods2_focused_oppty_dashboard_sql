@@ -764,7 +764,7 @@
                 <select id="wpEntryCustomer" class="field-ico text-sm py-2 w-full"><option value="">Select a customer…</option></select>
               </div>
               <p id="wpEntryCustomerStatic" class="text-sm font-medium" style="color:var(--text);display:none"></p>
-              <input id="wpEntryCustomerNew" type="text" class="field w-full px-3 py-2 text-sm mt-2" placeholder="New customer name…" style="display:none">
+              <div id="wpEntryCustomerNewWrap" style="display:none"><input id="wpEntryCustomerNew" type="text" class="field w-full px-3 py-2 text-sm mt-2" placeholder="New customer / account name…"><p class="text-[10px] mt-1" style="color:var(--text-faint)">It's saved to your account list (no opportunity needed), so you can pick it again next time.</p></div>
             </div>
             <div>
               <label class="block text-xs mb-1" style="color:var(--text-muted)">Topic to bring</label>
@@ -831,6 +831,22 @@
           <div id="vtPrioList" class="space-y-1" style="max-height:46vh;overflow:auto"></div>
           <div class="flex items-center gap-2 pt-3"><span id="vtPrioCount" class="text-xs" style="color:var(--text-muted)"></span>
             <div class="flex gap-2 ml-auto"><button type="button" data-close-modal="vtPrioModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button type="button" id="vtPrioSave" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button></div></div>
+        </div>
+      </div>
+
+      <div id="vtNewAcctModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
+        <div class="card w-full max-w-md elev p-6" style="contain:none">
+          <div class="flex items-start justify-between mb-1"><p class="text-sm font-semibold" style="color:var(--text)">Add an account</p><button data-close-modal="vtNewAcctModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+          <p class="text-[11px] mb-3" style="color:var(--text-faint)">For a customer or prospect that isn't in the list yet - no opportunity needed. You can plan visits to it right away.</p>
+          <form id="vtNewAcctForm" class="space-y-3">
+            <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Customer / account name</label><input id="vtNewAcctName" type="text" required class="field w-full px-3 py-2 text-sm"></div>
+            <div id="vtNewAcctAmWrap"><label class="block text-xs mb-1" style="color:var(--text-muted)">Account manager</label><select id="vtNewAcctAm" class="field w-full px-3 py-2 text-sm"></select></div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Type</label><select id="vtNewAcctType" class="field w-full px-3 py-2 text-sm"></select></div>
+              <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Visit cadence</label><select id="vtNewAcctCad" class="field w-full px-3 py-2 text-sm"></select></div>
+            </div>
+            <div class="flex justify-end gap-2 pt-1"><button type="button" data-close-modal="vtNewAcctModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Add account</button></div>
+          </form>
         </div>
       </div>
 
@@ -3242,9 +3258,9 @@ function renderWeeklyPlanAll(entries){
 
 const WP_NEW_CUSTOMER_VALUE = '__new__';
 function wpCustomerOptions(currentValue){
-  const opts = WP_CUSTOMERS.map(c=>({value:c,label:c}));
-  if(currentValue && !WP_CUSTOMERS.includes(currentValue)) opts.unshift({value:currentValue,label:currentValue});
-  opts.push({value:WP_NEW_CUSTOMER_VALUE,label:'+ Add new customer…'});
+  const opts = WP_CUSTOMERS.map(c=>({value:c.name,label:c.opp_count?c.name:`${c.name}  ·  no opportunity yet`}));
+  if(currentValue && !WP_CUSTOMERS.some(c=>c.name===currentValue)) opts.unshift({value:currentValue,label:currentValue});
+  opts.push({value:WP_NEW_CUSTOMER_VALUE,label:'+ Add a new customer / account…'});
   return opts;
 }
 // Goal of the visit is stored as newline-separated points in one TEXT column -
@@ -3291,7 +3307,7 @@ function openWpEntryModal(day, entry, readOnly){
     setSelectOptions('wpEntryCustomer', [{value:'',label:'Select a customer…'}, ...wpCustomerOptions(custValue)]);
     setSelectValue('wpEntryCustomer', custValue);
   }
-  document.getElementById('wpEntryCustomerNew').style.display = 'none';
+  document.getElementById('wpEntryCustomerNewWrap').style.display = 'none';
   document.getElementById('wpEntryCustomerNew').value = '';
 
   document.getElementById('wpEntryTopic').style.display = readOnly ? 'none' : '';
@@ -3335,15 +3351,25 @@ function openWpEntryModal(day, entry, readOnly){
 }
 
 document.getElementById('wpEntryCustomer').addEventListener('change', e=>{
-  document.getElementById('wpEntryCustomerNew').style.display = e.target.value===WP_NEW_CUSTOMER_VALUE ? '' : 'none';
+  document.getElementById('wpEntryCustomerNewWrap').style.display = e.target.value===WP_NEW_CUSTOMER_VALUE ? '' : 'none';
 });
 
 document.getElementById('wpEntryForm').addEventListener('submit', async ev=>{
   ev.preventDefault();
   const custSel = document.getElementById('wpEntryCustomer').value;
-  const customer = custSel===WP_NEW_CUSTOMER_VALUE
+  let customer = custSel===WP_NEW_CUSTOMER_VALUE
     ? document.getElementById('wpEntryCustomerNew').value.trim()
     : custSel;
+  if(custSel===WP_NEW_CUSTOMER_VALUE){
+    if(!customer){ showToast('Type the customer / account name',true); return; }
+    try{
+      const res=await fetch('/api/visit/accounts',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},body:JSON.stringify({name:customer})});
+      const j=await res.json();
+      if(res.status===201){ customer=j.name; ACCT_CACHE=null; showToast(`Added "${j.name}" to your accounts`); }
+      else if(res.status===409 && j.existing && j.existing.mine){ customer=j.existing.name; }
+      else throw new Error(j.error||'Could not add the account');
+    }catch(err){ showToast(err.message,true); return; }
+  }
   const body = {
     week_start: WP_WEEK_START,
     day: document.getElementById('wpEntryDay').value,
@@ -3636,10 +3662,11 @@ function vtAccounts(body){
       ${me.sees_all?vtSel('vtAccAm',`<option value="">All AMs</option>`+d.ams.map(a=>`<option value="${a.id}" ${String(a.id)===f.am?'selected':''}>${escapeHtml(a.name)}</option>`).join('')):''}
       ${vtSel('vtAccType',`<option value="">Priority + Other</option><option value="Priority" ${f.type==='Priority'?'selected':''}>Priority</option><option value="Other" ${f.type==='Other'?'selected':''}>Other</option>`)}
       <label class="text-xs flex items-center gap-1.5" style="color:var(--text-muted)"><input type="checkbox" id="vtFin" ${f.fin?'checked':''}> Target, MRC &amp; notes</label>
+      ${me.can_write?`<button type="button" id="vtAddAcct" class="btn-primary text-xs px-3 py-1.5 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>Add account</button>`:''}
       ${me.is_admin?`<button type="button" id="vtImportMaster" class="text-xs px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-file-import mr-1"></i>Import master account list</button>
         <button type="button" id="vtImportLog" class="text-xs px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-file-import mr-1"></i>Import daily log</button>
         <input type="file" id="vtFileMaster" accept=".xlsx" style="display:none"><input type="file" id="vtFileLog" accept=".xlsx" style="display:none">`:''}</div>
-    <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account</th><th>AM</th><th>Type</th><th>Cadence</th><th>Visit status</th><th>Last visit</th><th>Relationship</th><th>Champion</th><th>Opportunities</th>${f.fin?'<th>2026 target (Mn)</th><th>MRC (Mn)</th><th>Notes</th>':''}${me.is_admin?'<th></th>':''}</tr></thead><tbody>
+    <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account</th><th>AM</th><th>Type</th><th>Cadence</th><th>Visit status</th><th>Last visit</th><th>Relationship</th><th>Champion</th><th>Opportunities</th>${f.fin?'<th>2026 target (Mn)</th><th>MRC (Mn)</th><th>Notes</th>':''}<th></th></tr></thead><tbody>
     ${rows.map(a=>{ const c=a.cov, can=vtCanEdit(a.am_id);
       return `<tr><td><div class="flex items-center gap-2.5">${vtLogo(a,30)}<span class="font-medium">${escapeHtml(vtShort(a.name))}</span></div></td><td>${escapeHtml(vtAmName(a.am_id))}</td><td>${can?`<button type="button" class="vt-star text-xs whitespace-nowrap" data-id="${a.id}" data-am="${a.am_id}" title="Click to switch between Priority and Other">${a.type==='Priority'?'<i class="fa-solid fa-star" style="color:var(--warning)"></i> Priority':'<i class="fa-regular fa-star"></i> Other'}</button>`:vtChip(a.type,a.type==='Priority'?'vt-ok':'')}</td><td>${a.cadence}</td>
       <td>${vtChip(a.status,VT_STATUS_CLS[a.status])}</td><td>${a.last_visit?vtDate(a.last_visit):'—'}</td>
@@ -3647,7 +3674,7 @@ function vtAccounts(body){
       <td>${c?`<input type="checkbox" class="vt-cov-champ" data-id="${c.id}" ${c.is_champion?'checked':''} ${can?'':'disabled'}>`:'—'}</td>
       <td>${a.opp_count?`${a.opp_count} · ${fmtIDR(a.opp_value)}`:vtNone('none')}</td>
       ${f.fin?`<td>${a.target_idr_mn==null?'—':a.target_idr_mn.toLocaleString()}</td><td>${a.mrc_idr_mn==null?'—':a.mrc_idr_mn}</td><td>${c&&can?`<input type="text" class="vt-cov-notes field text-xs px-2 py-1" data-id="${c.id}" value="${escapeHtml(c.notes)}" style="min-width:160px">`:escapeHtml((c&&c.notes)||a.note)}</td>`:''}
-      ${me.is_admin?`<td><button type="button" class="vt-acc-edit text-xs" data-id="${a.id}" style="color:var(--primary)" title="Edit / logo"><i class="fa-solid fa-pen"></i></button></td>`:''}</tr>`; }).join('')}</tbody></table></div></div>
+      ${me.is_admin?`<td class="whitespace-nowrap"><button type="button" class="vt-acc-edit text-xs" data-id="${a.id}" style="color:var(--primary)" title="Edit / logo"><i class="fa-solid fa-pen"></i></button>${a.is_manual?` <button type="button" class="vt-acc-del text-xs ml-2" data-id="${a.id}" style="color:var(--text-faint)" title="Remove (added by hand)"><i class="fa-solid fa-trash"></i></button>`:''}</td>`:(a.is_manual&&can?`<td><button type="button" class="vt-acc-del text-xs" data-id="${a.id}" style="color:var(--text-faint)" title="Remove (added by hand)"><i class="fa-solid fa-trash"></i></button></td>`:'<td></td>')}</tr>`; }).join('')}</tbody></table></div></div>
     ${me.is_admin?`<div id="vtOptsCard" class="card elev p-5 mb-4"></div>`:''}
     ${me.is_admin?`<div class="card elev p-5"><p class="text-sm font-medium mb-1" style="color:var(--text)">Account manager &harr; login</p><p class="text-[11px] mb-3" style="color:var(--text-faint)">Matched automatically by name. Set a login explicitly only if an AM can't see their own page.</p>
       <div class="grid md:grid-cols-2 gap-2">${d.ams.map(a=>`<div class="flex items-center gap-2 text-xs"><span class="flex-1" style="color:var(--text)">${escapeHtml(a.name)}</span>
@@ -3670,6 +3697,9 @@ function vtAccounts(body){
     try{ await api('/api/visit/priority',{method:'PUT',body:JSON.stringify({am_id:amId,priority_ids:[...ids]})}); renderVisits(); }catch(e){ showToast(e.message,true); }
   }));
   if(me.is_admin) vtLoadOptsCard();
+  const addA=document.getElementById('vtAddAcct'); if(addA) addA.addEventListener('click',vtOpenNewAccount);
+  body.querySelectorAll('.vt-acc-del').forEach(b=>b.addEventListener('click',()=>openConfirm('Remove this account? (only possible while it has no tasks)',async()=>{
+    try{ await api('/api/visit/accounts/'+b.dataset.id,{method:'DELETE'}); showToast('Account removed'); ACCT_CACHE=null; renderVisits(); }catch(e){ showToast(e.message,true); } })));
   body.querySelectorAll('.vt-link-sel').forEach(sel=>sel.addEventListener('change',async()=>{
     try{ await api('/api/visit/ams/'+sel.dataset.id,{method:'PUT',body:JSON.stringify({user_id:sel.value?parseInt(sel.value):null})}); showToast('Link saved'); renderVisits(); }catch(e){ showToast(e.message,true); }
   }));
@@ -3685,6 +3715,28 @@ function vtAccounts(body){
   }
 }
 
+
+
+/* ---- add an account by hand (no opportunity needed) ---- */
+function vtOpenNewAccount(){
+  const d=VT.data, me=d.me, en=d.enums;
+  document.getElementById('vtNewAcctName').value='';
+  document.getElementById('vtNewAcctAmWrap').style.display=me.is_admin?'':'none';
+  document.getElementById('vtNewAcctAm').innerHTML=d.ams.map(a=>`<option value="${a.id}" ${a.id===VT.amId?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
+  document.getElementById('vtNewAcctType').innerHTML=vtOpts(en.types,'Other');
+  document.getElementById('vtNewAcctCad').innerHTML=vtOpts(en.cadences,'Quarterly');
+  openModal('vtNewAcctModal');
+}
+document.getElementById('vtNewAcctType').addEventListener('change',e=>{ document.getElementById('vtNewAcctCad').value = e.target.value==='Priority'?'Weekly':'Quarterly'; });
+document.getElementById('vtNewAcctForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  try{
+    const body={name:vtv('vtNewAcctName'),type:vtv('vtNewAcctType'),cadence:vtv('vtNewAcctCad')};
+    if(VT.data.me.is_admin) body.am_id=parseInt(vtv('vtNewAcctAm'));
+    const r=await api('/api/visit/accounts',{method:'POST',body:JSON.stringify(body)});
+    closeModal('vtNewAcctModal'); showToast(`Added "${r.name}"`); ACCT_CACHE=null; renderVisits();
+  }catch(e){ showToast(e.message,true); }
+});
 
 /* ---- choose priority accounts ---- */
 function vtOpenPriority(){
