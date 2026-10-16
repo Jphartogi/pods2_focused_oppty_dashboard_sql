@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.12.0"
+APP_VERSION = "2.13.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -361,6 +361,24 @@ def _seed_visit_tracker(db):
         )
 
 
+def _load_seed_logos(db):
+    """Fill in a logo for any account that has none yet, from seed/visit_logos.json
+    (never overwrites a logo someone uploaded)."""
+    path = os.path.join(BASE_DIR, "seed", "visit_logos.json")
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        mapping = json.load(f)
+    for name, fn in mapping.items():
+        fp = os.path.join(BASE_DIR, "seed", "logos", fn)
+        if not os.path.exists(fp):
+            continue
+        with open(fp, "rb") as lf:
+            data = lf.read()
+        db.execute("UPDATE visit_accounts SET logo = %s, logo_type = %s WHERE name = %s AND logo IS NULL",
+                   (data, "image/jpeg" if fn.endswith(".jpg") else "image/png", name))
+
+
 def _init_schema_and_seed(db):
         db.execute(
             """
@@ -582,6 +600,8 @@ def _init_schema_and_seed(db):
             ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_username TEXT DEFAULT '';
             ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_password TEXT DEFAULT '';
             ALTER TABLE config ADD COLUMN IF NOT EXISTS v1_sync_last_run TEXT DEFAULT '';
+            ALTER TABLE visit_accounts ADD COLUMN IF NOT EXISTS logo BYTEA;
+            ALTER TABLE visit_accounts ADD COLUMN IF NOT EXISTS logo_type TEXT DEFAULT '';
             """
         )
 
@@ -612,6 +632,7 @@ def _init_schema_and_seed(db):
             )
 
         _seed_visit_tracker(db)
+        _load_seed_logos(db)
 
         # Seed deals if empty
         if db.execute("SELECT COUNT(*) FROM deals").fetchone()["count"] == 0:
@@ -684,18 +705,6 @@ def can_edit_deal(user, deal_row):
     if user["role"] == "account_manager":
         return (deal_row["assigned_am"] or "") == (user["full_name"] or "")
     return False
-
-
-def is_valid_assignee(db, name):
-    """A task's assigned_to must be a real, currently-registered user who isn't
-    admin/management - it's a picker, not free text."""
-    if not name:
-        return False
-    row = db.execute(
-        "SELECT 1 FROM users WHERE full_name = %s AND role NOT IN ('admin', 'management')",
-        (name,),
-    ).fetchone()
-    return row is not None
 
 
 def current_config(db):
@@ -922,24 +931,6 @@ def get_account_managers():
     return jsonify(sorted(names))
 
 
-@app.route("/api/assignable_users", methods=["GET"])
-@login_required()
-def get_assignable_users():
-    """Everyone a Team Task can actually be assigned to: every role except admin and
-    management, who run the system rather than execute follow-ups. Used to populate
-    the "Assigned to" picker so it's a real selection, not free text."""
-    db = get_db()
-    rows = db.execute(
-        """SELECT full_name, role FROM users
-           WHERE role NOT IN ('admin', 'management') AND full_name != ''
-           ORDER BY full_name"""
-    ).fetchall()
-    return jsonify([{"full_name": r["full_name"], "role": r["role"]} for r in rows])
-
-
-# --------------------------------------------------------------------------
-# Deals API
-# --------------------------------------------------------------------------
 @app.route("/api/deals", methods=["GET"])
 @login_required()
 def get_deals():
@@ -1460,233 +1451,6 @@ def update_blocker(deal_id):
 # edit the note on tasks assigned to their own team - never the task text, the
 # team assignment, or any other opportunity field.
 # --------------------------------------------------------------------------
-def task_to_dict(row):
-    keys = row.keys()
-    d = {
-        "id": row["id"],
-        "deal_id": row["deal_id"],
-        "text": row["text"],
-        "team": row["team"],
-        "source_team": (row["source_team"] if "source_team" in keys else "sales") or "sales",
-        "status": row["status"],
-        "note": row["note"] or "",
-        "due": (row["due"] or "") if "due" in keys else "",
-        "assigned_to": (row["assigned_to"] if "assigned_to" in keys else "") or "",
-        "created_by": row["created_by"] or "",
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
-    }
-    if "deal_name" in row.keys():
-        d["deal_name"] = row["deal_name"]
-        d["customer"] = row["customer"] or ""
-        d["assigned_am"] = row["assigned_am"] or ""
-    return d
-
-
-@app.route("/api/deals/<int:deal_id>/tasks", methods=["GET"])
-@login_required()
-def get_deal_tasks(deal_id):
-    db = get_db()
-    rows = db.execute(
-        "SELECT * FROM deal_tasks WHERE deal_id = %s ORDER BY created_at", (deal_id,)
-    ).fetchall()
-    return jsonify([task_to_dict(r) for r in rows])
-
-
-@app.route("/api/deals/<int:deal_id>/tasks", methods=["POST"])
-@login_required(roles=("admin", "account_manager") + CROSS_FUNCTIONAL_ROLES)
-def create_deal_task(deal_id):
-    data = request.get_json(force=True) or {}
-    user = g.current_user
-    db = get_db()
-    deal_row = db.execute("SELECT * FROM deals WHERE id = %s", (deal_id,)).fetchone()
-    if not deal_row:
-        return jsonify({"error": "Deal not found"}), 404
-
-    if user["role"] in CROSS_FUNCTIONAL_ROLES:
-        # Solution/Project/Product can flag a follow-up on any opportunity, but only
-        # ever under their own team - they can't file work on another team's behalf.
-        team = user["role"]
-        source_team = user["role"]
-    else:
-        if not can_edit_deal(user, deal_row):
-            return jsonify({"error": "You can only add tasks to opportunities assigned to you"}), 403
-        team = str(data.get("team", "") or "").strip()
-        if team not in CROSS_FUNCTIONAL_ROLES:
-            return jsonify({"error": "A valid team (solution/project/product) is required"}), 400
-        source_team = "sales"
-
-    text = str(data.get("text", "") or "").strip()
-    if not text:
-        return jsonify({"error": "text is required"}), 400
-
-    # Every task must name who it's actually for, not just which team - so the
-    # weekly review can see who to chase without opening the opportunity. It's a
-    # picker over registered users (excluding admin/management), not free text.
-    assigned_to = str(data.get("assigned_to", "") or "").strip()
-    if not is_valid_assignee(db, assigned_to):
-        return jsonify({"error": "Choose who this task is assigned to from the user list"}), 400
-
-    # The creator decides the starting status and an optional target date right away,
-    # rather than always starting at "not_started" and having to change it afterward.
-    status = str(data.get("status", "") or "").strip()
-    if status not in TASK_STATUSES:
-        status = "not_started"
-    due = str(data.get("due", "") or "").strip()[:10]
-
-    creator = user.get("full_name") or user.get("username", "")
-    cur = db.execute(
-        """INSERT INTO deal_tasks (deal_id, text, team, source_team, status, due, created_by, assigned_to)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-        (deal_id, text, team, source_team, status, due, creator, assigned_to),
-    )
-    new_id = cur.fetchone()["id"]
-    db.commit()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (new_id,)).fetchone()
-    return jsonify(task_to_dict(row)), 201
-
-
-@app.route("/api/tasks/<int:task_id>", methods=["PUT"])
-@login_required()
-def update_task(task_id):
-    data = request.get_json(force=True) or {}
-    db = get_db()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (task_id,)).fetchone()
-    if not row:
-        return jsonify({"error": "Task not found"}), 404
-
-    user = g.current_user
-    text, team, status, note = row["text"], row["team"], row["status"], row["note"]
-    due = row["due"] if "due" in row.keys() else ""
-    assigned_to = row["assigned_to"] if "assigned_to" in row.keys() else ""
-
-    if user["role"] in CROSS_FUNCTIONAL_ROLES:
-        # Own team's tasks only; text/status/note/due/assigned_to are theirs to keep
-        # current, but the team assignment itself is fixed - they can't move a task
-        # to another team.
-        if row["team"] != user["role"]:
-            return jsonify({"error": "You can only update your own team's tasks"}), 403
-        if str(data.get("text", "")).strip():
-            text = str(data["text"]).strip()
-        if "status" in data:
-            new_status = str(data["status"] or "")
-            if new_status not in TASK_STATUSES:
-                return jsonify({"error": "Invalid status"}), 400
-            status = new_status
-        if "note" in data:
-            note = str(data["note"] or "")
-        if "due" in data:
-            due = str(data["due"] or "").strip()[:10]
-        if "assigned_to" in data:
-            new_assignee = str(data["assigned_to"] or "").strip()
-            if not is_valid_assignee(db, new_assignee):
-                return jsonify({"error": "Choose who this task is assigned to from the user list"}), 400
-            assigned_to = new_assignee
-    elif user["role"] in ("admin", "account_manager"):
-        deal_row = db.execute("SELECT * FROM deals WHERE id = %s", (row["deal_id"],)).fetchone()
-        if not deal_row or not can_edit_deal(user, deal_row):
-            return jsonify({"error": "You can only edit tasks on opportunities assigned to you"}), 403
-        if str(data.get("text", "")).strip():
-            text = str(data["text"]).strip()
-        if "team" in data:
-            new_team = str(data["team"] or "")
-            if new_team not in CROSS_FUNCTIONAL_ROLES:
-                return jsonify({"error": "Invalid team"}), 400
-            team = new_team
-        if "status" in data:
-            new_status = str(data["status"] or "")
-            if new_status not in TASK_STATUSES:
-                return jsonify({"error": "Invalid status"}), 400
-            status = new_status
-        if "note" in data:
-            note = str(data["note"] or "")
-        if "due" in data:
-            due = str(data["due"] or "").strip()[:10]
-        if "assigned_to" in data:
-            new_assignee = str(data["assigned_to"] or "").strip()
-            if not is_valid_assignee(db, new_assignee):
-                return jsonify({"error": "Choose who this task is assigned to from the user list"}), 400
-            assigned_to = new_assignee
-    elif user["role"] == "management":
-        # Read-only everywhere else, but management runs the weekly review, so they
-        # can mark a task's checklist state (done / needs discussion / etc.) and log
-        # a note there - not the text, team, or due date, which stay owned by sales
-        # or the cross-functional team that filed the task.
-        if "status" in data:
-            new_status = str(data["status"] or "")
-            if new_status not in TASK_STATUSES:
-                return jsonify({"error": "Invalid status"}), 400
-            status = new_status
-        if "note" in data:
-            note = str(data["note"] or "")
-    else:
-        return jsonify({"error": "Forbidden"}), 403
-
-    db.execute(
-        """UPDATE deal_tasks SET text = %s, team = %s, status = %s, note = %s, due = %s,
-           assigned_to = %s, updated_at = CURRENT_TIMESTAMP::text WHERE id = %s""",
-        (text, team, status, note, due, assigned_to, task_id),
-    )
-    db.commit()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (task_id,)).fetchone()
-    return jsonify(task_to_dict(row))
-
-
-@app.route("/api/tasks/<int:task_id>", methods=["DELETE"])
-@login_required()
-def delete_task(task_id):
-    db = get_db()
-    row = db.execute("SELECT * FROM deal_tasks WHERE id = %s", (task_id,)).fetchone()
-    if not row:
-        return jsonify({"error": "Task not found"}), 404
-    user = g.current_user
-    if user["role"] in CROSS_FUNCTIONAL_ROLES:
-        if row["team"] != user["role"]:
-            return jsonify({"error": "You can only delete your own team's tasks"}), 403
-    elif user["role"] in ("admin", "account_manager"):
-        deal_row = db.execute("SELECT * FROM deals WHERE id = %s", (row["deal_id"],)).fetchone()
-        if not deal_row or not can_edit_deal(user, deal_row):
-            return jsonify({"error": "You can only delete tasks on opportunities assigned to you"}), 403
-    else:
-        return jsonify({"error": "Forbidden"}), 403
-    db.execute("DELETE FROM deal_tasks WHERE id = %s", (task_id,))
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/tasks", methods=["GET"])
-@login_required()
-def list_tasks():
-    """Cross-opportunity task list.
-
-    Default behaviour: cross-functional roles only ever see their own team's tasks
-    (their personal follow-up inbox, "My Team Tasks"). Passing ?scope=all opts any
-    authenticated role - including cross-functional ones - into seeing every task,
-    optionally filtered by ?team= and ?status=; this powers the shared "Weekly
-    Meeting" board that everyone (sales included) can see ahead of the sync."""
-    db = get_db()
-    user = g.current_user
-    scope_all = request.args.get("scope") == "all"
-    query = """SELECT t.*, d.deal_name, d.customer, d.assigned_am
-               FROM deal_tasks t JOIN deals d ON d.id = t.deal_id WHERE 1=1"""
-    params = []
-    if user["role"] in CROSS_FUNCTIONAL_ROLES and not scope_all:
-        query += " AND t.team = %s"
-        params.append(user["role"])
-    else:
-        team = request.args.get("team")
-        if team in CROSS_FUNCTIONAL_ROLES:
-            query += " AND t.team = %s"
-            params.append(team)
-    status = request.args.get("status")
-    if status in TASK_STATUSES:
-        query += " AND t.status = %s"
-        params.append(status)
-    query += " ORDER BY t.updated_at DESC"
-    rows = db.execute(query, params).fetchall()
-    return jsonify([task_to_dict(r) for r in rows])
-
-
 NOTIFY_WINDOW_DAYS = 3
 NOTIFY_SEVERITY_RANK = {"overdue": 0, "due_soon": 1, "mention": 2}
 
@@ -1705,9 +1469,8 @@ def _days_until(value):
 @app.route("/api/notifications", methods=["GET"])
 @login_required()
 def get_notifications():
-    """Per-user notifications: tasks assigned to me (or @mentioning me) that are
-    overdue or due soon, plus - for account managers - their own opportunities'
-    target PO/revenue dates coming up. Computed fresh on every call rather than
+    """Per-user notifications: for account managers, their own opportunities'
+    target PO/revenue dates that are overdue or coming up. Computed fresh on every call rather than
     stored, since it's cheap and always exactly reflects current data."""
     db = get_db()
     user = g.current_user
@@ -1716,43 +1479,6 @@ def get_notifications():
         return jsonify([])
 
     notifications = []
-    mention_needle = f"@{full_name}".lower()
-
-    rows = db.execute(
-        """SELECT t.*, d.deal_name, d.customer
-           FROM deal_tasks t JOIN deals d ON d.id = t.deal_id
-           WHERE t.status != 'done'
-             AND (t.assigned_to = %s OR t.text ILIKE %s OR t.note ILIKE %s)""",
-        (full_name, f"%{mention_needle}%", f"%{mention_needle}%"),
-    ).fetchall()
-    for r in rows:
-        mine = (r["assigned_to"] or "") == full_name
-        mentioned = mention_needle in (r["text"] or "").lower() or mention_needle in (r["note"] or "").lower()
-        delta = _days_until(r["due"]) if mine else None
-
-        severity = None
-        if delta is not None:
-            if delta < 0:
-                severity = "overdue"
-            elif delta <= NOTIFY_WINDOW_DAYS:
-                severity = "due_soon"
-        if severity is None and mentioned:
-            severity = "mention"
-        if severity is None:
-            continue
-
-        notifications.append({
-            "id": f"task-{r['id']}",
-            "type": severity,
-            "task_id": r["id"],
-            "deal_id": r["deal_id"],
-            "title": r["text"],
-            "deal_name": r["deal_name"],
-            "customer": r["customer"] or "",
-            "due": r["due"] or "",
-            "days": delta,
-            "mentioned": mentioned,
-        })
 
     if user["role"] == "account_manager":
         deal_rows = db.execute(
@@ -1983,6 +1709,60 @@ def _visit_blocker_dict(b, am_name, today):
             "overdue": bool(due and due < today and b["status"] != "Resolved")}
 
 
+def _adjacent_working_day(d, step):
+    d += timedelta(days=step)
+    while d.weekday() >= 5 or d in VISIT_SETTINGS["holidays"]:
+        d += timedelta(days=step)
+    return d
+
+
+def _acct_tokens(name):
+    """Account name -> comparable token set (PT/Tbk/etc dropped, trailing 's' stemmed so
+    'Electronic' matches 'Electronics')."""
+    return {t[:-1] if len(t) > 3 and t.endswith("s") else t
+            for t in normalize_account_name(name).split()}
+
+
+def _acct_names_match(a, b):
+    ta, tb = _acct_tokens(a) if not isinstance(a, set) else a, _acct_tokens(b) if not isinstance(b, set) else b
+    if not ta or not tb:
+        return False
+    if ta == tb:
+        return True
+    return min(len(ta), len(tb)) >= 2 and (ta <= tb or tb <= ta)
+
+
+def _enrich_visit_accounts(db, acct_out, accounts, am_ids, today):
+    """Adds: logo flag, yesterday/tomorrow tasks, open-opportunity count/value from the
+    tracker, and the matching Account Coverage row (relationship status, champion, notes)."""
+    prev_d = _adjacent_working_day(today, -1).isoformat()
+    next_d = _adjacent_working_day(today, 1).isoformat()
+    day_rows = db.execute(
+        "SELECT account_id, task_date, activity, topic, status, outcome FROM visit_tasks "
+        "WHERE am_id = ANY(%s) AND task_date IN (%s, %s) ORDER BY id",
+        (am_ids, prev_d, next_d)).fetchall() if am_ids else []
+    by_acct = {}
+    for r in day_rows:
+        slot = "prev_day_tasks" if r["task_date"] == prev_d else "next_day_tasks"
+        by_acct.setdefault(r["account_id"], {"prev_day_tasks": [], "next_day_tasks": []})[slot].append(
+            {"activity": r["activity"], "topic": r["topic"] or "", "status": r["status"], "outcome": r["outcome"] or ""})
+    cov = [(_acct_tokens(r["account_name"]), r) for r in db.execute("SELECT * FROM account_coverage").fetchall()]
+    deals = [(_acct_tokens(r["customer"]), r) for r in db.execute(
+        "SELECT customer, estimated_value FROM deals WHERE customer != ''").fetchall()]
+    for a in acct_out:
+        toks = _acct_tokens(a["name"])
+        t = by_acct.get(a["id"], {"prev_day_tasks": [], "next_day_tasks": []})
+        a.update(t)
+        a["has_logo"] = bool(next((x["has_logo"] for x in accounts if x["id"] == a["id"]), False))
+        matched = [r for tk, r in deals if _acct_names_match(toks, tk)]
+        a["opp_count"] = len(matched)
+        a["opp_value"] = sum(int(r["estimated_value"] or 0) for r in matched)
+        c = next((r for tk, r in cov if _acct_names_match(toks, tk)), None)
+        a["cov"] = ({"id": c["id"], "status": c["status"], "is_champion": bool(c["is_champion"]),
+                     "notes": c["notes"] or "", "size": c["account_target"] or c["account_size"] or 0}
+                    if c else None)
+
+
 @app.route("/api/visit/overview", methods=["GET"])
 @login_required(roles=VISIT_ROLES)
 def visit_overview():
@@ -1995,7 +1775,8 @@ def visit_overview():
         ams = [a for a in ams if my_am and a["id"] == my_am["id"]]
     am_ids = [a["id"] for a in ams]
     accounts = db.execute(
-        "SELECT * FROM visit_accounts WHERE am_id = ANY(%s) ORDER BY am_id, "
+        "SELECT id, am_id, name, type, cadence, target_idr_mn, mrc_idr_mn, note, (logo IS NOT NULL) AS has_logo "
+        "FROM visit_accounts WHERE am_id = ANY(%s) ORDER BY am_id, "
         "CASE type WHEN 'Priority' THEN 0 ELSE 1 END, id", (am_ids,)).fetchall() if am_ids else []
     tasks = db.execute(
         "SELECT account_id, activity, status, task_date FROM visit_tasks WHERE am_id = ANY(%s)",
@@ -2007,6 +1788,8 @@ def visit_overview():
         "SELECT * FROM visit_blockers WHERE am_id = ANY(%s) AND status != 'Resolved'",
         (am_ids,)).fetchall() if am_ids else []
     acct_out = [_visit_account_dict(a, metrics[a["id"]]) for a in accounts]
+    _enrich_visit_accounts(db, acct_out, accounts, am_ids, today)
+    prev_day, next_day = _adjacent_working_day(today, -1), _adjacent_working_day(today, 1)
     am_out, tot = [], {"priority": 0, "on_track": 0, "slipping": 0, "overdue": 0, "no_plan": 0, "open_blockers": 0}
     for am in ams:
         pri = [a for a in acct_out if a["am_id"] == am["id"] and a["type"] == "Priority"]
@@ -2023,7 +1806,8 @@ def visit_overview():
             tot[k] += row[tk]
         am_out.append(row)
     return jsonify({
-        "today": today.isoformat(), "tracking_start_date": VISIT_SETTINGS["tracking_start_date"].isoformat(),
+        "today": today.isoformat(), "prev_day": prev_day.isoformat(), "next_day": next_day.isoformat(),
+        "tracking_start_date": VISIT_SETTINGS["tracking_start_date"].isoformat(),
         "me": {"am_id": my_am["id"] if my_am else None, "can_write": bool(my_am) or may_write_any,
                "is_admin": user["role"] == "admin", "sees_all": sees_all},
         "enums": {"activities": VISIT_ACTIVITIES, "task_statuses": VISIT_TASK_STATUSES,
@@ -2258,6 +2042,206 @@ def visit_delete_blocker(blocker_id):
     db.execute("DELETE FROM visit_blockers WHERE id = %s", (blocker_id,))
     db.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/api/visit/accounts/<int:account_id>/logo", methods=["GET"])
+@login_required(roles=VISIT_ROLES)
+def visit_account_logo(account_id):
+    row = get_db().execute("SELECT logo, logo_type FROM visit_accounts WHERE id = %s", (account_id,)).fetchone()
+    if not row or row["logo"] is None:
+        return jsonify({"error": "No logo"}), 404
+    resp = app.response_class(bytes(row["logo"]), mimetype=row["logo_type"] or "image/png")
+    resp.headers["Cache-Control"] = "private, max-age=3600"
+    return resp
+
+
+def _can_edit_visit_account(db, user, account_id):
+    acct = db.execute("SELECT am_id FROM visit_accounts WHERE id = %s", (account_id,)).fetchone()
+    if not acct:
+        return False, (jsonify({"error": "Account not found"}), 404)
+    if user["role"] == "admin":
+        return True, None
+    if user["role"] == "account_manager":
+        my = _visit_am_for_user(db, user)
+        if my and my["id"] == acct["am_id"]:
+            return True, None
+    return False, (jsonify({"error": "Only the admin or this account's AM can change this"}), 403)
+
+
+@app.route("/api/visit/accounts/<int:account_id>/logo", methods=["POST"])
+@login_required(roles=VISIT_ROLES)
+def visit_upload_logo(account_id):
+    db = get_db()
+    ok, err = _can_edit_visit_account(db, g.current_user, account_id)
+    if not ok:
+        return err
+    up = request.files.get("file")
+    if not up or not up.filename:
+        return jsonify({"error": "No file uploaded"}), 400
+    ext = up.filename.rsplit(".", 1)[-1].lower() if "." in up.filename else ""
+    types = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp", "gif": "image/gif"}
+    if ext not in types:
+        return jsonify({"error": "Logo must be a PNG, JPG, WEBP or GIF image"}), 400
+    data = up.read()
+    if len(data) > 1_000_000:
+        return jsonify({"error": "Logo must be under 1 MB"}), 400
+    db.execute("UPDATE visit_accounts SET logo = %s, logo_type = %s WHERE id = %s", (data, types[ext], account_id))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/visit/accounts/<int:account_id>/logo", methods=["DELETE"])
+@login_required(roles=VISIT_ROLES)
+def visit_delete_logo(account_id):
+    db = get_db()
+    ok, err = _can_edit_visit_account(db, g.current_user, account_id)
+    if not ok:
+        return err
+    db.execute("UPDATE visit_accounts SET logo = NULL, logo_type = '' WHERE id = %s", (account_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/visit/analytics", methods=["GET"])
+@login_required(roles=VISIT_ROLES)
+def visit_analytics():
+    """Trend data for the Overview charts: visits done per week, what the team spent its
+    time on, and how many AMs logged each recent working day."""
+    db = get_db()
+    my_am, sees_all, _ = _visit_scope(db, g.current_user)
+    today = visit_today()
+    ams = db.execute("SELECT * FROM visit_account_managers ORDER BY id").fetchall()
+    if not sees_all:
+        ams = [a for a in ams if my_am and a["id"] == my_am["id"]]
+    am_ids = [a["id"] for a in ams]
+    if not am_ids:
+        return jsonify({"weeks": [], "ams": [], "activity_mix": {}, "daily_logging": []})
+    monday = today - timedelta(days=today.weekday())
+    weeks = [monday - timedelta(days=7 * i) for i in range(7, -1, -1)]
+    rows = db.execute(
+        "SELECT am_id, task_date, activity, status FROM visit_tasks WHERE am_id = ANY(%s) AND task_date >= %s",
+        (am_ids, weeks[0].isoformat())).fetchall()
+    per_week = {a["id"]: [0] * len(weeks) for a in ams}
+    mix = {}
+    cutoff = (today - timedelta(days=30)).isoformat()
+    logged = {}
+    for r in rows:
+        d = _parse_iso_date(r["task_date"])
+        if not d:
+            continue
+        if r["activity"] in VISIT_COUNTED_ACTIVITIES and r["status"] == "Done":
+            wi = (d - weeks[0]).days // 7
+            if 0 <= wi < len(weeks):
+                per_week[r["am_id"]][wi] += 1
+        if r["status"] == "Done" and r["task_date"] >= cutoff:
+            mix[r["activity"]] = mix.get(r["activity"], 0) + 1
+        logged.setdefault(r["task_date"], set()).add(r["am_id"])
+    days, d = [], today
+    while len(days) < 10:
+        if d.weekday() < 5 and d not in VISIT_SETTINGS["holidays"] and d >= VISIT_SETTINGS["tracking_start_date"]:
+            days.append(d)
+        d -= timedelta(days=1)
+        if d < VISIT_SETTINGS["tracking_start_date"]:
+            break
+    days.reverse()
+    return jsonify({
+        "weeks": [w.isoformat() for w in weeks],
+        "ams": [{"id": a["id"], "name": a["name"], "visits": per_week[a["id"]]} for a in ams],
+        "activity_mix": mix,
+        "daily_logging": [{"date": x.isoformat(), "logged": len(logged.get(x.isoformat(), set())), "of": len(ams)} for x in days],
+    })
+
+
+def _sync_visit_accounts_from_coverage(db):
+    """Account Coverage's master import is the account registry: make sure every
+    account it lists under a Visit Tracker AM also exists as a visit account
+    (new ones start as 'Other', Monthly if they have a 2026 target else Quarterly).
+    Existing visit accounts keep their type, cadence and logo."""
+    ams = db.execute("SELECT * FROM visit_account_managers").fetchall()
+    existing = db.execute("SELECT id, am_id, name FROM visit_accounts").fetchall()
+    toks = [(_acct_tokens(r["name"]), r) for r in existing]
+    added = 0
+    for c in db.execute("SELECT * FROM account_coverage WHERE source IN ('master', 'performance')").fetchall():
+        am = next((a for a in ams if _names_match(a["name"], c["am"])), None)
+        if not am:
+            continue
+        ct = _acct_tokens(c["account_name"])
+        if any(_acct_names_match(ct, tk) for tk, _ in toks):
+            continue
+        cad = "Monthly" if (c["account_target"] or 0) > 0 else "Quarterly"
+        row = db.execute(
+            """INSERT INTO visit_accounts (am_id, name, type, cadence, target_idr_mn, note)
+               VALUES (%s, %s, 'Other', %s, %s, 'Added from Account Coverage') ON CONFLICT (name) DO NOTHING RETURNING id""",
+            (am["id"], c["account_name"], cad, (c["account_target"] or None))).fetchone()
+        if row:
+            toks.append((ct, {"id": row["id"]}))
+            added += 1
+    return added
+
+
+@app.route("/api/visit/sync_accounts", methods=["POST"])
+@login_required(roles=("admin",))
+def visit_sync_accounts():
+    db = get_db()
+    added = _sync_visit_accounts_from_coverage(db)
+    db.commit()
+    return jsonify({"ok": True, "added": added})
+
+
+@app.route("/api/visit/import_log", methods=["POST"])
+@login_required(roles=("admin",))
+def visit_import_log():
+    """Import the daily log from MLTR_Sales_Tracker_2026.xlsx (one sheet per AM, header row
+    Date | Account | Activity | Task / topic | Status | Outcome / next step)."""
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return jsonify({"error": "openpyxl is not installed on the server"}), 500
+    up = request.files.get("file")
+    if not up:
+        return jsonify({"error": "No file uploaded"}), 400
+    try:
+        wb = load_workbook(up, data_only=True)
+    except Exception as exc:
+        return jsonify({"error": f"Could not read this file as .xlsx ({exc})"}), 400
+    db = get_db()
+    ams = db.execute("SELECT * FROM visit_account_managers").fetchall()
+    accts = db.execute("SELECT id, am_id, name FROM visit_accounts").fetchall()
+    imported = dupes = 0
+    skipped = []
+    for ws in wb.worksheets:
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows or not rows[0]:
+            continue
+        am = next((a for a in ams if _names_match(a["name"], str(rows[0][0] or ""))), None)
+        hdr = next((i for i, r in enumerate(rows) if r and str(r[0] or "").strip() == "Date"
+                    and str(r[1] or "").strip() == "Account"), None)
+        if not am or hdr is None:
+            continue
+        mine = [a for a in accts if a["am_id"] == am["id"]]
+        for r in rows[hdr + 1:]:
+            if not r or r[0] is None:
+                continue
+            d = r[0].date() if hasattr(r[0], "date") else _parse_iso_date(r[0])
+            name, activity = str(r[1] or "").strip(), str(r[2] or "").strip()
+            status = str(r[4] or "Planned").strip()
+            acct = next((a for a in mine if a["name"].lower() == name.lower()), None) or \
+                next((a for a in mine if _acct_names_match(a["name"], name)), None)
+            if not d or not acct or activity not in VISIT_ACTIVITIES or status not in VISIT_TASK_STATUSES:
+                skipped.append(f"{ws.title}: {name or '(blank)'} / {activity}")
+                continue
+            topic, outcome = str(r[3] or "").strip(), str(r[5] or "").strip()
+            if db.execute("""SELECT 1 FROM visit_tasks WHERE task_date=%s AND am_id=%s AND account_id=%s
+                             AND activity=%s AND topic=%s""", (d.isoformat(), am["id"], acct["id"], activity, topic)).fetchone():
+                dupes += 1
+                continue
+            db.execute(
+                """INSERT INTO visit_tasks (task_date, am_id, account_id, activity, topic, status, outcome)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (d.isoformat(), am["id"], acct["id"], activity, topic, status, outcome))
+            imported += 1
+    db.commit()
+    return jsonify({"ok": True, "imported": imported, "duplicates": dupes, "skipped": skipped[:20]})
 
 
 @app.route("/api/visit/accounts/<int:account_id>", methods=["PUT"])
@@ -3624,6 +3608,7 @@ def import_performance():
     db.execute("""DELETE FROM performance WHERE id NOT IN
                   (SELECT id FROM performance ORDER BY id DESC LIMIT 12)""")
     removed = _sync_account_coverage(db, accounts)
+    _sync_visit_accounts_from_coverage(db)
     db.commit()
     return jsonify({"ok": True, "am_count": len(am_rows), "account_rows": len(accounts), "removed": removed})
 
@@ -3892,8 +3877,9 @@ def import_master_accounts():
             (current_keys,),
         )
         removed = cur.rowcount
+    visit_added = _sync_visit_accounts_from_coverage(db)
     db.commit()
-    return jsonify({"ok": True, "created": created, "updated": updated, "removed": removed, "total": len(accounts)})
+    return jsonify({"ok": True, "created": created, "updated": updated, "removed": removed, "total": len(accounts), "visit_accounts_added": visit_added})
 
 
 def _deals_by_account_key(db):

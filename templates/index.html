@@ -359,6 +359,10 @@
   .vt-table tr.vt-stale td { background:rgba(230,170,40,.10); }
   .vt-tabbtn { padding:7px 14px; font-size:13px; border-radius:8px; color:var(--text-muted); }
   .vt-tabbtn.active { background:var(--primary-soft); color:var(--primary); font-weight:600; }
+  .vt-day { min-height:74px; border:1px solid var(--border); border-radius:8px; padding:4px 5px; cursor:pointer; background:var(--surface); transition:border-color .12s; }
+  .vt-day:hover { border-color:var(--primary); } .vt-day.sel { border-color:var(--primary); background:var(--primary-soft); } .vt-day.today { box-shadow:inset 0 0 0 1px var(--primary); }
+  .vt-chipline { font-size:10px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  .vt-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:4px; vertical-align:middle; }
   .vt-link { color:var(--primary); cursor:pointer; text-decoration:underline; }
   .metric-context-item { display:inline-flex; align-items:center; gap:7px; font-size:12px; padding:5px 12px; border-radius:9999px; background:var(--surface-2); }
 </style>
@@ -449,7 +453,7 @@
       <span class="text-sm font-semibold leading-tight hidden sm:inline" style="color:var(--text);letter-spacing:-0.01em">Dashboard Tracker</span>
     </button>
     <button id="searchTriggerBtn" type="button" class="hidden md:flex items-center gap-2.5 flex-1 mx-3 px-4 py-2 rounded-full text-sm" style="background:var(--surface-2);color:var(--text-faint);border:1px solid var(--border);min-width:0" title="Search (Ctrl+K)">
-      <i class="fa-solid fa-magnifying-glass flex-shrink-0"></i><span class="flex-1 text-left" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search opportunities, features…</span><span class="chip flex-shrink-0" style="padding:1px 6px;font-size:9px;color:var(--text-faint)">Ctrl K</span>
+      <i class="fa-solid fa-magnifying-glass flex-shrink-0"></i><span class="flex-1 text-left" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Search opportunities, accounts, features…</span><span class="chip flex-shrink-0" style="padding:1px 6px;font-size:9px;color:var(--text-faint)">Ctrl K</span>
     </button>
     <button id="searchTriggerBtnMobile" type="button" class="icon-btn md:hidden" title="Search (Ctrl+K)"><i class="fa-solid fa-magnifying-glass"></i></button>
     <button id="quickConfigBtn" title="Configuration" class="icon-btn" style="display:none"><i class="fa-solid fa-list-check"></i></button>
@@ -488,8 +492,6 @@
           </button>
           <div class="nav-group-items space-y-1">
             <button data-tab="management" id="mgmtNavBtn" title="Management View" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-briefcase w-4"></i> <span class="rail-label">Management View</span></button>
-            <button data-tab="weeklymeeting" id="weeklyMeetingNavBtn" title="Weekly Meeting" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-people-arrows w-4"></i> <span class="rail-label">Weekly Meeting</span></button>
-            <button data-tab="myteamtasks" id="myTeamTasksNavBtn" title="My Team Tasks" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-list-check w-4"></i> <span class="rail-label">My Team Tasks</span></button>
           </div>
         </div>
         <!-- Tracker & updates -->
@@ -500,7 +502,7 @@
           <div class="nav-group-items space-y-1">
             <button data-tab="tracker" id="trackerNavBtn" title="My Tracker" class="nav-link active w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-table-cells-large w-4"></i> <span class="rail-label">My Tracker</span></button>
             <button data-tab="weeklyplan" id="weeklyPlanNavBtn" title="My Weekly Plan" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-calendar-week w-4"></i> <span class="rail-label">My Weekly Plan</span></button>
-            <button data-tab="visits" id="visitNavBtn" title="Visit Tracker" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-route w-4"></i> <span class="rail-label">Visit Tracker</span></button>
+            <button data-tab="visits" id="visitNavBtn" title="Accounts &amp; Visits" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-route w-4"></i> <span class="rail-label">Accounts &amp; Visits</span></button>
           </div>
         </div>
         <!-- Analytics -->
@@ -511,7 +513,6 @@
           <div class="nav-group-items space-y-1">
             <button data-tab="analytics" id="analyticsNavBtn" title="Pipeline Analytics" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-chart-line w-4"></i> <span class="rail-label">Pipeline Analytics</span></button>
             <button data-tab="performance" id="perfNavBtn" title="Performance" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-gauge-high w-4"></i> <span class="rail-label">Performance</span></button>
-            <button data-tab="coverage" id="coverageNavBtn" title="Account Coverage" class="nav-link w-full flex items-center gap-3 px-5 py-2.5 text-sm"><i class="fa-solid fa-users-viewfinder w-4"></i> <span class="rail-label">Account Coverage</span></button>
           </div>
         </div>
         <!-- Configuration -->
@@ -652,77 +653,6 @@
       </section>
 
       <!-- ============ WEEKLY FOLLOW-UPS (admin + management) ============ -->
-      <section id="tab-weeklymeeting" class="tab-panel px-8 py-7">
-        <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
-          <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-people-arrows mr-1" style="color:var(--primary)"></i>Weekly Meeting prep</span>
-          <select id="wmTeamFilter" class="field text-sm px-3 py-1.5">
-            <option value="">All teams</option>
-            <option value="solution">Solution</option>
-            <option value="project">Project</option>
-            <option value="product">Product</option>
-          </select>
-          <div class="flex-1"></div>
-          <button id="wmSummaryBtn" type="button" class="text-sm px-3 py-1.5 rounded-lg" style="background:var(--surface-2);color:var(--text)"><i class="fa-solid fa-list-check mr-1"></i>Get Weekly Summary</button>
-        </div>
-        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Everything Solution, Project and Product have flagged on opportunities — use this to run the weekly sync. Click a KPI to filter.</p>
-
-        <div id="wmSummaryPanel" class="card elev p-5 mb-4" style="display:none">
-          <div class="flex items-center justify-between mb-1">
-            <p class="text-sm font-medium"><i class="fa-solid fa-calendar-week mr-1.5" style="color:var(--primary)"></i>Weekly Summary</p>
-            <button id="wmSummaryCloseBtn" type="button" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button>
-          </div>
-          <p class="text-[11px] mb-3" style="color:var(--text-faint)">Condensed by opportunity — team tasks, Timeline Items, and Execution Framework evidence, grouped so it's quick to walk through in the meeting.</p>
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div>
-              <p class="text-xs font-medium mb-2" style="color:var(--success)"><i class="fa-solid fa-circle-check mr-1"></i>Done — last 7 days (<span id="wmSummaryDoneCount">0</span>)</p>
-              <div id="wmSummaryDoneList" class="space-y-1.5"></div>
-            </div>
-            <div>
-              <p class="text-xs font-medium mb-2" style="color:var(--primary)"><i class="fa-solid fa-calendar-days mr-1"></i>Planned — next 7 days (<span id="wmSummaryPlannedCount">0</span>)</p>
-              <div id="wmSummaryPlannedList" class="space-y-1.5"></div>
-            </div>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <div id="wmKpiBlockedCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--danger)"><p class="stat-label"><i class="fa-solid fa-ban mr-1"></i>Blocked</p><p id="wmKpiBlocked" class="stat-value">0</p></div>
-          <div id="wmKpiDiscussCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--warning)"><p class="stat-label"><i class="fa-solid fa-comments mr-1"></i>Needs discussion</p><p id="wmKpiDiscuss" class="stat-value">0</p></div>
-          <div id="wmKpiProgressCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--primary)"><p class="stat-label">In progress</p><p id="wmKpiProgress" class="stat-value">0</p></div>
-          <div id="wmKpiDoneCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--success)"><p class="stat-label">Done</p><p id="wmKpiDone" class="stat-value">0</p></div>
-        </div>
-        <p id="wmFilterNote" class="text-[11px] mb-3" style="color:var(--primary);display:none"><i class="fa-solid fa-filter mr-1"></i><span id="wmFilterNoteText"></span> — <button id="wmFilterClear" type="button" class="underline">clear</button></p>
-        <div class="card elev p-5">
-          <div id="wmList" class="space-y-2"></div>
-        </div>
-        <details id="wmSolvedSection" class="widget card elev p-5 mt-4" style="display:none">
-          <summary class="flex items-center gap-2" style="list-style:none;cursor:pointer">
-            <i class="fa-solid fa-chevron-right chev text-xs" style="color:var(--text-faint)"></i>
-            <i class="fa-solid fa-circle-check" style="color:var(--success)"></i>
-            <span class="text-sm font-medium" style="color:var(--text)">Solved</span>
-            <span id="wmSolvedCount" class="chip" style="color:var(--text-muted)">0</span>
-          </summary>
-          <p class="text-[11px] mt-1 mb-3" style="color:var(--text-faint)">Items already marked done, moved out of the active list above so it stays focused on what's still open.</p>
-          <div id="wmSolvedList" class="space-y-2"></div>
-        </details>
-      </section>
-
-      <!-- ============ MY TEAM TASKS (solution / project / product) ============ -->
-      <section id="tab-myteamtasks" class="tab-panel px-8 py-7">
-        <div class="card elev px-4 py-3 mb-4">
-          <span class="text-xs font-medium" style="color:var(--text-muted)"><i class="fa-solid fa-list-check mr-1" style="color:var(--primary)"></i>Your team's follow-ups across every opportunity</span>
-        </div>
-        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Update the status and note as you work — sales sees this instantly. You can't edit anything else on these opportunities. Click a KPI to filter.</p>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <div id="mtKpiPendingCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--primary)"><p class="stat-label">Pending</p><p id="mtKpiPending" class="stat-value">0</p></div>
-          <div id="mtKpiBlockedCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--danger)"><p class="stat-label"><i class="fa-solid fa-ban mr-1"></i>Blocked</p><p id="mtKpiBlocked" class="stat-value">0</p></div>
-          <div id="mtKpiDiscussCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--warning)"><p class="stat-label"><i class="fa-solid fa-comments mr-1"></i>Needs discussion</p><p id="mtKpiDiscuss" class="stat-value">0</p></div>
-          <div id="mtKpiDoneCard" class="stat-card clickable kpi-card" style="--stat-accent:var(--success)"><p class="stat-label">Done</p><p id="mtKpiDone" class="stat-value">0</p></div>
-        </div>
-        <p id="mtFilterNote" class="text-[11px] mb-3" style="color:var(--primary);display:none"><i class="fa-solid fa-filter mr-1"></i><span id="mtFilterNoteText"></span> — <button id="mtFilterClear" type="button" class="underline">clear</button></p>
-        <div class="card elev p-5">
-          <div id="mtList" class="space-y-2"></div>
-        </div>
-      </section>
-
       <!-- ============ TRACKER ============ -->
       <section id="tab-tracker" class="tab-panel active px-8 py-7">
         <!-- Page header: title + primary actions - kept apart from the filter bar below
@@ -731,6 +661,10 @@
           <div>
             <p class="section-label mb-1">Sales Pipeline</p>
             <p class="page-title">Tracker</p>
+          </div>
+          <div class="flex items-center gap-1 card p-1" style="width:fit-content">
+            <button type="button" id="tkViewOpps" class="vt-tabbtn active" data-tkview="opps">Opportunities</button>
+            <button type="button" id="tkViewAccts" class="vt-tabbtn" data-tkview="accounts">Accounts</button>
           </div>
           <div class="flex items-center gap-2.5">
             <button id="exportPdfBtn" class="text-sm px-4 py-2.5 rounded-lg transition" style="color:var(--text);border:1px solid var(--border)" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='transparent'"><i class="fa-solid fa-file-pdf mr-1.5" style="color:var(--danger)"></i>Export PDF</button>
@@ -778,6 +712,7 @@
         <p class="text-[11px] mb-2" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Double-click any row to open the full opportunity detail. <b>Rev 2026</b> = revenue realizable in the remaining H2 2026.</p>
 
         <div id="dealsTable"></div>
+        <div id="accountsView" style="display:none"></div>
       </section>
 
       <!-- ============ MY WEEKLY PLAN ============ -->
@@ -868,12 +803,12 @@
         </div>
       </div>
 
-      <!-- ============ VISIT TRACKER ============ -->
+      <!-- ============ ACCOUNTS & VISITS ============ -->
       <section id="tab-visits" class="tab-panel px-8 py-7">
         <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
           <div>
             <p class="section-label mb-1">Sales Cadence</p>
-            <p class="page-title">Visit Tracker</p>
+            <p class="page-title">Accounts &amp; Visits</p>
           </div>
           <p id="vtAsOf" class="text-[11px]" style="color:var(--text-faint)"></p>
         </div>
@@ -881,9 +816,16 @@
         <div id="vtBody"></div>
       </section>
 
+      <div id="acctModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
+        <div class="card w-full max-w-4xl elev p-6" style="contain:none;max-height:86vh;overflow:auto">
+          <div class="flex items-start justify-between mb-3"><div id="acctModalHead" class="flex items-center gap-3"></div><button data-close-modal="acctModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+          <div id="acctModalBody"></div>
+        </div>
+      </div>
+
       <div id="vtTaskModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
         <div class="card w-full max-w-lg elev p-6" style="contain:none">
-          <div class="flex items-start justify-between mb-4"><p id="vtTaskTitle" class="text-sm font-semibold" style="color:var(--text)">Log / plan a task</p><button data-close-modal="vtTaskModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+          <div class="flex items-start justify-between mb-4"><p id="vtTaskTitle" class="text-sm font-semibold" style="color:var(--text)">Edit task</p><button data-close-modal="vtTaskModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
           <form id="vtTaskForm" class="space-y-3">
             <div class="grid grid-cols-2 gap-3">
               <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Date</label><input id="vtTaskDate" type="date" required class="field w-full px-3 py-2 text-sm"></div>
@@ -928,14 +870,26 @@
         <div class="card w-full max-w-md elev p-6" style="contain:none">
           <div class="flex items-start justify-between mb-4"><p class="text-sm font-semibold" style="color:var(--text)">Edit account</p><button data-close-modal="vtAccountModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
           <form id="vtAccountForm" class="space-y-3">
+            <div class="flex items-center gap-3">
+              <div id="vtAccLogoPreview" class="flex items-center justify-center rounded-lg" style="width:84px;height:56px;background:#fff;border:1px solid var(--border)"></div>
+              <div class="flex-1"><label class="block text-xs mb-1" style="color:var(--text-muted)">Logo <span style="color:var(--text-faint)">(PNG / JPG, uploads immediately)</span></label>
+                <input id="vtAccLogoFile" type="file" accept=".png,.jpg,.jpeg,.webp,.gif" class="text-xs w-full"> <button type="button" id="vtAccLogoRemove" class="text-[11px] mt-1" style="color:var(--danger)">Remove logo</button></div>
+            </div>
             <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Account name</label><input id="vtAccName" type="text" required class="field w-full px-3 py-2 text-sm"></div>
             <div class="grid grid-cols-2 gap-3">
               <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Type</label><select id="vtAccType" class="field w-full px-3 py-2 text-sm"></select></div>
               <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Cadence</label><select id="vtAccCadence" class="field w-full px-3 py-2 text-sm"></select></div>
             </div>
             <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Note</label><input id="vtAccNote" type="text" class="field w-full px-3 py-2 text-sm"></div>
-            <div class="flex justify-end gap-2 pt-1"><button type="button" data-close-modal="vtAccountModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button></div>
+            <div class="flex justify-end gap-2 pt-1"><button type="button" data-close-modal="vtAccountModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Close</button><button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button></div>
           </form>
+        </div>
+      </div>
+
+      <div id="vtDetailModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
+        <div class="card w-full max-w-5xl elev p-6" style="contain:none;max-height:86vh;overflow:auto">
+          <div class="flex items-start justify-between mb-3"><div><p id="vtDetailTitle" class="text-sm font-semibold" style="color:var(--text)"></p><p class="text-[11px]" style="color:var(--text-faint)">Double-click a row to open that account manager's page</p></div><button data-close-modal="vtDetailModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+          <div id="vtDetailBody" class="overflow-x-auto"></div>
         </div>
       </div>
 
@@ -1073,174 +1027,6 @@
       </section>
 
       <!-- ============ ACCOUNT COVERAGE ============ -->
-      <section id="tab-coverage" class="tab-panel px-8 py-7">
-        <div class="flex flex-wrap items-center gap-1.5 mb-4 card elev p-1.5" style="width:fit-content">
-          <button data-ctab="coverage" class="ctab-btn active">Account Coverage</button>
-          <button data-ctab="workload" class="ctab-btn">AM Workload</button>
-        </div>
-
-        <div id="ctab-coverage" class="ctab-pane">
-        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Every account the performance team hands the AMs, cross-checked against opportunities already in the Tracker (matched by Customer name). Use it to spot accounts nobody is actively working &mdash; especially big ones &mdash; and to flag "champion" accounts an AM is confident in. Click any chart to filter the table below.</p>
-
-        <div id="covMasterImportWrap" class="card elev p-4 mb-4" style="display:none">
-          <p class="text-sm font-medium mb-1"><i class="fa-solid fa-file-arrow-up mr-1.5" style="color:var(--primary)"></i>Import master account list</p>
-          <p class="text-[11px] mb-3" style="color:var(--text-faint)">Uploads the Engine-1-wide "Master Account Planning" workbook (sheets named like <b>Target &amp; AM name</b> and <b>Revenue Data</b>) and pulls in only the PODS 2 rows &mdash; each account's 2026 target and assigned AM. This is the authoritative account list; anything not in here that shows up as an opportunity in the Tracker is flagged below as a "new" account instead. <b>The uploaded file itself is never saved</b> &mdash; only the account figures it contains are extracted and stored.</p>
-          <div class="flex flex-wrap items-center gap-2">
-            <input id="covMasterImportFile" type="file" accept=".xlsx" class="text-xs" style="color:var(--text-muted)">
-            <button id="covMasterImportBtn" class="text-xs px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-file-arrow-up mr-1"></i>Import master account list</button>
-            <span id="covMasterImportResult" class="text-[11px]" style="color:var(--text-muted)"></span>
-          </div>
-        </div>
-
-        <p id="covTotalLine" class="text-xs mb-3" style="color:var(--text-muted)"></p>
-        <div id="covHeadlineGauges" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4"></div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          <div class="card elev p-5">
-            <p class="text-sm font-medium mb-1">Relationship status</p>
-            <p class="text-[11px] mb-3" style="color:var(--text-faint)">Not just "cold" &mdash; an account can be in good standing without an open opportunity.</p>
-            <div id="covStatusChart"></div>
-          </div>
-          <div class="card elev p-5">
-            <p class="text-sm font-medium mb-1">Account source</p>
-            <p class="text-[11px] mb-3" style="color:var(--text-faint)">Given by the performance team's imports vs. surfaced only from Tracker activity or added by hand.</p>
-            <div id="covSourceChart"></div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          <div class="card elev p-5">
-            <p class="text-sm font-medium mb-3">Account load by AM</p>
-            <div id="covByAmChart"></div>
-          </div>
-          <div class="card elev p-5">
-            <p class="text-sm font-medium mb-1"><i class="fa-solid fa-arrows-rotate mr-1.5" style="color:var(--warning)"></i>Rotation signal</p>
-            <p class="text-[11px] mb-3" style="color:var(--text-muted)">Top-quartile accounts by size with no opportunity, no champion flag, and not marked Not Preferable.</p>
-            <div id="covRotationList"></div>
-          </div>
-        </div>
-
-        <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
-          <input id="covSearch" type="text" placeholder="Search account or AM…" class="field text-sm px-3 py-1.5" style="min-width:200px">
-          <select id="covFilterAM" class="field text-sm px-3 py-1.5"><option value="">All AMs</option></select>
-          <select id="covFilterStatus" class="field text-sm px-3 py-1.5">
-            <option value="">All statuses</option>
-            <option value="handled">Engaged (has opportunity)</option>
-            <optgroup label="Good standing">
-              <option value="existing_customer">Existing customer</option>
-              <option value="preferred">Preferred / good relationship</option>
-            </optgroup>
-            <optgroup label="Opportunity">
-              <option value="growth_potential">Growth potential</option>
-              <option value="unreviewed">Unreviewed</option>
-            </optgroup>
-            <optgroup label="Needs attention">
-              <option value="at_risk">At risk / cooling</option>
-              <option value="low_priority">Low priority</option>
-              <option value="no_contact">No contact</option>
-              <option value="not_preferable">Not preferable</option>
-            </optgroup>
-          </select>
-          <select id="covFilterSource" class="field text-sm px-3 py-1.5">
-            <option value="">All sources</option>
-            <option value="official">Given by performance team</option>
-            <option value="new">New (Tracker / manual)</option>
-          </select>
-          <label class="flex items-center gap-1.5 text-xs" style="color:var(--text-muted)"><input id="covChampionOnly" type="checkbox" class="rounded">Champions only</label>
-          <label class="flex items-center gap-1.5 text-xs" style="color:var(--text-muted)"><input id="covRotationOnly" type="checkbox" class="rounded">Rotation candidates only</label>
-          <button id="covFilterClear" class="text-xs px-2 py-1.5 rounded-lg" style="color:var(--text-muted)"><i class="fa-solid fa-xmark mr-1"></i>Clear</button>
-          <div class="flex-1"></div>
-          <span id="covResultCount" class="text-[11px]" style="color:var(--text-faint)"></span>
-          <button id="covAddBtn" class="text-sm card px-3 py-1.5" style="color:var(--text)"><i class="fa-solid fa-plus mr-1.5" style="color:var(--primary)"></i>Add account</button>
-        </div>
-        <div id="covAddWrap" class="card elev p-4 mb-4" style="display:none">
-          <p class="text-sm font-medium mb-2">Add an account you're working that isn't in the performance import</p>
-          <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
-            <input id="covAddName" type="text" placeholder="Account / company name" class="field text-sm px-3 py-2 sm:col-span-2">
-            <input id="covAddPillar" type="text" placeholder="Pillar (optional)" class="field text-sm px-3 py-2">
-            <select id="covAddAM" class="field text-sm px-3 py-2" style="display:none"></select>
-          </div>
-          <div class="flex items-center gap-2 mt-2">
-            <button id="covAddSaveBtn" class="btn-primary text-xs px-3 py-1.5 rounded-lg">Save</button>
-            <button id="covAddCancelBtn" class="text-xs px-3 py-1.5 rounded-lg" style="color:var(--text-muted)">Cancel</button>
-            <span id="covAddResult" class="text-[11px]" style="color:var(--text-faint)"></span>
-          </div>
-        </div>
-        <div class="card elev p-5">
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead style="color:var(--text-muted)"><tr class="text-xs uppercase" style="border-bottom:1px solid var(--border)">
-                <th class="text-left py-2 cov-th clickable" data-sort="account_name">Account</th>
-                <th class="text-left py-2 cov-th clickable" data-sort="source">Source</th>
-                <th class="text-left py-2 cov-th clickable" data-sort="am">AM</th>
-                <th class="text-left py-2 cov-th clickable" data-sort="pillar">Pillar</th>
-                <th class="text-right py-2 cov-th clickable" data-sort="size">Target / Size</th>
-                <th class="text-left py-2 cov-th clickable" data-sort="deal_count">Open opportunity</th>
-                <th class="text-left py-2 w-44 cov-th clickable" data-sort="status">Status</th>
-                <th class="text-center py-2 cov-th clickable" data-sort="is_champion">Champion</th>
-                <th class="text-left py-2 w-56">Notes</th>
-                <th class="py-2"></th>
-              </tr></thead>
-              <tbody id="covTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-        </div>
-
-        <div id="ctab-workload" class="ctab-pane" style="display:none">
-        <p class="text-[11px] mb-3" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>How many accounts each Account Manager actually has on their plate, from the same Account Coverage data. Click a card, a bar, or the selector to switch AM.</p>
-
-        <p id="amwTotalLine" class="text-sm font-medium mb-3" style="color:var(--text)"></p>
-
-        <div class="card elev p-5 mb-4">
-          <p class="text-sm font-medium mb-3">Accounts handled, by AM</p>
-          <div id="amwCoverageBars"></div>
-        </div>
-
-        <div id="amwCards" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4"></div>
-
-        <div class="card elev px-4 py-3 mb-4 flex flex-wrap items-center gap-3">
-          <label class="text-xs" style="color:var(--text-muted)">Account Manager</label>
-          <select id="amwSelect" class="field text-sm px-3 py-1.5"></select>
-          <div class="flex-1"></div>
-          <span id="amwSelectedNote" class="text-[11px]" style="color:var(--text-faint)"></span>
-        </div>
-
-        <div id="amwStatCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4"></div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-          <div class="card elev p-5">
-            <p class="text-sm font-medium mb-3">Their accounts by status</p>
-            <div id="amwStatusChart"></div>
-          </div>
-          <div class="card elev p-5">
-            <p class="text-sm font-medium mb-1"><i class="fa-solid fa-arrows-rotate mr-1.5" style="color:var(--warning)"></i>Biggest unhandled accounts</p>
-            <p class="text-[11px] mb-3" style="color:var(--text-muted)">Their largest accounts with no open opportunity right now.</p>
-            <div id="amwUnhandledList"></div>
-          </div>
-        </div>
-
-        <div class="card elev p-5">
-          <p class="text-sm font-medium mb-3">Full account list</p>
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead style="color:var(--text-muted)"><tr class="text-xs uppercase" style="border-bottom:1px solid var(--border)">
-                <th class="text-left py-2">Account</th>
-                <th class="text-left py-2">Source</th>
-                <th class="text-left py-2">Pillar</th>
-                <th class="text-right py-2">Target / Size</th>
-                <th class="text-left py-2">Open opportunity</th>
-                <th class="text-left py-2 w-44">Status</th>
-                <th class="text-center py-2">Champion</th>
-                <th class="text-left py-2 w-56">Notes</th>
-              </tr></thead>
-              <tbody id="amwTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-        </div>
-      </section>
-
       <!-- ============ SETTINGS ============ -->
       <section id="tab-settings" class="tab-panel px-8 py-7">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1585,9 +1371,6 @@
       <button type="button" id="mtabBtnActionplan" class="modal-tab-btn text-sm px-4 py-2" data-mtab="actionplan">
         Action Plan <span id="mtabApBadge" class="chip ml-1" style="color:var(--text-muted)">0</span>
       </button>
-      <button type="button" class="modal-tab-btn text-sm px-4 py-2" data-mtab="teamtasks">
-        Team Tasks <span id="mtabTtBadge" class="chip ml-1" style="color:var(--text-muted)">0</span>
-      </button>
     </div>
     <form id="dealForm" class="px-6 py-5 space-y-4">
       <input type="hidden" id="dealId">
@@ -1686,42 +1469,9 @@
         </div>
       </div><!-- /actionplan pane -->
 
-      <div id="mtab-teamtasks" class="modal-tab-pane space-y-4" style="display:none">
-        <div id="teamTasksDealContext" class="rounded-lg p-3" style="border:1px solid var(--border);display:none"></div>
-        <p class="text-[10px]" style="color:var(--text-faint)">Assign follow-ups to Solution, Project or Product so everyone knows what's pending and who owns it. They can only update the status, note and their own new tasks here — nothing else on this opportunity.</p>
-        <div id="teamTasksNewDealNote" class="rounded-lg p-3 text-xs" style="border:1px solid var(--border);color:var(--text-faint);display:none">Save this opportunity first, then add team tasks.</div>
-        <div id="teamTasksBody">
-          <div id="teamTasksList" class="space-y-2 mb-3"></div>
-          <div class="rounded-lg p-2.5" style="border:1px dashed var(--border)">
-            <input id="newTaskText" type="text" placeholder="What does the team need to do... (type @Full Name to notify someone)" class="field w-full px-3 py-2 text-sm mb-2">
-            <div class="flex flex-wrap gap-2 items-center">
-              <select id="newTaskTeam" class="field px-3 py-2 text-sm" style="width:120px">
-                <option value="solution">Solution</option>
-                <option value="project">Project</option>
-                <option value="product">Product</option>
-              </select>
-              <div class="assignee-combo flex-1" style="position:relative;min-width:180px">
-                <input id="newTaskAssignee" type="text" class="assignee-input field px-3 py-2 text-sm w-full" placeholder="Assigned to — search users..." title="Who this task is targeted to" autocomplete="off">
-                <div class="assignee-dropdown" style="display:none"></div>
-              </div>
-              <select id="newTaskStatus" class="field px-3 py-2 text-sm" style="width:150px" title="Status right now">
-                <option value="not_started">Not started</option>
-                <option value="in_progress">In progress</option>
-                <option value="blocked">Blocked</option>
-                <option value="needs_discussion">Needs discussion</option>
-                <option value="done">Done</option>
-              </select>
-              <input id="newTaskDue" type="date" class="field px-3 py-2 text-sm" style="width:150px" title="Target date to resolve this by">
-              <button type="button" id="addTaskBtn" class="text-sm px-3 py-2 rounded-lg" style="background:var(--surface-2);color:var(--text)">Add</button>
-            </div>
-          </div>
-        </div>
-      </div><!-- /teamtasks pane -->
-
       <div class="flex items-center justify-between gap-2 pt-2">
         <span id="dealSaveStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
         <div class="flex gap-2">
-          <button type="button" id="dealModalCloseBtn" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted);display:none">Close</button>
           <button type="button" data-close-modal="dealModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)" id="dealModalCancelBtn">Cancel</button>
           <button type="submit" id="dealModalSaveBtn" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button>
         </div>
@@ -1739,7 +1489,7 @@
       <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Username</label><input id="userUsername" required type="text" class="field w-full px-3 py-2 text-sm"></div>
       <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Full name (AM display name)</label><input id="userFullName" type="text" class="field w-full px-3 py-2 text-sm"></div>
       <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Password <span id="userPasswordHint" style="color:var(--text-faint)"></span></label><input id="userPassword" type="password" class="field w-full px-3 py-2 text-sm"></div>
-      <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Role</label><select id="userRole" class="field w-full px-3 py-2 text-sm"><option value="admin">Admin</option><option value="account_manager">Account Manager</option><option value="management">Management</option><option value="solution">Solution Team</option><option value="project">Project Team</option><option value="product">Product Team</option></select><p class="text-[10px] mt-1" style="color:var(--text-faint)">Solution / Project / Product can only update the status &amp; note on their own team's tasks in the Team Tasks tab &mdash; nothing else on an opportunity.</p></div>
+      <div><label class="block text-xs mb-1" style="color:var(--text-muted)">Role</label><select id="userRole" class="field w-full px-3 py-2 text-sm"><option value="admin">Admin</option><option value="account_manager">Account Manager</option><option value="management">Management</option></select></div>
       <div class="flex justify-end gap-2 pt-2"><button type="button" data-close-modal="userModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button type="submit" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button></div>
     </form>
   </div>
@@ -1773,7 +1523,7 @@
   <div class="card elev w-full max-w-lg overflow-hidden" style="max-height:70vh">
     <div class="flex items-center gap-2.5 px-4 py-3" style="border-bottom:1px solid var(--border)">
       <i class="fa-solid fa-magnifying-glass text-sm" style="color:var(--text-faint)"></i>
-      <input id="cmdInput" type="text" placeholder="Search features — Tracker, Weekly Plan, Analytics, Settings…" class="flex-1 text-sm bg-transparent outline-none" style="color:var(--text)">
+      <input id="cmdInput" type="text" placeholder="Search opportunities, accounts or features…" class="flex-1 text-sm bg-transparent outline-none" style="color:var(--text)">
       <button data-close-modal="cmdPalette" class="chip" style="color:var(--text-faint)">Esc</button>
     </div>
     <div id="cmdResults" class="overflow-y-auto" style="max-height:calc(70vh - 52px)"></div>
@@ -1834,7 +1584,7 @@ let NOTIFICATIONS = [], notifPollTimer = null;
 let DEALS = [], ALL_DEALS = [], CONFIG = { target_amount:0, strategic_pillars:[], squads:[], stages:[], am_targets:{}, am_achievements:{}, am_recurring:{}, current_achievement:0, recurring_revenue:0, max_login_logs:100 }, USERS = [], AMS = [], ASSIGNABLE_USERS = [];
 let COVERAGE = [];
 let timelineItemsDraft = [], confirmCallback = null, analyticsFilters = {};
-let dealModalDirty = false, dealModalRestricted = false, dealAutosaveTimer = null, dealAutosaveInFlight = false;
+let dealModalDirty = false, dealAutosaveTimer = null, dealAutosaveInFlight = false;
 let currentPage = 1;
 let proofsDraft = {}, fwDrillKey = null;
 // The 8 Enterprise Proofs (fetched from the server; this is the fallback order/labels)
@@ -2028,18 +1778,15 @@ async function enterApp(){
   document.getElementById('configNavBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('loginLogsNavBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('mgmtNavBtn').style.display = (ROLE==='admin'||ROLE==='management') ? '' : 'none';
-  document.getElementById('weeklyMeetingNavBtn').style.display = ''; // visible to every role
   document.getElementById('quickSettingsBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('quickConfigBtn').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('perfUploadWrap').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('amTargetsImportWrap').style.display = ROLE==='admin' ? '' : 'none';
-  document.getElementById('covMasterImportWrap').style.display = ROLE==='admin' ? '' : 'none';
   document.getElementById('addDealBtn').style.display = (ROLE==='admin'||ROLE==='account_manager') ? '' : 'none';
-  // Solution / Project / Product can see every opportunity (read-only, for context) and
-  // their own task inbox, but not Weekly Plan / Analytics / Performance / any edit control.
+  // Legacy Solution / Project / Product logins can still view opportunities (read-only)
+  // but not Weekly Plan / Visits / Analytics / Performance / any edit control.
   const isCrossFunctional = CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
-  document.getElementById('myTeamTasksNavBtn').style.display = isCrossFunctional ? '' : 'none';
-  ['weeklyPlanNavBtn','visitNavBtn','analyticsNavBtn','perfNavBtn','coverageNavBtn'].forEach(id=>{
+  ['weeklyPlanNavBtn','visitNavBtn','analyticsNavBtn','perfNavBtn'].forEach(id=>{
     document.getElementById(id).style.display = isCrossFunctional ? 'none' : '';
   });
   // Admin/management get an AM picker on Weekly Plan (to review anyone's plan, or
@@ -2062,7 +1809,7 @@ async function enterApp(){
   if(!CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) await loadAccountCoverage();
   if(ROLE==='admin') await loadUsers();
   // Management lands on the executive briefing; everyone else on the tracker
-  switchTab(ROLE==='management' ? 'management' : CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE) ? 'myteamtasks' : 'tracker');
+  switchTab(ROLE==='management' ? 'management' : 'tracker');
   loadNotifications();
   if(notifPollTimer) clearInterval(notifPollTimer);
   notifPollTimer = setInterval(loadNotifications, 60000);
@@ -2073,8 +1820,7 @@ document.querySelectorAll('.nav-link').forEach(b=>b.addEventListener('click',()=
 function switchTab(tab){
   if((tab==='settings'||tab==='configuration'||tab==='loginlogs') && ROLE!=='admin') return;
   if(tab==='management' && !(ROLE==='admin'||ROLE==='management')) return;
-  if(tab==='myteamtasks' && !CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
-  if(['weeklyplan','visits','analytics','performance','coverage'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
+  if(['weeklyplan','visits','analytics','performance'].includes(tab) && CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return;
   document.querySelectorAll('.nav-link').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
@@ -2095,9 +1841,6 @@ function switchTab(tab){
   // Re-fetch (not just re-render) every time this tab opens - Account Coverage is
   // import-driven and can change server-side (another admin's import, a scheduled
   // sync) without this browser's in-memory copy ever refreshing otherwise.
-  if(tab==='coverage'){ loadAccountCoverage().then(()=>{ renderCoverage(); renderAmWorkload(); }); }
-  if(tab==='weeklymeeting') renderWeeklyMeeting();
-  if(tab==='myteamtasks') renderMyTeamTasks();
 }
 
 /* ================= NOTIFICATIONS ================= */
@@ -2162,18 +1905,9 @@ async function goToNotification(idx){
   const n=NOTIFICATIONS[idx]; if(!n) return;
   document.getElementById('notifPanel').classList.add('hidden');
   markNotificationRead(n);
-  if(!n.task_id){
-    try{ ALL_DEALS=await api('/api/deals'); }catch(e){}
-    switchTab('tracker');
-    setTimeout(()=>openDetail(n.deal_id),80);
-    return;
-  }
-  wmExpandedThreads.add('open:'+n.deal_id);
-  switchTab('weeklymeeting');
-  setTimeout(()=>{
-    const el=document.getElementById('task-row-'+n.task_id);
-    if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.classList.add('flash-highlight'); setTimeout(()=>el.classList.remove('flash-highlight'),1700); }
-  },250);
+  try{ ALL_DEALS=await api('/api/deals'); }catch(e){}
+  switchTab('tracker');
+  setTimeout(()=>openDetail(n.deal_id),80);
 }
 
 /* ================= CONFIG / AMS ================= */
@@ -2381,9 +2115,6 @@ function dealsTableColumns(){
             <button class="del-btn ml-3" style="color:var(--danger)"><i class="fa-solid fa-trash text-xs"></i></button>`;
           wrap.querySelector('.edit-btn').addEventListener('click',()=>openDealModal(d.id));
           wrap.querySelector('.del-btn').addEventListener('click',()=>confirmDeleteDeal(d.id));
-        } else if(CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)){
-          wrap.innerHTML=`<button class="tasks-btn" style="color:var(--primary)" title="Team Tasks"><i class="fa-solid fa-list-check text-xs"></i></button>`;
-          wrap.querySelector('.tasks-btn').addEventListener('click',()=>openDealModal(d.id));
         } else {
           wrap.innerHTML=`<span class="text-xs" style="color:var(--text-faint)"><i class="fa-solid fa-lock"></i></span>`;
         }
@@ -2393,6 +2124,7 @@ function dealsTableColumns(){
 }
 
 function renderDealsTable(){
+  if(TK_VIEW==='accounts'){ renderAccountsView(); return; }
   const rows=sortRows(filteredBySearch());
   if(!dealsTabulator){
     dealsTabulator = new Tabulator("#dealsTable", {
@@ -2495,7 +2227,6 @@ function openDetail(id){
       <div id="docList" class="space-y-1.5"><p class="text-xs" style="color:var(--text-faint)">Loading…</p></div>
     </div>
     ${editable?`<button onclick="closeDetail();openDealModal(${d.id})" class="btn-primary w-full text-sm py-2.5 rounded-lg"><i class="fa-solid fa-pen mr-1.5"></i>Edit Opportunity</button>`
-      :CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)?`<button onclick="closeDetail();openDealModal(${d.id})" class="btn-primary w-full text-sm py-2.5 rounded-lg"><i class="fa-solid fa-list-check mr-1.5"></i>Team Tasks</button>`
       :`<p class="text-xs text-center" style="color:var(--text-faint)"><i class="fa-solid fa-lock mr-1"></i>${ROLE==='management'?'View-only role':'Assigned to another AM'}</p>`}
   `;
   document.getElementById('detailBackdrop').classList.remove('hidden');
@@ -2551,33 +2282,12 @@ document.getElementById('detailBackdrop').addEventListener('click',closeDetail);
 document.getElementById('addDealBtn').addEventListener('click',()=>openDealModal(null));
 function openDealModal(id){
   const d=id?DEALS.find(x=>x.id===id):null;
-  const restricted = CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
-  if(restricted && !d) return; // cross-functional roles can only add tasks to an existing opportunity
-
-  dealModalRestricted = restricted;
+  if(CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return; // legacy read-only roles can't edit
   dealModalDirty = false;
   clearTimeout(dealAutosaveTimer);
   updateDealSaveStatus('');
 
-  document.getElementById('dealModalTabBar').style.display = restricted ? 'none' : '';
-  document.getElementById('dealModalSaveBtn').style.display = restricted ? 'none' : '';
-  document.getElementById('dealModalCancelBtn').style.display = restricted ? 'none' : '';
-  document.getElementById('dealModalCloseBtn').style.display = restricted ? '' : 'none';
-  const ctx=document.getElementById('teamTasksDealContext');
-  if(restricted && d){
-    ctx.style.display='';
-    ctx.innerHTML=`<p class="text-sm font-medium mb-1" style="color:var(--text)">${escapeHtml(d.deal_name)}</p>
-      <div class="flex flex-wrap gap-3 text-xs" style="color:var(--text-muted)">
-        <span>${escapeHtml(d.customer||'—')}</span>
-        <span class="chip" style="color:var(--text-muted)">${escapeHtml(d.assigned_am||'—')}</span>
-        <span><span class="stage-dot" style="background:${stageColor(d.stage)}"></span> ${escapeHtml(d.stage)}</span>
-        <span>${fmtIDR(d.estimated_value)}</span>
-      </div>`;
-  } else { ctx.style.display='none'; ctx.innerHTML=''; }
-  document.getElementById('newTaskTeam').disabled = restricted;
-  if(restricted) document.getElementById('newTaskTeam').value = ROLE;
-
-  document.getElementById('dealModalTitle').textContent = restricted ? 'Team Tasks' : (d?'Edit Opportunity':'Add Opportunity');
+  document.getElementById('dealModalTitle').textContent = d?'Edit Opportunity':'Add Opportunity';
   document.getElementById('dealId').value=d?d.id:'';
   document.getElementById('dealName').value=d?d.deal_name:'';
   document.getElementById('dealCustomer').value=d?d.customer:'';
@@ -2600,8 +2310,7 @@ function openDealModal(id){
   proofsDraft=normalizeProofs(d?d.proofs:{});
   renderTimelineItemsDraft();
   renderProofsDraft();
-  loadTeamTasks(d?d.id:null);
-  switchModalTab(restricted?'teamtasks':'details');
+  switchModalTab('details');
   openModal('dealModal');
 }
 document.getElementById('dealProgress').addEventListener('input',e=>document.getElementById('dealProgressLabel').textContent=e.target.value);
@@ -2762,421 +2471,6 @@ function renderTimeline(items){
 document.getElementById('dealExpectedPO').addEventListener('change',refreshTimeline);
 document.getElementById('dealExpectedRevenue').addEventListener('change',refreshTimeline);
 
-/* ================= TEAM TASKS (bridge to Solution / Project / Product) ================= */
-const TASK_TEAM_META = {
-  sales:{label:'Sales', color:'#fff', bg:'#5f6b7a'},
-  solution:{label:'Solution', color:'#fff', bg:'#8b3fd6'},
-  project:{label:'Project', color:'#fff', bg:'#0972d3'},
-  product:{label:'Product', color:'#fff', bg:'#037f51'},
-};
-function taskFromToChips(t){
-  const fromM=TASK_TEAM_META[t.source_team]||TASK_TEAM_META.sales, toM=TASK_TEAM_META[t.team];
-  const fromWho=t.created_by?` <span style="opacity:.85">· ${escapeHtml(t.created_by)}</span>`:'';
-  return `<span class="chip" style="background:${fromM.bg};color:${fromM.color};border-color:transparent" title="Filed by">${fromM.label}${fromWho}</span>
-    <i class="fa-solid fa-arrow-right-long text-[9px]" style="color:var(--text-faint)"></i>
-    <span class="chip" style="background:${toM.bg};color:${toM.color};border-color:transparent" title="Assigned to team">${toM.label}</span>
-    ${t.assigned_to?`<span class="chip" style="color:var(--text)" title="Assigned to">
-      <i class="fa-solid fa-user text-[9px] mr-1" style="color:var(--text-faint)"></i>${escapeHtml(t.assigned_to)}</span>`:''}`;
-}
-const TASK_STATUS_META = {
-  not_started:{label:'Not started', color:'var(--text-faint)', bg:'var(--surface-3)'},
-  in_progress:{label:'In progress', color:'#fff', bg:'var(--primary)'},
-  blocked:{label:'Blocked', color:'#fff', bg:'var(--danger)'},
-  needs_discussion:{label:'Needs discussion', color:'#fff', bg:'var(--warning)'},
-  done:{label:'Done', color:'#fff', bg:'var(--success)'},
-};
-/* Searchable "assigned to" picker over ASSIGNABLE_USERS (every role except admin/
-   management) — deliberately not free text: the typed value only commits when it
-   exactly matches a real user, picked from the dropdown or typed in full. */
-function wireAssigneeCombo(container, currentValue, onCommit){
-  const input=container.querySelector('.assignee-input'), dropdown=container.querySelector('.assignee-dropdown');
-  if(!input || !dropdown || input.disabled) return;
-  input.dataset.committed = currentValue||'';
-  function showOptions(){
-    const q=input.value.trim().toLowerCase();
-    const matches=ASSIGNABLE_USERS.filter(u=>u.full_name.toLowerCase().includes(q)).slice(0,8);
-    dropdown.innerHTML = matches.length
-      ? matches.map(u=>`<div class="assignee-opt" data-name="${escapeHtml(u.full_name)}">${escapeHtml(u.full_name)} <span style="color:var(--text-faint)">· ${escapeHtml(TASK_TEAM_META[u.role]?.label||u.role)}</span></div>`).join('')
-      : `<div class="assignee-opt" style="color:var(--text-faint);cursor:default">No matching users</div>`;
-    dropdown.querySelectorAll('.assignee-opt[data-name]').forEach(opt=>opt.addEventListener('mousedown',ev=>{
-      ev.preventDefault();
-      const name=opt.dataset.name;
-      input.value=name; input.dataset.committed=name; dropdown.style.display='none';
-      onCommit(name);
-    }));
-    dropdown.style.display='';
-  }
-  input.addEventListener('focus',showOptions);
-  input.addEventListener('input',showOptions);
-  input.addEventListener('blur',()=>{
-    setTimeout(()=>{ dropdown.style.display='none'; }, 150);
-    const typed=input.value.trim(), committed=input.dataset.committed||'';
-    if(!ASSIGNABLE_USERS.some(u=>u.full_name===typed)){
-      if(committed) showToast('Please pick a user from the list',true);
-      input.value=committed;
-    } else if(typed!==committed){
-      input.dataset.committed=typed; onCommit(typed);
-    }
-  });
-}
-function resetAssigneeCombo(container){
-  const input=container.querySelector('.assignee-input');
-  if(input){ input.value=''; input.dataset.committed=''; }
-}
-let dealTasksDraft=[], currentTaskDealId=null;
-
-async function loadTeamTasks(dealId){
-  currentTaskDealId=dealId;
-  const note=document.getElementById('teamTasksNewDealNote'), body=document.getElementById('teamTasksBody');
-  if(!dealId){ dealTasksDraft=[]; note.style.display=''; body.style.display='none'; renderTeamTasksBadge(); return; }
-  note.style.display='none'; body.style.display='';
-  try{ dealTasksDraft=await api(`/api/deals/${dealId}/tasks`); }catch(e){ dealTasksDraft=[]; }
-  renderTeamTasks();
-}
-function renderTeamTasksBadge(){
-  document.getElementById('mtabTtBadge').textContent=String(dealTasksDraft.filter(t=>t.status!=='done').length);
-}
-function renderTeamTasks(){
-  const list=document.getElementById('teamTasksList');
-  const isCrossFunctional=CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
-  list.innerHTML = dealTasksDraft.map(t=>{
-    const sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
-    const rowEditable = !isCrossFunctional || t.team===ROLE;
-    const overdue = t.due && t.status!=='done' && t.due<todayStr();
-    return `<div class="rounded-lg p-2.5" style="border:1px solid var(--border)">
-      <div class="flex items-center gap-1.5 mb-1">${taskFromToChips(t)}</div>
-      <div class="flex items-center gap-2 mb-1.5">
-        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
-        <select class="tt-status field text-xs px-2 py-1" data-id="${t.id}" ${rowEditable?'':'disabled'} style="width:150px;background:${sm.bg};color:${sm.color};border-color:transparent">
-          ${Object.entries(TASK_STATUS_META).map(([v,m])=>`<option value="${v}" ${t.status===v?'selected':''}>${m.label}</option>`).join('')}
-        </select>
-        ${rowEditable?`<button type="button" class="tt-del" data-id="${t.id}" style="color:var(--text-faint)" title="Remove"><i class="fa-solid fa-xmark"></i></button>`:`<span style="width:16px"></span>`}
-      </div>
-      <div class="flex items-center gap-2 mb-1.5">
-        <div class="assignee-combo tt-assignee-combo" style="position:relative;width:170px" data-id="${t.id}">
-          <input type="text" class="assignee-input tt-assignee field px-2 py-1 text-xs w-full" ${rowEditable?'':'disabled'} placeholder="Assigned to — search users..." title="Who this task is targeted to" autocomplete="off" value="${escapeHtml(t.assigned_to||'')}">
-          <div class="assignee-dropdown" style="display:none"></div>
-        </div>
-        <input type="text" class="tt-note field flex-1 px-2 py-1 text-xs" data-id="${t.id}" ${rowEditable?'':'disabled'} placeholder="Note — what's the status, or what needs to be discussed..." value="${escapeHtml(t.note||'')}">
-        <input type="date" class="tt-due field px-2 py-1 text-xs" data-id="${t.id}" ${rowEditable?'':'disabled'} style="width:140px;${overdue?'color:var(--danger)':''}" title="Target date to resolve this by" value="${t.due||''}">
-      </div>
-    </div>`;
-  }).join('') || `<p class="text-xs" style="color:var(--text-faint)">No team tasks yet — add what Solution, Project or Product need to follow up on below.</p>`;
-  list.querySelectorAll('.tt-status').forEach(s=>s.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{status:e.target.value})));
-  list.querySelectorAll('.tt-assignee-combo').forEach(combo=>{
-    const id=parseInt(combo.dataset.id);
-    const current=dealTasksDraft.find(t=>t.id===id)?.assigned_to||'';
-    wireAssigneeCombo(combo, current, name=>saveTaskField(id,{assigned_to:name}));
-  });
-  list.querySelectorAll('.tt-note').forEach(inp=>inp.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{note:e.target.value})));
-  list.querySelectorAll('.tt-due').forEach(inp=>inp.addEventListener('change',e=>saveTaskField(parseInt(e.target.dataset.id),{due:e.target.value})));
-  list.querySelectorAll('.tt-del').forEach(b=>b.addEventListener('click',()=>deleteTask(parseInt(b.dataset.id))));
-  renderTeamTasksBadge();
-}
-async function saveTaskField(taskId,patch){
-  try{
-    const updated=await api(`/api/tasks/${taskId}`,{method:'PUT',body:JSON.stringify(patch)});
-    const idx=dealTasksDraft.findIndex(t=>t.id===taskId); if(idx>-1) dealTasksDraft[idx]=updated;
-    renderTeamTasks();
-  }catch(err){ showToast(err.message,true); }
-}
-async function deleteTask(taskId){
-  try{
-    await api(`/api/tasks/${taskId}`,{method:'DELETE'});
-    dealTasksDraft=dealTasksDraft.filter(t=>t.id!==taskId);
-    renderTeamTasks();
-  }catch(err){ showToast(err.message,true); }
-}
-wireAssigneeCombo(document.querySelector('#mtab-teamtasks .assignee-combo'), '', name=>{});
-document.getElementById('addTaskBtn').addEventListener('click',async()=>{
-  if(!currentTaskDealId) return;
-  const txt=document.getElementById('newTaskText'), team=document.getElementById('newTaskTeam');
-  const assignee=document.getElementById('newTaskAssignee');
-  const status=document.getElementById('newTaskStatus'), due=document.getElementById('newTaskDue');
-  const v=txt.value.trim(); if(!v) return;
-  const who=assignee.value.trim();
-  if(!ASSIGNABLE_USERS.some(u=>u.full_name===who)){ showToast('Search and pick who this task is assigned to',true); return; }
-  try{
-    const created=await api(`/api/deals/${currentTaskDealId}/tasks`,{method:'POST',body:JSON.stringify({text:v,team:team.value,assigned_to:who,status:status.value,due:due.value})});
-    dealTasksDraft.push(created); txt.value=''; resetAssigneeCombo(assignee.closest('.assignee-combo')); status.value='not_started'; due.value=''; renderTeamTasks();
-  }catch(err){ showToast(err.message,true); }
-});
-document.getElementById('newTaskText').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('addTaskBtn').click(); } });
-
-/* ---------- Weekly Meeting (admin + management): cross-team sync view ---------- */
-let wmStatusFilter=null, wmExpandedThreads=new Set();
-async function renderWeeklyMeeting(){
-  const team=document.getElementById('wmTeamFilter').value;
-  const params=new URLSearchParams({scope:'all'}); if(team) params.set('team',team);
-  let tasks=[];
-  try{ tasks=await api('/api/tasks?'+params.toString()); }catch(err){ showToast(err.message,true); }
-  document.getElementById('wmKpiBlocked').textContent=tasks.filter(t=>t.status==='blocked').length;
-  document.getElementById('wmKpiDiscuss').textContent=tasks.filter(t=>t.status==='needs_discussion').length;
-  document.getElementById('wmKpiProgress').textContent=tasks.filter(t=>t.status==='in_progress').length;
-  document.getElementById('wmKpiDone').textContent=tasks.filter(t=>t.status==='done').length;
-  ['wmKpiBlockedCard','wmKpiDiscussCard','wmKpiProgressCard','wmKpiDoneCard'].forEach(id=>document.getElementById(id).classList.remove('active'));
-  const activeMap={blocked:'wmKpiBlockedCard',needs_discussion:'wmKpiDiscussCard',in_progress:'wmKpiProgressCard',done:'wmKpiDoneCard'};
-  if(wmStatusFilter) document.getElementById(activeMap[wmStatusFilter]).classList.add('active');
-  const labelMap={blocked:'Blocked only',needs_discussion:'Needs discussion only',in_progress:'In progress only',done:'Done only'};
-  const noteEl=document.getElementById('wmFilterNote');
-  if(wmStatusFilter){ noteEl.style.display=''; document.getElementById('wmFilterNoteText').textContent=`Showing: ${labelMap[wmStatusFilter]}`; }
-  else noteEl.style.display='none';
-
-  const visible = wmStatusFilter ? tasks.filter(t=>t.status===wmStatusFilter) : tasks;
-  const rank=s=>({blocked:0,needs_discussion:1,in_progress:2,not_started:3,done:4}[s]??5);
-  const today=todayStr();
-
-  const canEditTask=t=>{
-    if(CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)) return t.team===ROLE;
-    if(ROLE==='admin') return true;
-    if(ROLE==='account_manager') return (t.assigned_am||'')===FULLNAME;
-    if(ROLE==='management') return true;
-    return false;
-  };
-  const isReviewer=ROLE==='admin'||ROLE==='management';
-
-  // Group by opportunity into a "thread" — everything Solution/Project/Product/Sales
-  // flagged on the same deal reads together, so the meeting can work project-by-
-  // project. Threads render as <details>, collapsed by default so the board opens
-  // to a scannable list of projects rather than every task at once; expand state
-  // persists per deal (wmExpandedThreads) across re-renders within the session.
-  function groupByDeal(items){
-    const g={};
-    items.forEach(t=>{ (g[t.deal_id]=g[t.deal_id]||{deal_id:t.deal_id,deal_name:t.deal_name,customer:t.customer,assigned_am:t.assigned_am,tasks:[]}).tasks.push(t); });
-    return Object.values(g);
-  }
-  function taskRow(t){
-    const sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
-    const overdue=t.due && t.status!=='done' && t.due<today;
-    const editable=canEditTask(t);
-    return `<div class="px-3 py-2.5" id="task-row-${t.id}">
-      <div class="flex items-center gap-2 mb-1 flex-wrap">
-        ${taskFromToChips(t)}
-        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
-        ${t.due?`<span class="chip" style="color:${overdue?'var(--danger)':'var(--text-muted)'};border-color:${overdue?'var(--danger)':'var(--border)'}">${overdue?'⚠ ':''}${t.due}</span>`:''}
-        ${ROLE==='admin'?`<button type="button" class="wm-del text-xs" data-id="${t.id}" style="color:var(--text-faint)" title="Delete from Weekly Meeting"><i class="fa-solid fa-trash"></i></button>`:''}
-      </div>
-      <div class="flex items-center gap-2 mb-1.5 flex-wrap">
-        <select class="wm-status field text-xs px-2 py-1" data-id="${t.id}" ${editable?'':'disabled'} style="width:150px;background:${sm.bg};color:${sm.color};border-color:transparent">
-          ${Object.entries(TASK_STATUS_META).map(([v,m])=>`<option value="${v}" ${t.status===v?'selected':''}>${m.label}</option>`).join('')}
-        </select>
-        <input type="text" class="wm-note field flex-1 px-2 py-1 text-xs" data-id="${t.id}" ${editable?'':'disabled'} placeholder="Note — discussed in weekly review, next step, blocker..." value="${escapeHtml(t.note||'')}">
-      </div>
-      ${isReviewer?`<div class="flex items-center gap-1.5">
-        <button type="button" class="wm-mark-solved text-[11px] px-2 py-1 rounded-md flex items-center gap-1" data-id="${t.id}" ${t.status==='done'?'disabled':''} style="background:${t.status==='done'?'var(--surface-3)':'var(--success)'};color:${t.status==='done'?'var(--text-faint)':'#fff'}"><i class="fa-solid fa-circle-check"></i> ${t.status==='done'?'Solved':'Mark solved'}</button>
-        <button type="button" class="wm-mark-discuss text-[11px] px-2 py-1 rounded-md flex items-center gap-1" data-id="${t.id}" ${t.status==='needs_discussion'?'disabled':''} style="background:${t.status==='needs_discussion'?'var(--surface-3)':'var(--warning)'};color:${t.status==='needs_discussion'?'var(--text-faint)':'#fff'}"><i class="fa-solid fa-comments"></i> ${t.status==='needs_discussion'?'Needs discussion':'Needs further discussion'}</button>
-      </div>`:''}
-    </div>`;
-  }
-  function threadHtml(th, accentKey){
-    const openKey=`${accentKey}:${th.deal_id}`;
-    return `<details class="widget rounded-lg wm-thread" style="background:var(--surface-2);border:1px solid var(--border)" data-key="${openKey}" ${wmExpandedThreads.has(openKey)?'open':''}>
-      <summary class="flex items-center gap-2 px-3 py-2 flex-wrap" style="border-bottom:1px solid var(--border)">
-        <i class="fa-solid fa-chevron-right chev text-[10px]" style="color:var(--text-faint)"></i>
-        <i class="fa-solid fa-comments text-xs" style="color:var(--text-faint)"></i>
-        <span class="text-sm font-medium" style="color:var(--text)">${escapeHtml(th.deal_name)}</span>
-        <span class="text-xs" style="color:var(--text-muted)">${escapeHtml(th.customer||'')}</span>
-        <span class="chip" style="color:var(--text-muted)">${escapeHtml((th.assigned_am||'').split(' ')[0])}</span>
-        <span class="flex-1"></span>
-        <span class="chip" style="color:var(--text-muted)">${th.tasks.length} item${th.tasks.length===1?'':'s'}</span>
-      </summary>
-      <div class="divide-y" style="border-color:var(--border)">${th.tasks.map(taskRow).join('')}</div>
-    </details>`;
-  }
-
-  const openTasks=visible.filter(t=>t.status!=='done'), doneTasks=visible.filter(t=>t.status==='done');
-  const openThreads=groupByDeal(openTasks).map(th=>{
-    th.tasks.sort((a,b)=>(a.due||'9999-99-99').localeCompare(b.due||'9999-99-99') || rank(a.status)-rank(b.status));
-    th.minRank=Math.min(...th.tasks.map(t=>rank(t.status)));
-    th.minDue=th.tasks.reduce((m,t)=>(t.due&&(!m||t.due<m))?t.due:m,null);
-    return th;
-  }).sort((a,b)=> a.minRank-b.minRank || (a.minDue||'9999-99-99').localeCompare(b.minDue||'9999-99-99') || (a.deal_name||'').localeCompare(b.deal_name||''));
-  const doneThreads=groupByDeal(doneTasks).sort((a,b)=>(a.deal_name||'').localeCompare(b.deal_name||''));
-
-  document.getElementById('wmList').innerHTML =
-    openThreads.map(th=>threadHtml(th,'open')).join('')
-    || `<p class="text-xs" style="color:var(--text-faint)">Nothing open${team?` for ${escapeHtml(TASK_TEAM_META[team]?.label||team)}`:''}.</p>`;
-
-  const solvedSection=document.getElementById('wmSolvedSection');
-  document.getElementById('wmSolvedCount').textContent=String(doneTasks.length);
-  if(doneThreads.length){
-    solvedSection.style.display='';
-    document.getElementById('wmSolvedList').innerHTML=doneThreads.map(th=>threadHtml(th,'solved')).join('');
-  } else {
-    solvedSection.style.display='none';
-  }
-
-  document.querySelectorAll('#tab-weeklymeeting .wm-thread').forEach(det=>det.addEventListener('toggle',()=>{
-    if(det.open) wmExpandedThreads.add(det.dataset.key); else wmExpandedThreads.delete(det.dataset.key);
-  }));
-  document.querySelectorAll('#tab-weeklymeeting .wm-status').forEach(s=>s.addEventListener('change',e=>saveWmTaskField(parseInt(e.target.dataset.id),{status:e.target.value})));
-  document.querySelectorAll('#tab-weeklymeeting .wm-mark-solved').forEach(b=>b.addEventListener('click',()=>saveWmTaskField(parseInt(b.dataset.id),{status:'done'})));
-  document.querySelectorAll('#tab-weeklymeeting .wm-mark-discuss').forEach(b=>b.addEventListener('click',()=>saveWmTaskField(parseInt(b.dataset.id),{status:'needs_discussion'})));
-  document.querySelectorAll('#tab-weeklymeeting .wm-note').forEach(inp=>inp.addEventListener('change',e=>saveWmTaskField(parseInt(e.target.dataset.id),{note:e.target.value})));
-  document.querySelectorAll('#tab-weeklymeeting .wm-del').forEach(b=>b.addEventListener('click',()=>{
-    openConfirm('Delete this task from the Weekly Meeting? This removes it entirely from the opportunity.',async()=>{
-      try{ await api(`/api/tasks/${b.dataset.id}`,{method:'DELETE'}); renderWeeklyMeeting(); }
-      catch(err){ showToast(err.message,true); }
-    });
-  }));
-}
-async function saveWmTaskField(taskId,patch){
-  try{ await api(`/api/tasks/${taskId}`,{method:'PUT',body:JSON.stringify(patch)}); renderWeeklyMeeting(); }
-  catch(err){ showToast(err.message,true); }
-}
-document.getElementById('wmTeamFilter').addEventListener('change',renderWeeklyMeeting);
-document.getElementById('wmFilterClear').addEventListener('click',()=>{ wmStatusFilter=null; renderWeeklyMeeting(); });
-[['wmKpiBlockedCard','blocked'],['wmKpiDiscussCard','needs_discussion'],['wmKpiProgressCard','in_progress'],['wmKpiDoneCard','done']].forEach(([id,key])=>{
-  document.getElementById(id).addEventListener('click',()=>{ wmStatusFilter = wmStatusFilter===key?null:key; renderWeeklyMeeting(); });
-});
-
-/* ---------- Weekly summary: what happened in the last 7 days, and what's planned
-   for the next 7 days, across every team task, Timeline Item, and Execution
-   Framework entry on every opportunity — regardless of the team filter above.
-   Grouped by opportunity and condensed to one line per item so it stays short
-   enough to actually walk through in the meeting. ---------- */
-async function buildWeeklySummary(){
-  const today=todayStr();
-  const weekAgoDate=new Date(); weekAgoDate.setDate(weekAgoDate.getDate()-7);
-  const weekAheadDate=new Date(); weekAheadDate.setDate(weekAheadDate.getDate()+7);
-  const weekAgo=ymd(weekAgoDate), weekAhead=ymd(weekAheadDate);
-  const inPast=d=> !!d && d>=weekAgo && d<=today;
-  const inFuture=d=> !!d && d>=today && d<=weekAhead;
-  const doneItems=[], plannedItems=[];
-
-  let tasks=[];
-  try{ tasks=await api('/api/tasks?scope=all'); }catch(e){ tasks=[]; }
-  tasks.forEach(t=>{
-    const updated=(t.updated_at||'').slice(0,10);
-    const kind=`${TASK_TEAM_META[t.team]?.label||t.team} Team Task`;
-    const ctx={deal_name:t.deal_name||'', customer:t.customer||''};
-    if(t.status==='done' && inPast(updated)) doneItems.push({text:t.text, date:updated, ctx, kind});
-    else if(t.status!=='done' && inFuture(t.due)) plannedItems.push({text:t.text, date:t.due, ctx, kind});
-  });
-
-  (ALL_DEALS||[]).forEach(d=>{
-    const ctx={deal_name:d.deal_name, customer:d.customer};
-    normalizeTimelineItems(d.next_actions).forEach(it=>{
-      if(it.status==='done' && inPast(it.date)) doneItems.push({text:it.text, date:it.date, ctx, kind:'Timeline Item'});
-      else if(it.status!=='done' && inFuture(it.date)) plannedItems.push({text:it.text, date:it.date, ctx, kind:'Timeline Item'});
-    });
-    const pr=normalizeProofs(d.proofs);
-    PROOF_FRAMEWORK.forEach((p,i)=>{
-      (pr[p.key].entries||[]).forEach(e=>{
-        if(!e.date) return;
-        const kind=`${i+1}. ${p.name.replace('Proof of ','')}`;
-        if(e.status==='done' && inPast(e.date)) doneItems.push({text:e.text, date:e.date, ctx, kind});
-        else if(e.status!=='done' && inFuture(e.date)) plannedItems.push({text:e.text, date:e.date, ctx, kind});
-      });
-    });
-  });
-
-  doneItems.sort((a,b)=>b.date.localeCompare(a.date));
-  plannedItems.sort((a,b)=>a.date.localeCompare(b.date));
-  return {doneItems, plannedItems};
-}
-function groupSummaryByDeal(items){
-  const byDeal={};
-  items.forEach(it=>{ const k=it.ctx.deal_name||'—'; (byDeal[k]=byDeal[k]||{deal_name:it.ctx.deal_name,customer:it.ctx.customer,items:[]}).items.push(it); });
-  return Object.values(byDeal);
-}
-function summaryGroupCard(group, accent){
-  return `<div class="rounded-lg p-2.5" style="background:var(--surface-2)">
-    <p class="text-sm font-medium mb-1" style="color:var(--text)">${escapeHtml(group.deal_name)}${group.customer?` <span class="text-[11px] font-normal" style="color:var(--text-faint)">· ${escapeHtml(group.customer)}</span>`:''}</p>
-    <ul class="space-y-1">
-      ${group.items.map(it=>`<li class="text-xs flex items-start gap-1.5" style="color:var(--text-muted)">
-        <span class="chip flex-shrink-0" style="color:${accent};border-color:${accent}">${escapeHtml(it.date)}</span>
-        <span><span style="color:var(--text)">${escapeHtml(it.text)}</span> <span class="text-[10px]" style="color:var(--text-faint)">(${escapeHtml(it.kind)})</span></span>
-      </li>`).join('')}
-    </ul>
-  </div>`;
-}
-document.getElementById('wmSummaryBtn').addEventListener('click',async()=>{
-  const panel=document.getElementById('wmSummaryPanel');
-  if(panel.style.display==='none'){
-    panel.style.display='';
-    document.getElementById('wmSummaryDoneList').innerHTML='<p class="text-xs" style="color:var(--text-faint)">Loading…</p>';
-    document.getElementById('wmSummaryPlannedList').innerHTML='';
-    const {doneItems, plannedItems}=await buildWeeklySummary();
-    document.getElementById('wmSummaryDoneCount').textContent=String(doneItems.length);
-    document.getElementById('wmSummaryPlannedCount').textContent=String(plannedItems.length);
-    const doneGroups=groupSummaryByDeal(doneItems), plannedGroups=groupSummaryByDeal(plannedItems);
-    document.getElementById('wmSummaryDoneList').innerHTML = doneGroups.map(g=>summaryGroupCard(g,'var(--success)')).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing marked done in the last 7 days.</p>`;
-    document.getElementById('wmSummaryPlannedList').innerHTML = plannedGroups.map(g=>summaryGroupCard(g,'var(--primary)')).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing planned for the next 7 days.</p>`;
-  } else {
-    panel.style.display='none';
-  }
-});
-document.getElementById('wmSummaryCloseBtn').addEventListener('click',()=>{ document.getElementById('wmSummaryPanel').style.display='none'; });
-
-/* ---------- My Team Tasks (solution / project / product): personal follow-up inbox ---------- */
-let mtStatusFilter=null;
-async function renderMyTeamTasks(){
-  let tasks=[];
-  try{ tasks=await api('/api/tasks'); }catch(err){ showToast(err.message,true); }
-  document.getElementById('mtKpiPending').textContent=tasks.filter(t=>t.status==='not_started'||t.status==='in_progress').length;
-  document.getElementById('mtKpiBlocked').textContent=tasks.filter(t=>t.status==='blocked').length;
-  document.getElementById('mtKpiDiscuss').textContent=tasks.filter(t=>t.status==='needs_discussion').length;
-  document.getElementById('mtKpiDone').textContent=tasks.filter(t=>t.status==='done').length;
-  ['mtKpiPendingCard','mtKpiBlockedCard','mtKpiDiscussCard','mtKpiDoneCard'].forEach(id=>document.getElementById(id).classList.remove('active'));
-  const activeMap={pending:'mtKpiPendingCard',blocked:'mtKpiBlockedCard',needs_discussion:'mtKpiDiscussCard',done:'mtKpiDoneCard'};
-  if(mtStatusFilter) document.getElementById(activeMap[mtStatusFilter]).classList.add('active');
-  const labelMap={pending:'Pending only',blocked:'Blocked only',needs_discussion:'Needs discussion only',done:'Done only'};
-  const noteEl=document.getElementById('mtFilterNote');
-  if(mtStatusFilter){ noteEl.style.display=''; document.getElementById('mtFilterNoteText').textContent=`Showing: ${labelMap[mtStatusFilter]}`; }
-  else noteEl.style.display='none';
-
-  const matchFilter=t=>{
-    if(!mtStatusFilter) return true;
-    if(mtStatusFilter==='pending') return t.status==='not_started'||t.status==='in_progress';
-    return t.status===mtStatusFilter;
-  };
-  const rank=s=>({blocked:0,needs_discussion:1,in_progress:2,not_started:3,done:4}[s]??5);
-  // Closest deadline first (done tasks sink to the bottom regardless of date); status breaks ties.
-  const sorted=tasks.filter(matchFilter).sort((a,b)=>
-    (a.status==='done')-(b.status==='done')
-    || (a.due||'9999-99-99').localeCompare(b.due||'9999-99-99')
-    || rank(a.status)-rank(b.status)
-    || (a.deal_name||'').localeCompare(b.deal_name||''));
-  const today=todayStr();
-  document.getElementById('mtList').innerHTML = sorted.map(t=>{
-    const sm=TASK_STATUS_META[t.status]||TASK_STATUS_META.not_started;
-    const overdue=t.due && t.status!=='done' && t.due<today;
-    return `<div class="rounded-lg p-3" style="background:var(--surface-2)">
-      <div class="flex items-center gap-1.5 mb-1">${taskFromToChips(t)}</div>
-      <div class="flex items-center gap-2 mb-1.5">
-        <input type="checkbox" class="mt-done" data-id="${t.id}" ${t.status==='done'?'checked':''} title="Mark done">
-        <span class="text-sm flex-1" style="color:var(--text)">${escapeHtml(t.text)}</span>
-        <select class="mt-status field text-xs px-2 py-1" data-id="${t.id}" style="width:150px;background:${sm.bg};color:${sm.color};border-color:transparent">
-          ${Object.entries(TASK_STATUS_META).map(([v,m])=>`<option value="${v}" ${t.status===v?'selected':''}>${m.label}</option>`).join('')}
-        </select>
-      </div>
-      <div class="flex items-center gap-2 text-xs mb-1.5" style="color:var(--text-muted)">
-        <span class="font-medium" style="color:var(--text)">${escapeHtml(t.deal_name)}</span>
-        <span>${escapeHtml(t.customer||'')}</span>
-        <span class="chip" style="color:var(--text-muted)">${escapeHtml((t.assigned_am||'').split(' ')[0])}</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <input type="text" class="mt-note field flex-1 px-2 py-1 text-xs" data-id="${t.id}" placeholder="Note — status detail, or what needs discussing..." value="${escapeHtml(t.note||'')}">
-        <input type="date" class="mt-due field px-2 py-1 text-xs" data-id="${t.id}" style="width:140px;${overdue?'color:var(--danger)':''}" title="Target date to resolve this by" value="${t.due||''}">
-      </div>
-    </div>`;
-  }).join('') || `<p class="text-xs" style="color:var(--text-faint)">Nothing here — you're all caught up.</p>`;
-
-  document.querySelectorAll('.mt-status').forEach(s=>s.addEventListener('change',e=>saveMyTask(parseInt(e.target.dataset.id),{status:e.target.value})));
-  document.querySelectorAll('.mt-note').forEach(inp=>inp.addEventListener('change',e=>saveMyTask(parseInt(e.target.dataset.id),{note:e.target.value})));
-  document.querySelectorAll('.mt-due').forEach(inp=>inp.addEventListener('change',e=>saveMyTask(parseInt(e.target.dataset.id),{due:e.target.value})));
-  document.querySelectorAll('.mt-done').forEach(cb=>cb.addEventListener('change',e=>saveMyTask(parseInt(e.target.dataset.id),{status:e.target.checked?'done':'in_progress'})));
-}
-async function saveMyTask(taskId,patch){
-  try{ await api(`/api/tasks/${taskId}`,{method:'PUT',body:JSON.stringify(patch)}); showToast('Saved'); await renderMyTeamTasks(); }
-  catch(err){ showToast(err.message,true); }
-}
-document.getElementById('mtFilterClear').addEventListener('click',()=>{ mtStatusFilter=null; renderMyTeamTasks(); });
-[['mtKpiPendingCard','pending'],['mtKpiBlockedCard','blocked'],['mtKpiDiscussCard','needs_discussion'],['mtKpiDoneCard','done']].forEach(([id,key])=>{
-  document.getElementById(id).addEventListener('click',()=>{ mtStatusFilter = mtStatusFilter===key?null:key; renderMyTeamTasks(); });
-});
-
 document.getElementById('addTimelineItemBtn').addEventListener('click',()=>{
   const i=document.getElementById('newTimelineItemText'), st=document.getElementById('newTimelineItemStart'),
         en=document.getElementById('newTimelineItemEnd'), sel=document.getElementById('newTimelineItemStatus');
@@ -3256,7 +2550,6 @@ function updateDealSaveStatus(state){
   el.textContent=m.text; el.style.color=m.color;
 }
 function markDealDirty(){
-  if(dealModalRestricted) return; // Team Tasks pane saves independently per-task
   dealModalDirty=true;
   updateDealSaveStatus('unsaved');
   const id=document.getElementById('dealId').value;
@@ -3281,11 +2574,9 @@ async function autosaveDeal(){
   }
 }
 ['input','change'].forEach(evt=>document.getElementById('dealForm').addEventListener(evt,e=>{
-  if(e.target.closest('#mtab-teamtasks')) return;
   markDealDirty();
 }));
 document.getElementById('dealForm').addEventListener('click',e=>{
-  if(e.target.closest('#mtab-teamtasks')) return;
   if(e.target.closest('.ti-del, .pe-del, .pe-add, #addTimelineItemBtn')) markDealDirty();
 });
 function attemptCloseDealModal(){
@@ -3554,7 +2845,6 @@ document.getElementById('perfImportBtn').addEventListener('click',()=>{
       // was in memory from page load until a full reload happens to refresh it.
       if(!CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE)){
         await loadAccountCoverage();
-        if(document.getElementById('tab-coverage').classList.contains('active')){ renderCoverage(); renderAmWorkload(); }
       }
     }catch(err){ showToast(err.message,true); }
   });
@@ -4091,127 +3381,295 @@ document.getElementById('wpNextBtn').addEventListener('click', ()=>{ WP_WEEK_STA
 document.getElementById('wpTodayBtn').addEventListener('click', ()=>{ WP_WEEK_START = ymd(startOfWeek(new Date())); renderWeeklyPlan(); });
 document.getElementById('wpAmFilter').addEventListener('change', renderWeeklyPlan);
 
-/* ================= VISIT TRACKER ================= */
-const VT = {data:null, tab:'summary', amId:null, tasks:[], blockers:[], mon:{am:'',show:'all'},
-            log:{status:'',account:'',activity:'',from:'',to:''}, showFin:false, editTask:null, editBlocker:null, editAcc:null};
+/* ================= ACCOUNTS & VISITS ================= */
+const VT = {data:null, tab:'overview', amId:null, month:null, day:null, monthTasks:[], blockers:[], an:null,
+            acc:{am:'',type:'',q:'',fin:false}, editTask:null, editBlocker:null, editAcc:null, logoV:Date.now()};
 const VT_STATUS_CLS = {'On track':'vt-ok','Slipping':'vt-warn','Overdue':'vt-bad'};
 const VT_PLAN_CLS = {'OK':'vt-ok','No visit planned':'vt-warn','Beyond limit':'vt-bad'};
 const VT_TASK_CLS = {'Done':'vt-ok','Planned':'vt-warn','Moved':'','Cancelled':''};
+const VT_ACT_SHORT = {'Visit (in person)':'Visit','Video meeting':'Video','Call / WhatsApp':'Call','Proposal / quotation':'Proposal','Internal / admin':'Internal'};
 const vtChip=(t,c)=>`<span class="vt-chip ${c||''}" ${c?'':'style="background:var(--surface-2);color:var(--text-muted)"'}>${escapeHtml(t)}</span>`;
 function vtDate(d){ if(!d) return '—'; const [y,m,dd]=d.split('-'); return new Date(+y,+m-1,+dd).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
+function vtLong(d){ const [y,m,dd]=d.split('-'); return new Date(+y,+m-1,+dd).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
 const vtOpts=(arr,sel)=>arr.map(v=>`<option value="${escapeHtml(v)}" ${v===sel?'selected':''}>${escapeHtml(v)}</option>`).join('');
 const vtAmName=id=>{ const a=VT.data.ams.find(x=>x.id===id); return a?a.name:''; };
-const vtSel=(id,opts,val,extra)=>`<select id="${id}" class="field text-xs px-2 py-1.5" ${extra||''}>${opts}</select>`;
+const vtSel=(id,opts)=>`<select id="${id}" class="field text-xs px-2 py-1.5">${opts}</select>`;
+const vtv=id=>document.getElementById(id).value.trim();
+const vtNone=t=>`<span style="color:var(--text-faint)">${t}</span>`;
 function vtCanEdit(amId){ const me=VT.data.me; return me.is_admin || (me.am_id && me.am_id===amId); }
+function vtLogo(a,size){
+  const w=size||36;
+  const inner = a.has_logo
+    ? `<img src="/api/visit/accounts/${a.id}/logo?token=${encodeURIComponent(TOKEN)}&v=${VT.logoV}" alt="" style="max-width:100%;max-height:100%;object-fit:contain">`
+    : `<span style="font-size:${Math.round(w/3)}px;font-weight:700;color:#64748b">${escapeHtml((a.name.replace(/^(PT\.?|CV)\s+/i,'').match(/[A-Za-z0-9]/g)||['?']).slice(0,2).join('').toUpperCase())}</span>`;
+  return `<span class="inline-flex items-center justify-center flex-shrink-0" style="width:${Math.round(w*1.5)}px;height:${w}px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:3px;overflow:hidden">${inner}</span>`;
+}
+const vtShort=n=>n.replace(/^(PT\.?|CV)\s+/i,'').replace(/\s*\(.*\)$/,'');
+const vtTaskLine=t=>`<div class="text-[11px] leading-snug"><b>${escapeHtml(VT_ACT_SHORT[t.activity]||t.activity)}</b>${t.status!=='Done'&&t.status!=='Planned'?' ('+t.status+')':''}${t.topic?': '+escapeHtml(t.topic):''}</div>`;
+const vtDayCell=(list,empty)=>list.length?list.map(vtTaskLine).join(''):vtNone(empty);
 
 async function renderVisits(){
   const body=document.getElementById('vtBody');
   try{ VT.data = await api('/api/visit/overview'); }
   catch(e){ body.innerHTML=`<p class="text-sm" style="color:var(--danger)">${escapeHtml(e.message)}</p>`; return; }
   const d=VT.data, me=d.me;
-  document.getElementById('vtAsOf').textContent = `Today ${vtDate(d.today)} · tracking since ${vtDate(d.tracking_start_date)}`;
-  const tabs = me.sees_all ? [['summary','Summary'],['am','AM page'],['accounts','Accounts'],['blockers','Blockers']] : [['am','My page'],['blockers','Blockers']];
+  document.getElementById('vtAsOf').textContent = `Today ${vtDate(d.today)} · yesterday ${vtDate(d.prev_day)} · tomorrow ${vtDate(d.next_day)}`;
+  const tabs = me.sees_all ? [['overview','Overview'],['am','AM page'],['accounts','Accounts'],['blockers','Blockers']] : [['am','My page'],['accounts','My accounts'],['blockers','Blockers']];
   if(!tabs.some(t=>t[0]===VT.tab)) VT.tab=tabs[0][0];
   if(!VT.amId || !d.ams.some(a=>a.id===VT.amId)) VT.amId = me.am_id || (d.ams[0] && d.ams[0].id) || null;
+  if(!VT.month) VT.month=d.today.slice(0,7);
+  if(!VT.day) VT.day=d.today;
   document.getElementById('vtTabs').innerHTML = tabs.map(([k,l])=>`<button type="button" class="vt-tabbtn ${VT.tab===k?'active':''}" data-vt="${k}">${l}</button>`).join('');
   document.querySelectorAll('#vtTabs .vt-tabbtn').forEach(b=>b.addEventListener('click',()=>{ VT.tab=b.dataset.vt; renderVisits(); }));
   if(!me.sees_all && !me.am_id){
-    body.innerHTML=`<div class="card elev p-5 text-sm" style="color:var(--text-muted)">Your login isn't linked to a Visit Tracker account manager yet. Ask the admin to link it (Visit Tracker → Accounts).</div>`; return;
+    body.innerHTML=`<div class="card elev p-5 text-sm" style="color:var(--text-muted)">Your login isn't linked to an account manager here yet. Ask the admin to link it (Accounts &amp; Visits → Accounts).</div>`; return;
   }
-  if(VT.tab==='summary') vtSummary(body);
+  if(VT.tab==='overview') await vtOverview(body);
   else if(VT.tab==='am') await vtAmPage(body);
   else if(VT.tab==='accounts') vtAccounts(body);
   else await vtBlockers(body);
 }
+// After saving a task from the calendar: refresh data but stay on the same page/day.
+async function vtAfterChange(){ if(VT.tab==='am') await vtAmPage(document.getElementById('vtBody'), true); else renderVisits(); }
 
-function vtSummary(body){
+/* ---------------- Overview: analytics first, details on double-click ---------------- */
+function vtPriority(){ return VT.data.accounts.filter(a=>a.type==='Priority'); }
+async function vtOverview(body){
   const d=VT.data, t=d.totals;
-  const tiles=[['Priority accounts',t.priority,'var(--primary)'],['On track',t.on_track,'var(--success)'],['Slipping',t.slipping,'var(--warning)'],
-               ['Overdue',t.overdue,'var(--danger)'],['No visit planned',t.no_plan,'var(--warning)'],['Open blockers',t.open_blockers,'var(--danger)']];
-  const rank={Overdue:0,Slipping:1,'On track':2};
-  const rows=d.accounts.filter(a=>a.type==='Priority' && (!VT.mon.am || String(a.am_id)===VT.mon.am) && (VT.mon.show==='all'||a.needs_attention))
-    .sort((a,b)=>rank[a.status]-rank[b.status] || b.days_since-a.days_since);
+  try{ VT.an = await api('/api/visit/analytics'); }catch(e){ VT.an=null; }
+  const tiles=[['priority','Priority accounts',t.priority,'var(--primary)'],['on_track','On track',t.on_track,'var(--success)'],['slipping','Slipping',t.slipping,'var(--warning)'],
+               ['overdue','Overdue',t.overdue,'var(--danger)'],['no_plan','No visit planned',t.no_plan,'var(--warning)'],['blockers','Open blockers',t.open_blockers,'var(--danger)']];
+  const chartCard=(id,title,sub)=>`<div class="card elev p-4"><p class="text-sm font-medium" style="color:var(--text)">${title}</p><p class="text-[10px] mb-2" style="color:var(--text-faint)">${sub}</p><div id="${id}" style="height:230px"></div></div>`;
   body.innerHTML=`
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">${tiles.map(([l,v,c])=>`<div class="stat-card" style="--stat-accent:${c}"><p class="stat-label">${l}</p><p class="stat-value">${v}</p></div>`).join('')}</div>
-    <div class="card elev p-5 mb-4"><p class="text-sm font-medium mb-3" style="color:var(--text)">By account manager</p>
-      <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account manager</th><th>Priority</th><th>On track</th><th>Slipping</th><th>Overdue</th><th>No visit planned</th><th>Logged today?</th><th>Open blockers</th></tr></thead><tbody>
-      ${d.ams.map(a=>`<tr><td><span class="vt-link" data-am="${a.id}">${escapeHtml(a.name)}</span></td><td>${a.priority}</td><td>${a.on_track}</td><td>${a.slipping}</td><td>${a.overdue}</td><td>${a.no_plan}</td>
-        <td>${a.logged_today?vtChip('Yes','vt-ok'):vtChip('Not yet','vt-warn')}</td><td>${a.open_blockers}</td></tr>`).join('')}</tbody></table></div></div>
-    <div class="card elev p-5"><div class="flex flex-wrap items-center gap-3 mb-3"><p class="text-sm font-medium" style="color:var(--text)">Priority account monitor</p><div class="flex-1"></div>
-      <label class="text-xs" style="color:var(--text-muted)">AM ${vtSel('vtMonAm',`<option value="">All</option>`+d.ams.map(a=>`<option value="${a.id}" ${String(a.id)===VT.mon.am?'selected':''}>${escapeHtml(a.name)}</option>`).join(''))}</label>
-      <label class="text-xs" style="color:var(--text-muted)">Show ${vtSel('vtMonShow',`<option value="all" ${VT.mon.show==='all'?'selected':''}>All priority accounts</option><option value="attn" ${VT.mon.show==='attn'?'selected':''}>Only needing attention</option>`)}</label></div>
-      <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account</th><th>AM</th><th>Last visit</th><th>Days since</th><th>Status</th><th>Next planned visit</th><th>Plan check</th></tr></thead><tbody>
-      ${rows.map(a=>`<tr><td class="font-medium">${escapeHtml(a.name)}</td><td>${escapeHtml(vtAmName(a.am_id))}</td><td>${a.last_visit?vtDate(a.last_visit):'<span style="color:var(--text-faint)">none yet</span>'}</td><td>${a.days_since}</td>
-        <td>${vtChip(a.status,VT_STATUS_CLS[a.status])}</td><td>${a.next_planned_visit?vtDate(a.next_planned_visit):'<span style="color:var(--text-faint)">none</span>'}</td><td>${vtChip(a.plan_check,VT_PLAN_CLS[a.plan_check])}</td></tr>`).join('')
-        || `<tr><td colspan="7" style="color:var(--text-faint)">Nothing needs attention.</td></tr>`}</tbody></table></div></div>`;
-  body.querySelectorAll('.vt-link').forEach(l=>l.addEventListener('click',()=>{ VT.amId=parseInt(l.dataset.am); VT.tab='am'; renderVisits(); }));
-  document.getElementById('vtMonAm').addEventListener('change',e=>{ VT.mon.am=e.target.value; vtSummary(body); });
-  document.getElementById('vtMonShow').addEventListener('change',e=>{ VT.mon.show=e.target.value; vtSummary(body); });
+    <p class="text-[11px] mb-2" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i>Double-click any tile, chart bar or account manager for the detail behind it.</p>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">${tiles.map(([k,l,v,c])=>`<div class="stat-card clickable vt-tile" data-kind="${k}" style="--stat-accent:${c}" title="Double-click for details"><p class="stat-label">${l}</p><p class="stat-value">${v}</p></div>`).join('')}</div>
+    <div class="grid lg:grid-cols-2 gap-4 mb-4">
+      ${chartCard('vtChStatus','Priority accounts by status','Per account manager')}
+      ${chartCard('vtChWeekly','Visits done per week','Done in-person visits + video meetings, last 8 weeks')}
+    </div>
+    <div class="grid lg:grid-cols-3 gap-4 mb-4">
+      ${chartCard('vtChPlan','Is the next visit planned?','Priority accounts, plan check')}
+      ${chartCard('vtChMix','What the team did (30 days)','Completed tasks by activity')}
+      ${chartCard('vtChLog','Daily logging','Account managers who logged per working day')}
+    </div>
+    <div class="card elev p-5"><p class="text-sm font-medium mb-3" style="color:var(--text)">By account manager</p>
+      <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account manager</th><th>Priority</th><th>On track / Slipping / Overdue</th><th>No visit planned</th><th>Logged today?</th><th>Open blockers</th></tr></thead><tbody>
+      ${d.ams.map(a=>`<tr class="vt-am-row clickable" data-am="${a.id}" title="Double-click to open"><td class="font-medium">${escapeHtml(a.name)}</td><td>${a.priority}</td>
+        <td>${vtChip(a.on_track,'vt-ok')} ${vtChip(a.slipping,'vt-warn')} ${vtChip(a.overdue,'vt-bad')}</td><td>${a.no_plan}</td>
+        <td>${a.logged_today?vtChip('Yes','vt-ok'):vtChip('Not yet','vt-warn')}</td><td>${a.open_blockers}</td></tr>`).join('')}</tbody></table></div></div>`;
+  body.querySelectorAll('.vt-tile').forEach(el=>el.addEventListener('dblclick',()=>vtDetail(el.dataset.kind)));
+  body.querySelectorAll('.vt-am-row').forEach(el=>el.addEventListener('dblclick',()=>{ VT.amId=parseInt(el.dataset.am); VT.tab='am'; renderVisits(); }));
+  vtDrawCharts();
+}
+function vtChart(id,cfg,onDbl){
+  destroyChart(id);
+  const canvas=ensureCanvas(id);
+  const ch=new Chart(canvas,cfg); CHART_INSTANCES[id]=ch;
+  if(onDbl) canvas.addEventListener('dblclick',e=>{
+    const els=ch.getElementsAtEventForMode(e,'nearest',{intersect:true},false);
+    if(els.length) onDbl(els[0].datasetIndex, els[0].index);
+  });
+  return ch;
+}
+function vtDrawCharts(){
+  const d=VT.data, tc=cssVar('--chart-text'), grid=cssVar('--chart-grid');
+  const ok=cssVar('--success')||'#2fa36b', warn=cssVar('--warning')||'#e6aa28', bad=cssVar('--danger')||'#e5535c';
+  const axes=(stacked)=>({x:{stacked,ticks:{color:tc,font:{size:10}},grid:{display:false}},y:{stacked,beginAtZero:true,ticks:{color:tc,font:{size:10},precision:0},grid:{color:grid}}});
+  const leg={labels:{color:tc,boxWidth:10,font:{size:10}}};
+  // status per AM (stacked, horizontal)
+  const pri=vtPriority(), ams=d.ams;
+  const stat=['On track','Slipping','Overdue'], statCol=[ok,warn,bad];
+  vtChart('vtChStatus',{type:'bar',data:{labels:ams.map(a=>a.name.split(' ')[0]),datasets:stat.map((s,i)=>({label:s,backgroundColor:statCol[i],borderRadius:3,
+      data:ams.map(a=>pri.filter(x=>x.am_id===a.id&&x.status===s).length)}))},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:leg},scales:{x:{stacked:true,beginAtZero:true,ticks:{color:tc,precision:0},grid:{color:grid}},y:{stacked:true,ticks:{color:tc},grid:{display:false}}}}},
+    (ds,i)=>vtDetail('status',{am:ams[i].id,status:stat[ds]}));
+  // plan check donut
+  const plans=['OK','No visit planned','Beyond limit'], planCol=[ok,warn,bad];
+  vtChart('vtChPlan',{type:'doughnut',data:{labels:plans,datasets:[{data:plans.map(p=>pri.filter(x=>x.plan_check===p).length),backgroundColor:planCol,borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{color:tc,boxWidth:10,font:{size:10}}}}}},
+    (ds,i)=>vtDetail('plan',{plan:plans[i]}));
+  const an=VT.an;
+  if(!an||!an.ams.length){ ['vtChWeekly','vtChMix','vtChLog'].forEach(id=>{ document.getElementById(id).innerHTML='<p class="text-xs py-10 text-center" style="color:var(--text-faint)">No data yet</p>'; }); return; }
+  // weekly visits stacked by AM
+  vtChart('vtChWeekly',{type:'bar',data:{labels:an.weeks.map(w=>vtDate(w)),datasets:an.ams.map((a,i)=>({label:a.name.split(' ')[0],data:a.visits,backgroundColor:CHART_COLORS[i%CHART_COLORS.length],borderRadius:2}))},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:leg},scales:axes(true)}},
+    (ds)=>{ VT.amId=an.ams[ds].id; VT.tab='am'; renderVisits(); });
+  // activity mix
+  const keys=Object.keys(an.activity_mix);
+  if(!keys.length) document.getElementById('vtChMix').innerHTML='<p class="text-xs py-10 text-center" style="color:var(--text-faint)">Nothing completed yet</p>';
+  else vtChart('vtChMix',{type:'doughnut',data:{labels:keys.map(k=>VT_ACT_SHORT[k]||k),datasets:[{data:keys.map(k=>an.activity_mix[k]),backgroundColor:keys.map((_,i)=>CHART_COLORS[i%CHART_COLORS.length]),borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{color:tc,boxWidth:10,font:{size:10}}}}}});
+  // logging compliance
+  vtChart('vtChLog',{type:'bar',data:{labels:an.daily_logging.map(x=>vtDate(x.date)),datasets:[{label:'Logged',data:an.daily_logging.map(x=>x.logged),backgroundColor:ok,borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:tc,font:{size:9}},grid:{display:false}},y:{beginAtZero:true,max:an.ams.length,ticks:{color:tc,precision:0},grid:{color:grid}}}}});
+}
+function vtDetail(kind,opt){
+  opt=opt||{}; const d=VT.data; let list=vtPriority(), title='Priority accounts';
+  if(kind==='on_track'){ list=list.filter(a=>a.status==='On track'); title='Priority accounts on track'; }
+  else if(kind==='slipping'){ list=list.filter(a=>a.status==='Slipping'); title='Priority accounts slipping'; }
+  else if(kind==='overdue'){ list=list.filter(a=>a.status==='Overdue'); title='Priority accounts overdue'; }
+  else if(kind==='no_plan'){ list=list.filter(a=>a.plan_check==='No visit planned'); title='Priority accounts with no visit planned'; }
+  else if(kind==='status'){ list=list.filter(a=>a.am_id===opt.am&&a.status===opt.status); title=`${vtAmName(opt.am)} — ${opt.status}`; }
+  else if(kind==='plan'){ list=list.filter(a=>a.plan_check===opt.plan); title=`Plan check: ${opt.plan}`; }
+  else if(kind==='blockers'){ VT.tab='blockers'; renderVisits(); return; }
+  const rank={Overdue:0,Slipping:1,'On track':2};
+  list=[...list].sort((a,b)=>rank[a.status]-rank[b.status]||b.days_since-a.days_since);
+  document.getElementById('vtDetailTitle').textContent=`${title} (${list.length})`;
+  document.getElementById('vtDetailBody').innerHTML=`<table class="vt-table"><thead><tr><th>Account</th><th>AM</th><th>Last visit</th><th>Days since</th><th>Status</th><th>Plan check</th><th>Next planned</th><th>Yesterday</th><th>Next working day</th></tr></thead><tbody>
+    ${list.map(a=>`<tr class="vt-d-row clickable" data-am="${a.am_id}"><td><div class="flex items-center gap-2">${vtLogo(a,26)}<span class="font-medium">${escapeHtml(vtShort(a.name))}</span></div></td><td>${escapeHtml(vtAmName(a.am_id))}</td>
+      <td>${a.last_visit?vtDate(a.last_visit):vtNone('none yet')}</td><td>${a.days_since}</td><td>${vtChip(a.status,VT_STATUS_CLS[a.status])}</td><td>${vtChip(a.plan_check,VT_PLAN_CLS[a.plan_check])}</td>
+      <td>${a.next_planned_visit?vtDate(a.next_planned_visit):vtNone('none')}</td><td>${vtDayCell(a.prev_day_tasks,'—')}</td><td>${vtDayCell(a.next_day_tasks,'—')}</td></tr>`).join('')||'<tr><td colspan="9" style="color:var(--text-faint)">Nothing here.</td></tr>'}</tbody></table>`;
+  document.querySelectorAll('#vtDetailBody .vt-d-row').forEach(r=>r.addEventListener('dblclick',()=>{ VT.amId=parseInt(r.dataset.am); VT.tab='am'; closeModal('vtDetailModal'); renderVisits(); }));
+  openModal('vtDetailModal');
 }
 
-async function vtAmPage(body){
+/* ---------------- AM page: priority accounts + calendar ---------------- */
+function vtMonthRange(){ const [y,m]=VT.month.split('-').map(Number); const last=new Date(y,m,0).getDate(); return [`${VT.month}-01`,`${VT.month}-${String(last).padStart(2,'0')}`]; }
+async function vtLoadMonth(){
+  const [from,to]=vtMonthRange();
+  VT.monthTasks = await api(`/api/visit/tasks?am_id=${VT.amId}&date_from=${from}&date_to=${to}`);
+}
+async function vtAmPage(body, keep){
   const d=VT.data, me=d.me, amId=VT.amId;
   if(!amId){ body.innerHTML='<p class="text-sm" style="color:var(--text-faint)">No account manager.</p>'; return; }
-  const f=VT.log, q=new URLSearchParams({am_id:amId});
-  if(f.status) q.set('status',f.status); if(f.account) q.set('account_id',f.account); if(f.activity) q.set('activity',f.activity);
-  if(f.from) q.set('date_from',f.from); if(f.to) q.set('date_to',f.to);
-  VT.tasks = await api('/api/visit/tasks?'+q);
-  const accts=d.accounts.filter(a=>a.am_id===amId), pri=accts.filter(a=>a.type==='Priority');
+  if(keep){ VT.data=await api('/api/visit/overview'); }
+  await vtLoadMonth();
+  const D=VT.data, accts=D.accounts.filter(a=>a.am_id===amId), pri=accts.filter(a=>a.type==='Priority');
   const noPlan=pri.filter(a=>a.plan_check==='No visit planned');
   const canEdit=vtCanEdit(amId);
-  const picker = me.sees_all ? `<label class="text-xs" style="color:var(--text-muted)">Account manager ${vtSel('vtAmPick',d.ams.map(a=>`<option value="${a.id}" ${a.id===amId?'selected':''}>${escapeHtml(a.name)}</option>`).join(''))}</label>` : '';
+  const picker = me.sees_all ? `<label class="text-xs" style="color:var(--text-muted)">Account manager ${vtSel('vtAmPick',D.ams.map(a=>`<option value="${a.id}" ${a.id===amId?'selected':''}>${escapeHtml(a.name)}</option>`).join(''))}</label>` : '';
   body.innerHTML=`
     <div class="flex flex-wrap items-center gap-3 mb-3"><p class="text-lg font-semibold" style="color:var(--text)">${escapeHtml(vtAmName(amId))}</p><div class="flex-1"></div>${picker}</div>
-    ${noPlan.length?`<div class="rounded-lg px-4 py-3 mb-3 text-sm" style="background:rgba(230,170,40,.12);color:var(--text)"><i class="fa-solid fa-triangle-exclamation mr-1.5" style="color:var(--warning)"></i><b>${noPlan.length} priority account${noPlan.length>1?'s':''} still ha${noPlan.length>1?'ve':'s'} no visit planned</b> &mdash; plan before 16:45 for the 17:00 sync: ${noPlan.map(a=>escapeHtml(a.name)).join(', ')}</div>`:''}
-    <div class="card elev p-5 mb-4"><p class="text-sm font-medium mb-3" style="color:var(--text)">${me.sees_all?'Priority accounts':'My priority accounts'}</p>
-      <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Last visit</th><th>Account</th><th>Status</th><th>Plan check</th><th>Days since</th><th>Next planned visit</th></tr></thead><tbody>
-      ${pri.map(a=>`<tr><td>${a.last_visit?vtDate(a.last_visit):'<span style="color:var(--text-faint)">none yet</span>'}</td><td class="font-medium">${escapeHtml(a.name)}</td><td>${vtChip(a.status,VT_STATUS_CLS[a.status])}</td><td>${vtChip(a.plan_check,VT_PLAN_CLS[a.plan_check])}</td><td>${a.days_since}</td><td>${a.next_planned_visit?vtDate(a.next_planned_visit):'<span style="color:var(--text-faint)">none</span>'}</td></tr>`).join('')||'<tr><td colspan="6" style="color:var(--text-faint)">No priority accounts.</td></tr>'}</tbody></table></div></div>
-    <div class="card elev p-5"><div class="flex flex-wrap items-center gap-2 mb-3"><p class="text-sm font-medium" style="color:var(--text)">Daily log</p><div class="flex-1"></div>
-      ${vtSel('vtLfStatus',`<option value="">All statuses</option>`+vtOpts(d.enums.task_statuses,f.status))}
-      ${vtSel('vtLfAcc',`<option value="">All accounts</option>`+accts.map(a=>`<option value="${a.id}" ${String(a.id)===String(f.account)?'selected':''}>${escapeHtml(a.name)}</option>`).join(''))}
-      ${vtSel('vtLfAct',`<option value="">All activities</option>`+vtOpts(d.enums.activities,f.activity))}
-      <input id="vtLfFrom" type="date" value="${f.from}" class="field text-xs px-2 py-1.5" title="From"><input id="vtLfTo" type="date" value="${f.to}" class="field text-xs px-2 py-1.5" title="To">
-      ${canEdit?`<button type="button" id="vtAddTask" class="btn-primary text-xs px-3 py-1.5 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>Log / plan task</button>`:''}</div>
-      <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Date</th><th>Account</th><th>Activity</th><th>Task / topic</th><th>Status</th><th>Outcome / next step</th><th></th></tr></thead><tbody>
-      ${VT.tasks.map(t=>`<tr class="${t.not_updated?'vt-stale':''}"><td class="whitespace-nowrap">${vtDate(t.task_date)}</td><td>${escapeHtml(t.account_name)}</td><td>${escapeHtml(t.activity)}</td><td>${escapeHtml(t.topic)}</td>
-        <td>${vtChip(t.status,VT_TASK_CLS[t.status])}${t.not_updated?' '+vtChip('not updated','vt-warn'):''}</td><td>${escapeHtml(t.outcome)}</td>
-        <td class="whitespace-nowrap text-right">${canEdit?`${t.status==='Planned'?`<button type="button" class="vt-done text-xs mr-2" data-id="${t.id}" style="color:var(--success)" title="Mark done"><i class="fa-solid fa-check"></i></button>`:''}<button type="button" class="vt-edit text-xs" data-id="${t.id}" style="color:var(--primary)" title="Edit"><i class="fa-solid fa-pen"></i></button>`:''}</td></tr>`).join('')
-        || '<tr><td colspan="7" style="color:var(--text-faint)">Nothing logged for these filters yet.</td></tr>'}</tbody></table></div></div>`;
-  const re=()=>vtAmPage(body);
-  const pick=document.getElementById('vtAmPick'); if(pick) pick.addEventListener('change',e=>{ VT.amId=parseInt(e.target.value); VT.log.account=''; re(); });
-  [['vtLfStatus','status'],['vtLfAcc','account'],['vtLfAct','activity'],['vtLfFrom','from'],['vtLfTo','to']].forEach(([id,k])=>document.getElementById(id).addEventListener('change',e=>{ VT.log[k]=e.target.value; re(); }));
-  const add=document.getElementById('vtAddTask'); if(add) add.addEventListener('click',()=>vtOpenTask(null));
-  body.querySelectorAll('.vt-edit').forEach(b=>b.addEventListener('click',()=>vtOpenTask(VT.tasks.find(t=>String(t.id)===b.dataset.id))));
-  body.querySelectorAll('.vt-done').forEach(b=>b.addEventListener('click',async()=>{
-    const t=VT.tasks.find(x=>String(x.id)===b.dataset.id);
-    try{ await api('/api/visit/tasks/'+t.id,{method:'PUT',body:JSON.stringify({...t,status:'Done'})}); showToast('Marked done'); renderVisits(); }catch(e){ showToast(e.message,true); }
+    ${noPlan.length?`<div class="rounded-lg px-4 py-3 mb-3 text-sm" style="background:rgba(230,170,40,.12);color:var(--text)"><i class="fa-solid fa-triangle-exclamation mr-1.5" style="color:var(--warning)"></i><b>${noPlan.length} priority account${noPlan.length>1?'s':''} with no visit planned</b> &mdash; plan before 16:45 for the 17:00 sync: ${noPlan.map(a=>escapeHtml(vtShort(a.name))).join(', ')}</div>`:''}
+    <div class="card elev p-5 mb-4"><p class="text-sm font-medium mb-1" style="color:var(--text)">${me.sees_all?'Priority accounts':'My priority accounts'} (${pri.length})</p>
+      <p class="text-[11px] mb-3" style="color:var(--text-faint)">Which accounts matter most, whether they've been visited, and what was done yesterday / is planned tomorrow.${canEdit?' Click a logo to change it.':''}</p>
+      <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account</th><th>Status</th><th>Plan check</th><th>Last visit</th><th>Days</th><th>Done yesterday (${vtDate(D.prev_day)})</th><th>Next working day (${vtDate(D.next_day)})</th><th>Opps</th></tr></thead><tbody>
+      ${pri.map(a=>`<tr><td><div class="flex items-center gap-2.5"><span class="vt-logo-btn ${canEdit?'clickable':''}" data-id="${a.id}">${vtLogo(a,34)}</span><span class="font-medium">${escapeHtml(vtShort(a.name))}</span></div></td>
+        <td>${vtChip(a.status,VT_STATUS_CLS[a.status])}</td><td>${vtChip(a.plan_check,VT_PLAN_CLS[a.plan_check])}</td>
+        <td>${a.last_visit?vtDate(a.last_visit):vtNone('none yet')}</td><td>${a.days_since}</td><td>${vtDayCell(a.prev_day_tasks,'nothing logged')}</td><td>${vtDayCell(a.next_day_tasks,'nothing planned')}</td>
+        <td>${a.opp_count?`${a.opp_count} · ${fmtIDR(a.opp_value)}`:vtNone('—')}</td></tr>`).join('')||'<tr><td colspan="8" style="color:var(--text-faint)">No priority accounts.</td></tr>'}</tbody></table></div></div>
+    <div id="vtCal"></div>`;
+  const pick=document.getElementById('vtAmPick'); if(pick) pick.addEventListener('change',e=>{ VT.amId=parseInt(e.target.value); renderVisits(); });
+  body.querySelectorAll('.vt-logo-btn.clickable').forEach(el=>el.addEventListener('click',()=>vtOpenAccount(VT.data.accounts.find(a=>String(a.id)===el.dataset.id))));
+  vtCalendar();
+}
+function vtCalendar(){
+  const D=VT.data, amId=VT.amId, canEdit=vtCanEdit(amId), today=D.today;
+  const [y,m]=VT.month.split('-').map(Number);
+  const byDate={}; VT.monthTasks.forEach(t=>(byDate[t.task_date]=byDate[t.task_date]||[]).push(t));
+  const first=new Date(y,m-1,1), lead=(first.getDay()+6)%7, days=new Date(y,m,0).getDate();
+  const dot=s=>s==='Done'?'var(--success)':s==='Planned'?'var(--warning)':'var(--text-faint)';
+  const cells=[]; for(let i=0;i<lead;i++) cells.push(null); for(let k=1;k<=days;k++) cells.push(k);
+  while(cells.length%7) cells.push(null);
+  const title=first.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const sel=VT.day; const selTasks=(byDate[sel]||[]);
+  const accts=D.accounts.filter(a=>a.am_id===amId);
+  const defStatus = sel<=today ? 'Done' : 'Planned';
+  document.getElementById('vtCal').innerHTML=`
+    <div class="grid lg:grid-cols-3 gap-4">
+      <div class="card elev p-4 lg:col-span-2">
+        <div class="flex items-center gap-2 mb-3"><button type="button" id="vtPrev" class="px-2.5 py-1 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-left"></i></button>
+          <p class="text-sm font-semibold flex-1 text-center" style="color:var(--text)">${title}</p>
+          <button type="button" id="vtToday" class="text-xs px-2.5 py-1 rounded-lg" style="border:1px solid var(--border);color:var(--text)">Today</button>
+          <button type="button" id="vtNext" class="px-2.5 py-1 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-right"></i></button></div>
+        <div class="grid grid-cols-7 gap-1 mb-1">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<div class="text-[10px] text-center font-medium" style="color:var(--text-muted)">${x}</div>`).join('')}</div>
+        <div class="grid grid-cols-7 gap-1">${cells.map(k=>{
+          if(!k) return '<div></div>';
+          const ds=`${VT.month}-${String(k).padStart(2,'0')}`, list=byDate[ds]||[], wk=new Date(y,m-1,k).getDay(), weekend=wk===0||wk===6;
+          const stale=list.some(t=>t.not_updated);
+          return `<div class="vt-day ${ds===sel?'sel':''} ${ds===today?'today':''}" data-d="${ds}" style="${weekend?'opacity:.55':''}">
+            <div class="flex items-center justify-between"><span class="text-[11px] font-semibold" style="color:${ds===today?'var(--primary)':'var(--text-muted)'}">${k}</span>${stale?'<i class="fa-solid fa-circle-exclamation text-[9px]" style="color:var(--warning)" title="Planned task not updated"></i>':''}</div>
+            ${list.slice(0,3).map(t=>`<div class="vt-chipline" title="${escapeHtml(t.account_name+' — '+t.activity)}"><span class="vt-dot" style="background:${dot(t.status)}"></span>${escapeHtml(vtShort(t.account_name))}</div>`).join('')}
+            ${list.length>3?`<div class="text-[10px]" style="color:var(--text-faint)">+${list.length-3} more</div>`:''}</div>`; }).join('')}</div>
+        <p class="text-[10px] mt-2" style="color:var(--text-faint)"><span class="vt-dot" style="background:var(--success)"></span> done &nbsp; <span class="vt-dot" style="background:var(--warning)"></span> planned &nbsp; click a day to see and add tasks</p>
+      </div>
+      <div class="card elev p-4">
+        <p class="text-sm font-semibold" style="color:var(--text)">${vtLong(sel)} ${sel===today?vtChip('today','vt-ok'):sel===D.prev_day?vtChip('yesterday',''):sel===D.next_day?vtChip('tomorrow',''):''}</p>
+        <div class="space-y-2 my-3">${selTasks.map(t=>`<div class="rounded-lg px-3 py-2" style="background:var(--surface-2)"><div class="flex items-start gap-2"><div class="flex-1 min-w-0"><p class="text-xs font-medium" style="color:var(--text)">${escapeHtml(vtShort(t.account_name))}</p>
+            <p class="text-[11px]" style="color:var(--text-muted)">${escapeHtml(VT_ACT_SHORT[t.activity]||t.activity)}${t.topic?' · '+escapeHtml(t.topic):''}</p>${t.outcome?`<p class="text-[11px]" style="color:var(--text-faint)">→ ${escapeHtml(t.outcome)}</p>`:''}</div>
+            <div class="text-right whitespace-nowrap">${vtChip(t.status,VT_TASK_CLS[t.status])}${canEdit?`<div class="mt-1">${t.status==='Planned'?`<button type="button" class="vt-done text-xs mr-2" data-id="${t.id}" style="color:var(--success)" title="Mark done"><i class="fa-solid fa-check"></i></button>`:''}<button type="button" class="vt-edit text-xs" data-id="${t.id}" style="color:var(--primary)" title="Edit"><i class="fa-solid fa-pen"></i></button></div>`:''}</div></div></div>`).join('')||'<p class="text-xs" style="color:var(--text-faint)">Nothing logged or planned for this day.</p>'}</div>
+        ${canEdit?`<div class="rounded-lg p-3" style="border:1px dashed var(--border)"><p class="text-[11px] font-medium mb-2" style="color:var(--text-muted)">Quick add</p>
+          <select id="vtQAcc" class="field w-full text-xs px-2 py-1.5 mb-1.5">${accts.map(a=>`<option value="${a.id}">${a.type==='Priority'?'★ ':''}${escapeHtml(a.name)}</option>`).join('')}</select>
+          <div class="grid grid-cols-2 gap-1.5 mb-1.5"><select id="vtQAct" class="field text-xs px-2 py-1.5">${vtOpts(D.enums.activities,'Visit (in person)')}</select><select id="vtQStat" class="field text-xs px-2 py-1.5">${vtOpts(D.enums.task_statuses,defStatus)}</select></div>
+          <input id="vtQTopic" type="text" placeholder="What was / will be done… (Enter to save)" class="field w-full text-xs px-2 py-1.5 mb-1.5">
+          <button type="button" id="vtQAdd" class="btn-primary w-full text-xs py-1.5 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>Add to ${vtDate(sel)}</button></div>`:''}
+      </div>
+    </div>`;
+  const go=async delta=>{ const dt=new Date(y,m-1+delta,1); VT.month=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`; VT.day=`${VT.month}-01`; await vtLoadMonth(); vtCalendar(); };
+  document.getElementById('vtPrev').addEventListener('click',()=>go(-1));
+  document.getElementById('vtNext').addEventListener('click',()=>go(1));
+  document.getElementById('vtToday').addEventListener('click',async()=>{ VT.month=today.slice(0,7); VT.day=today; await vtLoadMonth(); vtCalendar(); });
+  document.querySelectorAll('#vtCal .vt-day').forEach(c=>c.addEventListener('click',()=>{ VT.day=c.dataset.d; vtCalendar(); }));
+  document.querySelectorAll('#vtCal .vt-edit').forEach(b=>b.addEventListener('click',()=>vtOpenTask(VT.monthTasks.find(t=>String(t.id)===b.dataset.id))));
+  document.querySelectorAll('#vtCal .vt-done').forEach(b=>b.addEventListener('click',async()=>{
+    const t=VT.monthTasks.find(x=>String(x.id)===b.dataset.id);
+    try{ await api('/api/visit/tasks/'+t.id,{method:'PUT',body:JSON.stringify({...t,status:'Done'})}); showToast('Marked done'); vtAfterChange(); }catch(e){ showToast(e.message,true); }
   }));
+  const add=async()=>{
+    const topic=document.getElementById('vtQTopic').value.trim();
+    const body={task_date:sel, am_id:amId, account_id:parseInt(document.getElementById('vtQAcc').value), activity:document.getElementById('vtQAct').value, status:document.getElementById('vtQStat').value, topic, outcome:''};
+    try{ const r=await api('/api/visit/tasks',{method:'POST',body:JSON.stringify(body)}); showToast(r.warning||'Added',!!r.warning); vtAfterChange(); }catch(e){ showToast(e.message,true); }
+  };
+  const addBtn=document.getElementById('vtQAdd'); if(addBtn){ addBtn.addEventListener('click',add); document.getElementById('vtQTopic').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); add(); } }); }
 }
 
+/* ---------------- Accounts: one list (visit cadence + relationship + opportunities) ---------------- */
 function vtAccounts(body){
-  const d=VT.data, me=d.me;
-  body.innerHTML=`<div class="card elev p-5 mb-4"><div class="flex flex-wrap items-center gap-3 mb-3"><p class="text-sm font-medium" style="color:var(--text)">All accounts (${d.accounts.length})</p><div class="flex-1"></div>
-      <label class="text-xs flex items-center gap-1.5" style="color:var(--text-muted)"><input type="checkbox" id="vtFin" ${VT.showFin?'checked':''}> Show target, MRC &amp; notes</label></div>
-    <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account</th><th>AM</th><th>Type</th><th>Cadence</th><th>Last visit</th><th>Days since</th><th>Status</th><th>Next planned</th><th>Plan check</th>${VT.showFin?'<th>2026 target (Mn)</th><th>MRC (Mn)</th><th>Note</th>':''}${me.is_admin?'<th></th>':''}</tr></thead><tbody>
-    ${d.accounts.map(a=>`<tr><td class="font-medium">${escapeHtml(a.name)}</td><td>${escapeHtml(vtAmName(a.am_id))}</td><td>${vtChip(a.type,a.type==='Priority'?'vt-ok':'')}</td><td>${a.cadence}</td><td>${a.last_visit?vtDate(a.last_visit):'—'}</td><td>${a.days_since}</td><td>${vtChip(a.status,VT_STATUS_CLS[a.status])}</td><td>${a.next_planned_visit?vtDate(a.next_planned_visit):'—'}</td><td>${a.plan_check?vtChip(a.plan_check,VT_PLAN_CLS[a.plan_check]):'—'}</td>
-      ${VT.showFin?`<td>${a.target_idr_mn==null?'—':a.target_idr_mn.toLocaleString()}</td><td>${a.mrc_idr_mn==null?'—':a.mrc_idr_mn}</td><td style="color:var(--text-muted)">${escapeHtml(a.note)}</td>`:''}
-      ${me.is_admin?`<td><button type="button" class="vt-acc-edit text-xs" data-id="${a.id}" style="color:var(--primary)"><i class="fa-solid fa-pen"></i></button></td>`:''}</tr>`).join('')}</tbody></table></div></div>
+  const d=VT.data, me=d.me, f=VT.acc;
+  const rows=d.accounts.filter(a=>(!f.am||String(a.am_id)===f.am)&&(!f.type||a.type===f.type)&&(!f.q||a.name.toLowerCase().includes(f.q.toLowerCase())));
+  const covOpts=sel=>Object.entries(COV_STATUS_LABEL).map(([k,l])=>`<option value="${k}" ${k===sel?'selected':''}>${l}</option>`).join('');
+  body.innerHTML=`<div class="card elev p-5 mb-4"><div class="flex flex-wrap items-center gap-2 mb-3"><p class="text-sm font-medium" style="color:var(--text)">${me.sees_all?'All accounts':'My accounts'} (${rows.length})</p><div class="flex-1"></div>
+      <input id="vtAccQ" type="text" value="${escapeHtml(f.q)}" placeholder="Search account…" class="field text-xs px-2 py-1.5" style="width:170px">
+      ${me.sees_all?vtSel('vtAccAm',`<option value="">All AMs</option>`+d.ams.map(a=>`<option value="${a.id}" ${String(a.id)===f.am?'selected':''}>${escapeHtml(a.name)}</option>`).join('')):''}
+      ${vtSel('vtAccType',`<option value="">Priority + Other</option><option value="Priority" ${f.type==='Priority'?'selected':''}>Priority</option><option value="Other" ${f.type==='Other'?'selected':''}>Other</option>`)}
+      <label class="text-xs flex items-center gap-1.5" style="color:var(--text-muted)"><input type="checkbox" id="vtFin" ${f.fin?'checked':''}> Target, MRC &amp; notes</label>
+      ${me.is_admin?`<button type="button" id="vtImportMaster" class="text-xs px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-file-import mr-1"></i>Import master account list</button>
+        <button type="button" id="vtImportLog" class="text-xs px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-file-import mr-1"></i>Import daily log</button>
+        <input type="file" id="vtFileMaster" accept=".xlsx" style="display:none"><input type="file" id="vtFileLog" accept=".xlsx" style="display:none">`:''}</div>
+    <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account</th><th>AM</th><th>Type</th><th>Cadence</th><th>Visit status</th><th>Last visit</th><th>Relationship</th><th>Champion</th><th>Opportunities</th>${f.fin?'<th>2026 target (Mn)</th><th>MRC (Mn)</th><th>Notes</th>':''}${me.is_admin?'<th></th>':''}</tr></thead><tbody>
+    ${rows.map(a=>{ const c=a.cov, can=vtCanEdit(a.am_id);
+      return `<tr><td><div class="flex items-center gap-2.5">${vtLogo(a,30)}<span class="font-medium">${escapeHtml(vtShort(a.name))}</span></div></td><td>${escapeHtml(vtAmName(a.am_id))}</td><td>${vtChip(a.type,a.type==='Priority'?'vt-ok':'')}</td><td>${a.cadence}</td>
+      <td>${vtChip(a.status,VT_STATUS_CLS[a.status])}</td><td>${a.last_visit?vtDate(a.last_visit):'—'}</td>
+      <td>${c?(can?`<select class="vt-cov-status field text-xs px-2 py-1" data-id="${c.id}">${covOpts(c.status)}</select>`:escapeHtml(COV_STATUS_LABEL[c.status]||c.status)):vtNone('—')}</td>
+      <td>${c?`<input type="checkbox" class="vt-cov-champ" data-id="${c.id}" ${c.is_champion?'checked':''} ${can?'':'disabled'}>`:'—'}</td>
+      <td>${a.opp_count?`${a.opp_count} · ${fmtIDR(a.opp_value)}`:vtNone('none')}</td>
+      ${f.fin?`<td>${a.target_idr_mn==null?'—':a.target_idr_mn.toLocaleString()}</td><td>${a.mrc_idr_mn==null?'—':a.mrc_idr_mn}</td><td>${c&&can?`<input type="text" class="vt-cov-notes field text-xs px-2 py-1" data-id="${c.id}" value="${escapeHtml(c.notes)}" style="min-width:160px">`:escapeHtml((c&&c.notes)||a.note)}</td>`:''}
+      ${me.is_admin?`<td><button type="button" class="vt-acc-edit text-xs" data-id="${a.id}" style="color:var(--primary)" title="Edit / logo"><i class="fa-solid fa-pen"></i></button></td>`:''}</tr>`; }).join('')}</tbody></table></div></div>
     ${me.is_admin?`<div class="card elev p-5"><p class="text-sm font-medium mb-1" style="color:var(--text)">Account manager &harr; login</p><p class="text-[11px] mb-3" style="color:var(--text-faint)">Matched automatically by name. Set a login explicitly only if an AM can't see their own page.</p>
       <div class="grid md:grid-cols-2 gap-2">${d.ams.map(a=>`<div class="flex items-center gap-2 text-xs"><span class="flex-1" style="color:var(--text)">${escapeHtml(a.name)}</span>
         <select class="vt-link-sel field text-xs px-2 py-1.5" data-id="${a.id}"><option value="">Auto-match by name</option>${USERS.filter(u=>u.role==='account_manager').map(u=>`<option value="${u.id}" ${u.id===a.user_id?'selected':''}>${escapeHtml(u.full_name||u.username)}</option>`).join('')}</select></div>`).join('')}</div></div>`:''}`;
-  document.getElementById('vtFin').addEventListener('change',e=>{ VT.showFin=e.target.checked; vtAccounts(body); });
+  const re=()=>vtAccounts(body);
+  document.getElementById('vtAccQ').addEventListener('input',e=>{ f.q=e.target.value; clearTimeout(VT._qt); VT._qt=setTimeout(()=>{ re(); const i=document.getElementById('vtAccQ'); i.focus(); i.setSelectionRange(f.q.length,f.q.length); },250); });
+  const am=document.getElementById('vtAccAm'); if(am) am.addEventListener('change',e=>{ f.am=e.target.value; re(); });
+  document.getElementById('vtAccType').addEventListener('change',e=>{ f.type=e.target.value; re(); });
+  document.getElementById('vtFin').addEventListener('change',e=>{ f.fin=e.target.checked; re(); });
+  const patchCov=async(id,patch)=>{ const a=VT.data.accounts.find(x=>x.cov&&x.cov.id===parseInt(id)); const c=a.cov; Object.assign(c,patch);
+    try{ await api('/api/account_coverage/'+c.id,{method:'PUT',body:JSON.stringify({status:c.status,is_champion:c.is_champion,notes:c.notes})}); showToast('Saved'); await loadAccountCoverage(); }catch(e){ showToast(e.message,true); } };
+  body.querySelectorAll('.vt-cov-status').forEach(el=>el.addEventListener('change',()=>patchCov(el.dataset.id,{status:el.value})));
+  body.querySelectorAll('.vt-cov-champ').forEach(el=>el.addEventListener('change',()=>patchCov(el.dataset.id,{is_champion:el.checked})));
+  body.querySelectorAll('.vt-cov-notes').forEach(el=>el.addEventListener('change',()=>patchCov(el.dataset.id,{notes:el.value})));
   body.querySelectorAll('.vt-acc-edit').forEach(b=>b.addEventListener('click',()=>vtOpenAccount(d.accounts.find(a=>String(a.id)===b.dataset.id))));
   body.querySelectorAll('.vt-link-sel').forEach(sel=>sel.addEventListener('change',async()=>{
     try{ await api('/api/visit/ams/'+sel.dataset.id,{method:'PUT',body:JSON.stringify({user_id:sel.value?parseInt(sel.value):null})}); showToast('Link saved'); renderVisits(); }catch(e){ showToast(e.message,true); }
   }));
+  const upload=async(url,file,okMsg)=>{ const fd=new FormData(); fd.append('file',file);
+    try{ const r=await fetch(url,{method:'POST',headers:{'Authorization':'Bearer '+TOKEN},body:fd}); const j=await r.json(); if(!r.ok) throw new Error(j.error||'Import failed'); showToast(okMsg(j)); await loadAccountCoverage(); renderVisits(); }catch(e){ showToast(e.message,true); } };
+  const im=document.getElementById('vtImportMaster'); if(im){
+    im.addEventListener('click',()=>document.getElementById('vtFileMaster').click());
+    document.getElementById('vtFileMaster').addEventListener('change',e=>{ const f0=e.target.files[0]; if(!f0) return;
+      openConfirm(`Import PODS 2 accounts from "${f0.name}"? This refreshes AM, target and revenue figures from the master file without touching relationship tags.`,()=>upload('/api/account_coverage/import_master',f0,j=>`Imported ${j.total} accounts (${j.created} new, ${j.updated} refreshed${j.visit_accounts_added?`, ${j.visit_accounts_added} added to visits`:''})`)); e.target.value=''; });
+    document.getElementById('vtImportLog').addEventListener('click',()=>document.getElementById('vtFileLog').click());
+    document.getElementById('vtFileLog').addEventListener('change',e=>{ const f0=e.target.files[0]; if(!f0) return;
+      upload('/api/visit/import_log',f0,j=>`Imported ${j.imported} tasks (${j.duplicates} already there${j.skipped.length?`, ${j.skipped.length} skipped`:''})`); e.target.value=''; });
+  }
 }
 
+/* ---------------- Blockers ---------------- */
 async function vtBlockers(body){
   const d=VT.data, me=d.me;
   VT.blockers = await api('/api/visit/blockers');
-  const canAdd = me.can_write;
   body.innerHTML=`<div class="card elev p-5"><div class="flex items-center gap-3 mb-3"><p class="text-sm font-medium" style="color:var(--text)">Blockers needing escalation</p><div class="flex-1"></div>
-    ${canAdd?`<button type="button" id="vtAddBlocker" class="btn-primary text-xs px-3 py-1.5 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>Raise blocker</button>`:''}</div>
+    ${me.can_write?`<button type="button" id="vtAddBlocker" class="btn-primary text-xs px-3 py-1.5 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>Raise blocker</button>`:''}</div>
     <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Date raised</th><th>AM</th><th>Blocker</th><th>Escalate to</th><th>Due date</th><th>Status</th><th>Overdue?</th><th></th></tr></thead><tbody>
     ${VT.blockers.map(b=>`<tr><td class="whitespace-nowrap">${vtDate(b.date_raised)}</td><td>${escapeHtml(b.am_name)}</td><td>${escapeHtml(b.text)}</td><td>${escapeHtml(b.escalate_to)}</td><td>${vtDate(b.due_date)}</td>
       <td>${vtChip(b.status,b.status==='Resolved'?'vt-ok':(b.status==='Escalated'?'vt-warn':''))}</td><td>${b.overdue?vtChip('Overdue','vt-bad'):'—'}</td>
@@ -4220,40 +3678,35 @@ async function vtBlockers(body){
   body.querySelectorAll('.vt-b-edit').forEach(b=>b.addEventListener('click',()=>vtOpenBlocker(VT.blockers.find(x=>String(x.id)===b.dataset.id))));
 }
 
-/* ---- task modal ---- */
+/* ---- task modal (edit) ---- */
 function vtFillAccounts(amId, sel){
   document.getElementById('vtTaskAccount').innerHTML = VT.data.accounts.filter(a=>a.am_id===amId)
     .map(a=>`<option value="${a.id}" ${a.id===sel?'selected':''}>${a.type==='Priority'?'★ ':''}${escapeHtml(a.name)}</option>`).join('');
 }
 function vtOpenTask(t){
   const d=VT.data, me=d.me; VT.editTask=t;
-  document.getElementById('vtTaskTitle').textContent = t?'Edit task':'Log / plan a task';
+  document.getElementById('vtTaskTitle').textContent = 'Edit task';
   const amSel=document.getElementById('vtTaskAm');
   amSel.innerHTML=d.ams.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
-  const amId=t?t.am_id:(VT.amId||me.am_id); amSel.value=amId; amSel.disabled=!me.is_admin || !!t;
-  vtFillAccounts(amId, t&&t.account_id);
-  document.getElementById('vtTaskDate').value=t?t.task_date:d.today;
-  document.getElementById('vtTaskActivity').innerHTML=vtOpts(d.enums.activities,t&&t.activity);
-  document.getElementById('vtTaskStatus').innerHTML=vtOpts(d.enums.task_statuses,t?t.status:'Planned');
-  document.getElementById('vtTaskTopic').value=t?t.topic:'';
-  document.getElementById('vtTaskOutcome').value=t?t.outcome:'';
-  document.getElementById('vtTaskDeleteBtn').style.display=t?'':'none';
+  amSel.value=t.am_id; amSel.disabled=true;
+  vtFillAccounts(t.am_id, t.account_id);
+  document.getElementById('vtTaskDate').value=t.task_date;
+  document.getElementById('vtTaskActivity').innerHTML=vtOpts(d.enums.activities,t.activity);
+  document.getElementById('vtTaskStatus').innerHTML=vtOpts(d.enums.task_statuses,t.status);
+  document.getElementById('vtTaskTopic').value=t.topic; document.getElementById('vtTaskOutcome').value=t.outcome;
+  document.getElementById('vtTaskDeleteBtn').style.display='';
   openModal('vtTaskModal');
 }
-document.getElementById('vtTaskAm').addEventListener('change',e=>vtFillAccounts(parseInt(e.target.value)));
 document.getElementById('vtTaskForm').addEventListener('submit',async ev=>{
   ev.preventDefault();
   const body={task_date:vtv('vtTaskDate'), am_id:parseInt(vtv('vtTaskAm')), account_id:parseInt(vtv('vtTaskAccount')), activity:vtv('vtTaskActivity'),
               status:vtv('vtTaskStatus'), topic:vtv('vtTaskTopic'), outcome:vtv('vtTaskOutcome')};
-  try{
-    const r = VT.editTask ? await api('/api/visit/tasks/'+VT.editTask.id,{method:'PUT',body:JSON.stringify(body)})
-                          : await api('/api/visit/tasks',{method:'POST',body:JSON.stringify(body)});
-    closeModal('vtTaskModal'); showToast(r.warning||'Task saved', !!r.warning); renderVisits();
+  try{ const r=await api('/api/visit/tasks/'+VT.editTask.id,{method:'PUT',body:JSON.stringify(body)});
+    closeModal('vtTaskModal'); showToast(r.warning||'Task saved',!!r.warning); vtAfterChange();
   }catch(e){ showToast(e.message,true); }
 });
-function vtv(id){ return document.getElementById(id).value.trim(); }
 document.getElementById('vtTaskDeleteBtn').addEventListener('click',()=>openConfirm('Delete this task?',async()=>{
-  try{ await api('/api/visit/tasks/'+VT.editTask.id,{method:'DELETE'}); closeModal('vtTaskModal'); showToast('Task deleted'); renderVisits(); }catch(e){ showToast(e.message,true); }
+  try{ await api('/api/visit/tasks/'+VT.editTask.id,{method:'DELETE'}); closeModal('vtTaskModal'); showToast('Task deleted'); vtAfterChange(); }catch(e){ showToast(e.message,true); }
 }));
 
 /* ---- blocker modal ---- */
@@ -4283,14 +3736,29 @@ document.getElementById('vtBlockerDeleteBtn').addEventListener('click',()=>openC
   try{ await api('/api/visit/blockers/'+VT.editBlocker.id,{method:'DELETE'}); closeModal('vtBlockerModal'); showToast('Blocker deleted'); renderVisits(); }catch(e){ showToast(e.message,true); }
 }));
 
-/* ---- account modal (admin) ---- */
+/* ---- account modal: details (admin) + logo (admin or the account's AM) ---- */
+function vtDrawLogoPreview(){ document.getElementById('vtAccLogoPreview').innerHTML = vtLogo(VT.editAcc,40).replace(/border:1px solid var\(--border\);/,''); }
 function vtOpenAccount(a){
-  VT.editAcc=a; const en=VT.data.enums;
+  VT.editAcc=a; const en=VT.data.enums, admin=VT.data.me.is_admin;
   document.getElementById('vtAccName').value=a.name; document.getElementById('vtAccNote').value=a.note||'';
   document.getElementById('vtAccType').innerHTML=vtOpts(en.types,a.type);
   document.getElementById('vtAccCadence').innerHTML=vtOpts(en.cadences,a.cadence);
+  ['vtAccName','vtAccType','vtAccCadence','vtAccNote'].forEach(id=>document.getElementById(id).disabled=!admin);
+  document.querySelector('#vtAccountForm button[type="submit"]').style.display=admin?'':'none';
+  document.getElementById('vtAccLogoFile').value=''; vtDrawLogoPreview();
+  document.getElementById('vtAccLogoRemove').style.display=a.has_logo?'':'none';
   openModal('vtAccountModal');
 }
+document.getElementById('vtAccLogoFile').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const fd=new FormData(); fd.append('file',f);
+  try{ const r=await fetch(`/api/visit/accounts/${VT.editAcc.id}/logo`,{method:'POST',headers:{'Authorization':'Bearer '+TOKEN},body:fd}); const j=await r.json(); if(!r.ok) throw new Error(j.error||'Upload failed');
+    VT.editAcc.has_logo=true; VT.logoV=Date.now(); vtDrawLogoPreview(); document.getElementById('vtAccLogoRemove').style.display=''; showToast('Logo saved'); vtAfterChange();
+  }catch(err){ showToast(err.message,true); }
+});
+document.getElementById('vtAccLogoRemove').addEventListener('click',async()=>{
+  try{ await api(`/api/visit/accounts/${VT.editAcc.id}/logo`,{method:'DELETE'}); VT.editAcc.has_logo=false; VT.logoV=Date.now(); vtDrawLogoPreview(); document.getElementById('vtAccLogoRemove').style.display='none'; showToast('Logo removed'); vtAfterChange(); }catch(err){ showToast(err.message,true); }
+});
 document.getElementById('vtAccountForm').addEventListener('submit',async ev=>{
   ev.preventDefault();
   try{
@@ -4319,514 +3787,22 @@ function switchAnalyticsTab(tab){
   document.querySelectorAll('.atab-pane').forEach(p=>p.style.display=(p.id==='atab-'+tab)?'':'none');
 }
 
-/* ---------- Account Coverage sub-tabs: Coverage overview vs. per-AM Workload ---------- */
-document.querySelectorAll('.ctab-btn').forEach(b=>b.addEventListener('click',()=>switchCoverageTab(b.dataset.ctab)));
-function switchCoverageTab(tab){
-  document.querySelectorAll('.ctab-btn').forEach(b=>b.classList.toggle('active',b.dataset.ctab===tab));
-  document.querySelectorAll('.ctab-pane').forEach(p=>p.style.display=(p.id==='ctab-'+tab)?'':'none');
-}
-
-/* ---------- Account Coverage: load vs. what the tracker actually shows worked ---------- */
+/* ---------- Account Coverage data (feeds Accounts & Visits and the Revenue Overview context) ---------- */
 async function loadAccountCoverage(){ try{ const d=await api('/api/account_coverage'); COVERAGE=d.accounts||[]; }catch(e){ COVERAGE=[]; } }
-
-document.getElementById('covMasterImportBtn').addEventListener('click',()=>{
-  const f=document.getElementById('covMasterImportFile').files[0];
-  if(!f){ showToast('Choose the master account .xlsx first',true); return; }
-  openConfirm(`Import PODS 2 accounts from "${f.name}"? This refreshes each account's AM, target and revenue figures from the master file, without touching any status/champion tags already set.`, async()=>{
-    try{
-      const fd=new FormData(); fd.append('file',f);
-      const res=await fetch('/api/account_coverage/import_master',{method:'POST',headers:{'Authorization':'Bearer '+TOKEN},body:fd});
-      const data=await res.json();
-      if(!res.ok) throw new Error(data.error||'Import failed');
-      document.getElementById('covMasterImportResult').textContent=`${data.total} accounts (${data.created} new, ${data.updated} refreshed`
-        + (data.removed ? `, ${data.removed} removed` : '') + `).`;
-      document.getElementById('covMasterImportFile').value='';
-      showToast(`Imported ${data.total} accounts`+(data.removed?` — removed ${data.removed} stale account(s)`:''));
-      await loadAccountCoverage(); renderCoverage(); renderAmWorkload();
-    }catch(err){ showToast(err.message,true); }
-  });
-});
-
-// Relationship-status taxonomy: an account can be in genuinely good standing
-// (already a customer, good rapport) without an open opportunity - this isn't
-// just a "how cold is it" scale. Grouped as good standing / opportunity / needs attention.
 const COV_STATUS_LABEL = {
   existing_customer:'Existing customer', preferred:'Preferred / good relationship',
   growth_potential:'Growth potential', unreviewed:'Unreviewed',
   at_risk:'At risk / cooling', low_priority:'Low priority', no_contact:'No contact', not_preferable:'Not preferable',
 };
-const COV_STATUS_COLOR = {
-  existing_customer:'#14b8a6', preferred:'#0ea5e9',
-  growth_potential:'#8b5cf6', unreviewed:'var(--text-faint)',
-  at_risk:'#f59e0b', low_priority:'#fb923c', no_contact:'var(--danger)', not_preferable:'var(--text-muted)',
-};
-const COV_SOURCE_LABEL = {performance:'Performance import', master:'Master account list', tracker:'New (Tracker)', manual:'New (manual)'};
-
 function amNameMatches(a,b){
   const an=(a||'').toLowerCase().trim(), bn=(b||'').toLowerCase().trim();
   if(!an||!bn) return false;
   return an===bn || an.startsWith(bn) || bn.startsWith(an);
 }
-function covCanEdit(row){ return ROLE==='admin' || (ROLE==='account_manager' && amNameMatches(row.am, FULLNAME)); }
-
-function covPercentile(arr, p){
-  if(!arr.length) return 0;
-  const s=[...arr].sort((a,b)=>a-b);
-  const idx=(s.length-1)*p, lo=Math.floor(idx), hi=Math.ceil(idx);
-  return lo===hi ? s[lo] : s[lo] + (s[hi]-s[lo])*(idx-lo);
-}
-
-let covSort = {field:'size', dir:'desc'};
-
 function resolveColor(c){
-  // Canvas (Chart.js) can't resolve CSS custom properties itself like real
-  // DOM/CSS can - anywhere a color might be a "var(--x)" string reused from
-  // an inline style elsewhere, resolve it to its current computed value first.
+  // Canvas (Chart.js) can't resolve CSS custom properties itself - resolve "var(--x)" first.
   if(typeof c==='string' && c.startsWith('var(')) return cssVar(c.slice(4,-1).trim()) || c;
   return c;
-}
-
-function covSetFilter(field, value){
-  if(field==='status') document.getElementById('covFilterStatus').value=value;
-  else if(field==='source') document.getElementById('covFilterSource').value=value;
-  else if(field==='am' && document.getElementById('covFilterAM').style.display!=='none') document.getElementById('covFilterAM').value=value;
-  renderCoverage();
-}
-
-function covDonut(containerId, entries, filterField){
-  const el=document.getElementById(containerId);
-  const shown=entries.filter(e=>e[2]>0);
-  const total=shown.reduce((s,e)=>s+e[2],0);
-  destroyChart(containerId);
-  if(!total){ el.innerHTML=`<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`; return; }
-  const interactive=!!filterField;
-  el.innerHTML='<div class="flex items-center gap-6"><div style="width:140px;height:140px;flex-shrink:0"><canvas></canvas></div><div class="donut-legend space-y-1.5 flex-1 min-w-0"></div></div>';
-  const canvas=el.querySelector('canvas');
-  CHART_INSTANCES[containerId] = new Chart(canvas, {
-    type:'doughnut',
-    data:{ labels: shown.map(e=>e[1]), datasets:[{ data: shown.map(e=>e[2]), backgroundColor: shown.map(e=>resolveColor(e[3])), borderWidth:0 }]},
-    options:{
-      responsive:true, maintainAspectRatio:false, cutout:'65%',
-      plugins:{ legend:{display:false} },
-      onHover:(evt, els)=>{ evt.native.target.style.cursor = (interactive && els.length) ? 'pointer' : 'default'; },
-      onClick:(evt, elements)=>{ if(interactive && elements.length) covSetFilter(filterField, shown[elements[0].index][0]); }
-    }
-  });
-  el.querySelector('.donut-legend').innerHTML = shown.map(([key,label,count,color])=>
-    `<div class="flex items-center gap-1.5 text-xs${interactive?' clickable':''}" ${interactive?`onclick="covSetFilter('${filterField}','${key}')"`:''} style="color:var(--text-muted)"><span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${color}"></span>${escapeHtml(label)} (${count})</div>`
-  ).join('');
-}
-
-function covGauge(pct, label, sub, color){
-  const cx=50,cy=50,r=40,sw=10,C=2*Math.PI*r;
-  const dash=Math.max(0,Math.min(100,pct))/100*C;
-  const tc=cssVar('--chart-text');
-  return `<div class="card elev p-4 flex items-center gap-3">
-    <svg viewBox="0 0 100 100" style="width:72px;height:72px" class="flex-shrink-0">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="${sw}"/>
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-dasharray="${dash} ${C-dash}" stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
-      <text x="50" y="56" text-anchor="middle" font-size="20" font-weight="700" fill="${tc}">${Math.round(pct)}%</text>
-    </svg>
-    <div class="min-w-0">
-      <p class="text-xs font-medium" style="color:var(--text)">${label}</p>
-      <p class="text-[11px]" style="color:var(--text-faint)">${sub}</p>
-    </div>
-  </div>`;
-}
-
-function covMiniBarList(rows, valueKey, color, emptyMsg){
-  if(!rows.length) return `<p class="text-xs py-6 text-center" style="color:var(--text-faint)">${emptyMsg}</p>`;
-  const max=Math.max(...rows.map(r=>r[valueKey]||0),1);
-  return rows.map(r=>{
-    const pct=(r[valueKey]||0)/max*100;
-    return `<div class="mb-2.5">
-      <div class="flex items-center justify-between text-xs mb-1">
-        <span style="color:var(--text)">${escapeHtml(r.account_name)} <span style="color:var(--text-faint)">(${escapeHtml(r.am||'unassigned')})</span></span>
-        <span style="color:${color}">${fmtIDR(r[valueKey]||0)}</span>
-      </div>
-      <div class="rounded-full h-2" style="background:var(--surface-3)"><div class="h-2 rounded-full" style="width:${pct}%;background:${color}"></div></div>
-    </div>`;
-  }).join('');
-}
-
-function covByAmChart(rows){
-  const byAM={};
-  rows.forEach(r=>{ const k=r.am||'Unassigned'; const x=byAM[k]=byAM[k]||{total:0,handled:0}; x.total++; if(r.deal_count>0) x.handled++; });
-  const entries=Object.entries(byAM).sort((a,b)=>b[1].total-a[1].total);
-  if(!entries.length) return `<p class="text-xs py-8 text-center" style="color:var(--text-faint)">No data</p>`;
-  const max=Math.max(...entries.map(([,x])=>x.total),1);
-  return entries.map(([am,x])=>{
-    const hPct = x.total ? x.handled/x.total*100 : 0;
-    const widthPct = x.total/max*100;
-    return `<div class="flex items-center gap-3 mb-2.5">
-      <span class="text-xs clickable cov-chart-seg" data-filter="am" data-value="${escapeHtml(am)}" style="color:var(--text);width:150px;flex-shrink:0" title="Filter to ${escapeHtml(am)}">${escapeHtml(am)}</span>
-      <div class="flex-1 rounded-full h-3 overflow-hidden" style="background:var(--surface-3)">
-        <div style="width:${widthPct}%;height:100%;display:flex">
-          <div style="width:${hPct}%;background:var(--success)" title="Handled: ${x.handled}"></div>
-          <div style="width:${100-hPct}%;background:var(--border)" title="Not handled: ${x.total-x.handled}"></div>
-        </div>
-      </div>
-      <span class="text-[11px]" style="color:var(--text-muted);width:70px;text-align:right;flex-shrink:0">${x.handled}/${x.total}</span>
-    </div>`;
-  }).join('');
-}
-
-document.getElementById('tab-coverage').addEventListener('click', (e)=>{
-  const seg=e.target.closest('.cov-chart-seg'); if(!seg) return;
-  const field=seg.dataset.filter, value=seg.dataset.value;
-  if(field==='status') document.getElementById('covFilterStatus').value=value;
-  else if(field==='source') document.getElementById('covFilterSource').value=value;
-  else if(field==='am' && document.getElementById('covFilterAM').style.display!=='none') document.getElementById('covFilterAM').value=value;
-  renderCoverage();
-});
-
-document.querySelectorAll('.cov-th').forEach(th=>th.addEventListener('click', ()=>{
-  const f=th.dataset.sort;
-  if(covSort.field===f) covSort.dir = covSort.dir==='asc'?'desc':'asc';
-  else { covSort={field:f, dir:(f==='account_name'||f==='am'||f==='pillar'||f==='status'||f==='source')?'asc':'desc'}; }
-  renderCoverage();
-}));
-
-function renderCoverage(){
-  const body=document.getElementById('covTableBody');
-  if(!body) return;
-  const amFilter=document.getElementById('covFilterAM').value;
-  const statusFilter=document.getElementById('covFilterStatus').value;
-  const sourceFilter=document.getElementById('covFilterSource').value;
-  const rotationOnly=document.getElementById('covRotationOnly').checked;
-  const championOnly=document.getElementById('covChampionOnly').checked;
-  const search=document.getElementById('covSearch').value.trim().toLowerCase();
-
-  const sizeP75=covPercentile(COVERAGE.map(r=>r.size||0), 0.75);
-  const rows=COVERAGE.map(r=>Object.assign({}, r, {
-    is_rotation: sizeP75>0 && (r.size||0)>=sizeP75 && r.deal_count===0 && !r.is_champion && r.status!=='not_preferable',
-  }));
-
-  if(ROLE!=='account_manager'){
-    const amSel=document.getElementById('covFilterAM');
-    const ams=[...new Set(COVERAGE.map(r=>r.am).filter(Boolean))].sort();
-    const cur=amSel.value;
-    amSel.innerHTML='<option value="">All AMs</option>'+ams.map(a=>`<option value="${escapeHtml(a)}"${a===cur?' selected':''}>${escapeHtml(a)}</option>`).join('');
-  } else {
-    document.getElementById('covFilterAM').style.display='none';
-  }
-
-  const scoped = amFilter ? rows.filter(r=>amNameMatches(r.am, amFilter)) : rows;
-  const counts = {handled:0, champion:0, existing_customer:0, preferred:0, growth_potential:0, unreviewed:0, at_risk:0, low_priority:0, no_contact:0, not_preferable:0};
-  scoped.forEach(r=>{
-    if(r.deal_count>0) counts.handled++;
-    else if(counts[r.status]!==undefined) counts[r.status]++;
-    if(r.is_champion) counts.champion++;
-  });
-  const total = scoped.length || 1;
-  const officialCount = scoped.filter(r=>r.source==='performance'||r.source==='master').length;
-  const newCount = scoped.length - officialCount;
-  const attentionCount = counts.at_risk + counts.low_priority + counts.no_contact;
-
-  document.getElementById('covTotalLine').textContent = `${scoped.length} account${scoped.length===1?'':'s'} tracked${amFilter?' for '+amFilter:''}.`;
-
-  document.getElementById('covHeadlineGauges').innerHTML =
-    covGauge(officialCount/total*100, 'Given by performance team', `${officialCount} of ${scoped.length} accounts`, 'var(--primary)') +
-    covGauge(counts.handled/total*100, 'Engaged (running projects/solutions)', `${counts.handled} of ${scoped.length} have an open opportunity`, 'var(--success)') +
-    covGauge(counts.champion/total*100, 'Champion accounts', `${counts.champion} of ${scoped.length} flagged as champion`, '#0ea5e9') +
-    covGauge(attentionCount/total*100, 'Needs attention', `${attentionCount} at risk, low priority or no contact`, 'var(--warning)');
-
-  covDonut('covStatusChart', [
-    ['handled','Engaged',counts.handled,'var(--success)'],
-    ['existing_customer',COV_STATUS_LABEL.existing_customer,counts.existing_customer,COV_STATUS_COLOR.existing_customer],
-    ['preferred',COV_STATUS_LABEL.preferred,counts.preferred,COV_STATUS_COLOR.preferred],
-    ['growth_potential',COV_STATUS_LABEL.growth_potential,counts.growth_potential,COV_STATUS_COLOR.growth_potential],
-    ['unreviewed',COV_STATUS_LABEL.unreviewed,counts.unreviewed,COV_STATUS_COLOR.unreviewed],
-    ['at_risk',COV_STATUS_LABEL.at_risk,counts.at_risk,COV_STATUS_COLOR.at_risk],
-    ['low_priority',COV_STATUS_LABEL.low_priority,counts.low_priority,COV_STATUS_COLOR.low_priority],
-    ['no_contact',COV_STATUS_LABEL.no_contact,counts.no_contact,COV_STATUS_COLOR.no_contact],
-    ['not_preferable',COV_STATUS_LABEL.not_preferable,counts.not_preferable,COV_STATUS_COLOR.not_preferable],
-  ], 'status');
-
-  covDonut('covSourceChart', [
-    ['official','Given by performance team',officialCount,'var(--primary)'],
-    ['new','New (Tracker / manual)',newCount,'var(--warning)'],
-  ], 'source');
-
-  document.getElementById('covByAmChart').innerHTML = covByAmChart(scoped);
-
-  let filtered = scoped;
-  if(statusFilter==='handled') filtered=filtered.filter(r=>r.deal_count>0);
-  else if(statusFilter) filtered=filtered.filter(r=>r.status===statusFilter && r.deal_count===0);
-  if(sourceFilter==='official') filtered=filtered.filter(r=>r.source==='performance'||r.source==='master');
-  else if(sourceFilter==='new') filtered=filtered.filter(r=>r.source==='tracker'||r.source==='manual');
-  if(rotationOnly) filtered=filtered.filter(r=>r.is_rotation);
-  if(championOnly) filtered=filtered.filter(r=>r.is_champion);
-  if(search) filtered=filtered.filter(r=>(r.account_name||'').toLowerCase().includes(search) || (r.am||'').toLowerCase().includes(search));
-
-  filtered=[...filtered].sort((a,b)=>{
-    let av=a[covSort.field], bv=b[covSort.field];
-    if(typeof av==='boolean') av=av?1:0;
-    if(typeof bv==='boolean') bv=bv?1:0;
-    if(typeof av==='string' || typeof bv==='string'){ av=(av||'').toString().toLowerCase(); bv=(bv||'').toString().toLowerCase(); }
-    else { av=av||0; bv=bv||0; }
-    if(av<bv) return covSort.dir==='asc'?-1:1;
-    if(av>bv) return covSort.dir==='asc'?1:-1;
-    return 0;
-  });
-
-  document.querySelectorAll('.cov-th').forEach(th=>{
-    const f=th.dataset.sort;
-    const base=th.textContent.replace(/\s*[▲▼]\s*$/,'').trim();
-    th.textContent = base + (covSort.field===f ? (covSort.dir==='asc'?' ▲':' ▼') : '');
-  });
-  document.getElementById('covResultCount').textContent = `${filtered.length} of ${scoped.length} accounts`;
-
-  body.innerHTML = filtered.map(r=>{
-    const editable=covCanEdit(r);
-    const dealsLabel = r.deal_count>0
-      ? r.open_deals.map(d=>escapeHtml(d.deal_name)).join(', ')
-      : '<span style="color:var(--text-faint)">— none —</span>';
-    const statusCell = editable
-      ? `<select class="field text-xs px-2 py-1 cov-status" data-id="${r.id}">${Object.entries(COV_STATUS_LABEL).map(([v,l])=>`<option value="${v}"${v===r.status?' selected':''}>${l}</option>`).join('')}</select>`
-      : `<span class="text-xs" style="color:${COV_STATUS_COLOR[r.status]||'var(--text-muted)'}">${COV_STATUS_LABEL[r.status]||r.status}</span>`;
-    const champCell = `<input type="checkbox" class="rounded cov-champion" data-id="${r.id}" ${r.is_champion?'checked':''} ${editable?'':'disabled'}>`;
-    const notesCell = editable
-      ? `<input type="text" class="field text-xs px-2 py-1 w-full cov-notes" data-id="${r.id}" value="${escapeHtml(r.notes||'')}" placeholder="Notes…">`
-      : `<span class="text-xs" style="color:var(--text-faint)">${escapeHtml(r.notes||'')}</span>`;
-    const delBtn = (r.is_manual && editable)
-      ? `<button class="cov-del text-xs" data-id="${r.id}" style="color:var(--text-faint)" title="Remove"><i class="fa-solid fa-trash"></i></button>` : '';
-    const sourceBadge = COV_SOURCE_LABEL[r.source] || r.source;
-    return `<tr style="border-bottom:1px solid var(--border)${r.is_rotation?';background:rgba(239,68,68,0.06)':''}">
-      <td class="py-2">${escapeHtml(r.account_name)}${r.is_rotation?' <i class="fa-solid fa-arrows-rotate" style="color:var(--warning)" title="Rotation candidate"></i>':''}</td>
-      <td class="py-2"><span class="text-[10px] px-1.5 py-0.5 rounded" style="background:var(--surface-3);color:var(--text-muted)">${sourceBadge}</span></td>
-      <td class="py-2">${escapeHtml(r.am||'—')}</td>
-      <td class="py-2">${escapeHtml(r.pillar||'—')}</td>
-      <td class="py-2 text-right">${fmtIDR(r.size||0)}</td>
-      <td class="py-2">${dealsLabel}</td>
-      <td class="py-2">${statusCell}</td>
-      <td class="py-2 text-center">${champCell}</td>
-      <td class="py-2">${notesCell}</td>
-      <td class="py-2">${delBtn}</td>
-    </tr>`;
-  }).join('') || `<tr><td colspan="10" class="py-6 text-center text-xs" style="color:var(--text-faint)">No accounts to show.</td></tr>`;
-
-  const rotList=rows.filter(r=>r.is_rotation).sort((a,b)=>(b.size||0)-(a.size||0)).slice(0,10);
-  document.getElementById('covRotationList').innerHTML = covMiniBarList(rotList, 'size', 'var(--warning)', 'No rotation candidates right now.');
-}
-
-document.getElementById('covFilterAM').addEventListener('change', renderCoverage);
-document.getElementById('covFilterStatus').addEventListener('change', renderCoverage);
-document.getElementById('covFilterSource').addEventListener('change', renderCoverage);
-document.getElementById('covRotationOnly').addEventListener('change', renderCoverage);
-document.getElementById('covChampionOnly').addEventListener('change', renderCoverage);
-document.getElementById('covSearch').addEventListener('input', renderCoverage);
-document.getElementById('covFilterClear').addEventListener('click', ()=>{
-  document.getElementById('covFilterAM').value='';
-  document.getElementById('covFilterStatus').value='';
-  document.getElementById('covFilterSource').value='';
-  document.getElementById('covRotationOnly').checked=false;
-  document.getElementById('covChampionOnly').checked=false;
-  document.getElementById('covSearch').value='';
-  renderCoverage();
-});
-
-document.getElementById('covAddBtn').addEventListener('click', ()=>{
-  const wrap=document.getElementById('covAddWrap');
-  const show = wrap.style.display==='none';
-  wrap.style.display = show ? '' : 'none';
-  if(show){
-    const amSel=document.getElementById('covAddAM');
-    if(ROLE==='admin'){ amSel.style.display=''; amSel.innerHTML=AMS.map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join(''); }
-    else { amSel.style.display='none'; }
-  }
-});
-document.getElementById('covAddCancelBtn').addEventListener('click', ()=>{ document.getElementById('covAddWrap').style.display='none'; });
-document.getElementById('covAddSaveBtn').addEventListener('click', async ()=>{
-  const name=document.getElementById('covAddName').value.trim();
-  const pillar=document.getElementById('covAddPillar').value.trim();
-  const am=document.getElementById('covAddAM').value;
-  const resultEl=document.getElementById('covAddResult');
-  if(!name){ resultEl.textContent='Account name is required'; resultEl.style.color='var(--danger)'; return; }
-  try{
-    await api('/api/account_coverage',{method:'POST', body:JSON.stringify({account_name:name, pillar, am})});
-    resultEl.textContent='Added'; resultEl.style.color='var(--success)';
-    document.getElementById('covAddName').value=''; document.getElementById('covAddPillar').value='';
-    await loadAccountCoverage(); renderCoverage();
-  }catch(err){ resultEl.textContent=err.message; resultEl.style.color='var(--danger)'; }
-});
-
-document.getElementById('covTableBody').addEventListener('change', async (e)=>{
-  const id=e.target.dataset.id; if(!id) return;
-  if(e.target.classList.contains('cov-status')){
-    try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({status:e.target.value})}); await loadAccountCoverage(); renderCoverage(); }
-    catch(err){ showToast(err.message,true); }
-  } else if(e.target.classList.contains('cov-champion')){
-    try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({is_champion:e.target.checked})}); await loadAccountCoverage(); renderCoverage(); }
-    catch(err){ showToast(err.message,true); }
-  }
-});
-document.getElementById('covTableBody').addEventListener('blur', async (e)=>{
-  if(!e.target.classList || !e.target.classList.contains('cov-notes')) return;
-  const id=e.target.dataset.id;
-  try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({notes:e.target.value})}); await loadAccountCoverage(); }
-  catch(err){ showToast(err.message,true); }
-}, true);
-document.getElementById('covTableBody').addEventListener('click', (e)=>{
-  const btn=e.target.closest('.cov-del'); if(!btn) return;
-  const id=btn.dataset.id;
-  openConfirm('Remove this account from coverage tracking?', async ()=>{
-    try{ await api(`/api/account_coverage/${id}`,{method:'DELETE'}); showToast('Removed'); await loadAccountCoverage(); renderCoverage(); }
-    catch(err){ showToast(err.message,true); }
-  });
-});
-
-/* ---------- AM Workload: per-AM account list + target vs. live pipeline coverage ---------- */
-let amwSelected = null;
-
-function amwStats(am){
-  const accounts = COVERAGE.filter(r=>amNameMatches(r.am, am));
-  const engaged = accounts.filter(r=>r.deal_count>0).length;
-  const champion = accounts.filter(r=>r.is_champion).length;
-  const attention = accounts.filter(r=>r.deal_count===0 && ['at_risk','low_priority','no_contact'].includes(r.status)).length;
-  return {am, accounts, engaged, champion, attention};
-}
-
-function renderAmwCoverageBars(){
-  const list=AMS.map(amwStats).sort((a,b)=>b.accounts.length-a.accounts.length);
-  const max=Math.max(...list.map(x=>x.accounts.length),1);
-  document.getElementById('amwCoverageBars').innerHTML = list.map(x=>{
-    const hPct = x.accounts.length ? x.engaged/x.accounts.length*100 : 0;
-    const widthPct = x.accounts.length/max*100;
-    return `<div class="flex items-center gap-3 mb-2.5 clickable amw-pick" data-am="${escapeHtml(x.am)}">
-      <span class="text-xs" style="color:var(--text);width:150px;flex-shrink:0">${escapeHtml(x.am)}</span>
-      <div class="flex-1 rounded-full h-3 overflow-hidden" style="background:var(--surface-3)">
-        <div style="width:${widthPct}%;height:100%;display:flex">
-          <div style="width:${hPct}%;background:var(--success)" title="Engaged: ${x.engaged}"></div>
-          <div style="width:${100-hPct}%;background:var(--border)" title="Not engaged: ${x.accounts.length-x.engaged}"></div>
-        </div>
-      </div>
-      <span class="text-[11px]" style="color:var(--text-muted);width:130px;text-align:right;flex-shrink:0">${x.accounts.length} accounts &middot; ${x.engaged} engaged</span>
-    </div>`;
-  }).join('') || `<p class="text-xs py-6 text-center" style="color:var(--text-faint)">No account managers defined.</p>`;
-}
-
-function renderAmwCards(){
-  const list=AMS.map(amwStats);
-  document.getElementById('amwCards').innerHTML = list.map(x=>{
-    const active = amwSelected===x.am;
-    return `<div class="card elev p-3 clickable amw-pick" data-am="${escapeHtml(x.am)}" style="${active?'box-shadow:0 0 0 2px var(--primary) inset':''}">
-      <p class="text-xs font-medium mb-1" style="color:var(--text)">${escapeHtml(x.am)}</p>
-      <p class="text-lg font-medium" style="color:var(--text)">${x.accounts.length}</p>
-      <p class="text-[10px]" style="color:var(--text-faint)">accounts &middot; ${x.engaged} engaged &middot; ${x.champion} champion &middot; ${x.attention} need attention</p>
-    </div>`;
-  }).join('');
-}
-
-document.getElementById('ctab-workload').addEventListener('click',(e)=>{
-  const el=e.target.closest('.amw-pick'); if(!el) return;
-  amwSelected=el.dataset.am;
-  document.getElementById('amwSelect').value=amwSelected;
-  renderAmwCards();
-  renderAmwDetail();
-});
-
-document.getElementById('amwSelect').addEventListener('change',()=>{
-  amwSelected=document.getElementById('amwSelect').value;
-  renderAmwCards();
-  renderAmwDetail();
-});
-
-function renderAmwDetail(){
-  if(!amwSelected) return;
-  const x=amwStats(amwSelected);
-  document.getElementById('amwSelectedNote').textContent = `${x.accounts.length} accounts on their plate`;
-
-  document.getElementById('amwStatCards').innerHTML = [
-    ['Total accounts', x.accounts.length, 'var(--text)'],
-    ['Engaged (has opportunity)', x.engaged, 'var(--success)'],
-    ['Champion', x.champion, '#0ea5e9'],
-    ['Needs attention', x.attention, 'var(--warning)'],
-  ].map(([label,val,c])=>`<div class="stat-card" style="--stat-accent:${c}"><p class="stat-label">${label}</p><p class="stat-value">${val}</p></div>`).join('');
-
-  const counts={existing_customer:0,preferred:0,growth_potential:0,unreviewed:0,at_risk:0,low_priority:0,no_contact:0,not_preferable:0,handled:0};
-  x.accounts.forEach(r=>{ if(r.deal_count>0) counts.handled++; else if(counts[r.status]!==undefined) counts[r.status]++; });
-  covDonut('amwStatusChart', [
-    ['handled','Engaged',counts.handled,'var(--success)'],
-    ['existing_customer',COV_STATUS_LABEL.existing_customer,counts.existing_customer,COV_STATUS_COLOR.existing_customer],
-    ['preferred',COV_STATUS_LABEL.preferred,counts.preferred,COV_STATUS_COLOR.preferred],
-    ['growth_potential',COV_STATUS_LABEL.growth_potential,counts.growth_potential,COV_STATUS_COLOR.growth_potential],
-    ['unreviewed',COV_STATUS_LABEL.unreviewed,counts.unreviewed,COV_STATUS_COLOR.unreviewed],
-    ['at_risk',COV_STATUS_LABEL.at_risk,counts.at_risk,COV_STATUS_COLOR.at_risk],
-    ['low_priority',COV_STATUS_LABEL.low_priority,counts.low_priority,COV_STATUS_COLOR.low_priority],
-    ['no_contact',COV_STATUS_LABEL.no_contact,counts.no_contact,COV_STATUS_COLOR.no_contact],
-    ['not_preferable',COV_STATUS_LABEL.not_preferable,counts.not_preferable,COV_STATUS_COLOR.not_preferable],
-  ], null);
-
-  const unhandled=x.accounts.filter(r=>r.deal_count===0).sort((a,b)=>(b.size||0)-(a.size||0)).slice(0,8);
-  document.getElementById('amwUnhandledList').innerHTML = covMiniBarList(unhandled, 'size', 'var(--warning)', 'Every account has an open opportunity.');
-
-  const body=document.getElementById('amwTableBody');
-  body.innerHTML = x.accounts.slice().sort((a,b)=>(b.size||0)-(a.size||0)).map(r=>{
-    const editable=covCanEdit(r);
-    const dealsLabel = r.deal_count>0
-      ? r.open_deals.map(d=>escapeHtml(d.deal_name)).join(', ')
-      : '<span style="color:var(--text-faint)">— none —</span>';
-    const statusCell = editable
-      ? `<select class="field text-xs px-2 py-1 cov-status" data-id="${r.id}">${Object.entries(COV_STATUS_LABEL).map(([v,l])=>`<option value="${v}"${v===r.status?' selected':''}>${l}</option>`).join('')}</select>`
-      : `<span class="text-xs" style="color:${COV_STATUS_COLOR[r.status]||'var(--text-muted)'}">${COV_STATUS_LABEL[r.status]||r.status}</span>`;
-    const champCell = `<input type="checkbox" class="rounded cov-champion" data-id="${r.id}" ${r.is_champion?'checked':''} ${editable?'':'disabled'}>`;
-    const notesCell = editable
-      ? `<input type="text" class="field text-xs px-2 py-1 w-full cov-notes" data-id="${r.id}" value="${escapeHtml(r.notes||'')}" placeholder="Notes…">`
-      : `<span class="text-xs" style="color:var(--text-faint)">${escapeHtml(r.notes||'')}</span>`;
-    const sourceBadge = COV_SOURCE_LABEL[r.source] || r.source;
-    return `<tr style="border-bottom:1px solid var(--border)">
-      <td class="py-2">${escapeHtml(r.account_name)}</td>
-      <td class="py-2"><span class="text-[10px] px-1.5 py-0.5 rounded" style="background:var(--surface-3);color:var(--text-muted)">${sourceBadge}</span></td>
-      <td class="py-2">${escapeHtml(r.pillar||'—')}</td>
-      <td class="py-2 text-right">${fmtIDR(r.size||0)}</td>
-      <td class="py-2">${dealsLabel}</td>
-      <td class="py-2">${statusCell}</td>
-      <td class="py-2 text-center">${champCell}</td>
-      <td class="py-2">${notesCell}</td>
-    </tr>`;
-  }).join('') || `<tr><td colspan="8" class="py-6 text-center text-xs" style="color:var(--text-faint)">No accounts for this AM yet.</td></tr>`;
-}
-
-document.getElementById('amwTableBody').addEventListener('change', async (e)=>{
-  const id=e.target.dataset.id; if(!id) return;
-  if(e.target.classList.contains('cov-status')){
-    try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({status:e.target.value})}); await loadAccountCoverage(); renderAmwCoverageBars(); renderAmwCards(); renderAmwDetail(); }
-    catch(err){ showToast(err.message,true); }
-  } else if(e.target.classList.contains('cov-champion')){
-    try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({is_champion:e.target.checked})}); await loadAccountCoverage(); renderAmwCoverageBars(); renderAmwCards(); renderAmwDetail(); }
-    catch(err){ showToast(err.message,true); }
-  }
-});
-document.getElementById('amwTableBody').addEventListener('blur', async (e)=>{
-  if(!e.target.classList || !e.target.classList.contains('cov-notes')) return;
-  const id=e.target.dataset.id;
-  try{ await api(`/api/account_coverage/${id}`,{method:'PUT', body:JSON.stringify({notes:e.target.value})}); await loadAccountCoverage(); }
-  catch(err){ showToast(err.message,true); }
-}, true);
-
-function renderAmWorkload(){
-  if(!AMS.length) return;
-  const sel=document.getElementById('amwSelect');
-  const cur=sel.value;
-  sel.innerHTML = AMS.map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
-  if(ROLE==='account_manager'){
-    sel.value = AMS.find(a=>amNameMatches(a,FULLNAME)) || FULLNAME;
-    sel.disabled=true;
-  } else {
-    sel.disabled=false;
-    if(cur && AMS.includes(cur)) sel.value=cur;
-  }
-  amwSelected = sel.value || AMS[0];
-  sel.value = amwSelected;
-
-  const totalEngaged = COVERAGE.filter(r=>r.deal_count>0).length;
-  document.getElementById('amwTotalLine').textContent =
-    `PODS 2 total: ${COVERAGE.length} accounts tracked, ${totalEngaged} engaged (${COVERAGE.length?Math.round(totalEngaged/COVERAGE.length*100):0}%).`;
-
-  renderAmwCoverageBars();
-  renderAmwCards();
-  renderAmwDetail();
 }
 
 function renderAnalytics(){
@@ -5382,7 +4358,10 @@ function openUserModal(id){
   document.getElementById('userFullName').value=u?(u.full_name||''):'';
   document.getElementById('userPassword').value='';
   document.getElementById('userPasswordHint').textContent=u?'(blank = keep current)':'';
-  document.getElementById('userRole').value=u?u.role:'account_manager';
+  const roleSel=document.getElementById('userRole');
+  roleSel.querySelectorAll('option[data-legacy]').forEach(o=>o.remove());
+  if(u && CROSS_FUNCTIONAL_ROLES_JS.includes(u.role)) roleSel.insertAdjacentHTML('beforeend',`<option value="${u.role}" data-legacy="1">${u.role} (legacy, read-only)</option>`);
+  roleSel.value=u?u.role:'account_manager';
   openModal('userModal');
 }
 document.getElementById('userForm').addEventListener('submit',async e=>{
@@ -5481,16 +4460,109 @@ document.getElementById('perfExportPdfBtn').addEventListener('click',async()=>{
   }catch(err){ showToast(err.message,true); }
 });
 
+/* ================= TRACKER: ACCOUNTS VIEW + SEARCH ================= */
+let TK_VIEW='opps', ACCT_CACHE=null, tkOpen=new Set();
+const ACCT_STOP=/\b(pt|tbk|persero|cv|ltd|inc|corp|corporation|company|co)\b\.?/g;
+function acctTokens(name){
+  return new Set(String(name||'').toLowerCase().replace(ACCT_STOP,' ').replace(/[^a-z0-9]+/g,' ').split(' ').filter(Boolean).map(t=>t.length>3&&t.endsWith('s')?t.slice(0,-1):t));
+}
+function acctMatch(ta,tb){
+  if(!ta.size||!tb.size) return false;
+  const inter=[...ta].filter(x=>tb.has(x)).length;
+  if(inter===ta.size&&ta.size===tb.size) return true;
+  return Math.min(ta.size,tb.size)>=2 && inter===Math.min(ta.size,tb.size);
+}
+const isClosedStage=st=>/^closed/i.test(st||'');
+async function loadManagedAccounts(force){
+  if(ACCT_CACHE && !force) return ACCT_CACHE;
+  try{ const d=await api('/api/visit/overview'); ACCT_CACHE=d.accounts.map(a=>({...a,am_name:(d.ams.find(x=>x.id===a.am_id)||{}).name||'',tokens:acctTokens(a.name)})); }
+  catch(e){ ACCT_CACHE=[]; }
+  return ACCT_CACHE;
+}
+// Group deals by account: every managed account (even with 0 opportunities) plus any
+// customer name in the tracker that isn't in the managed list.
+function buildAccountRows(deals, managed){
+  const rows=managed.map(m=>({key:'m'+m.id,name:m.name,managed:m,am:m.am_name,deals:[]}));
+  const extra={};
+  deals.forEach(d=>{
+    const td=acctTokens(d.customer); let best=null,bs=0;
+    rows.forEach(r=>{ if(!acctMatch(r.managed.tokens,td)) return;
+      const inter=[...r.managed.tokens].filter(x=>td.has(x)).length/new Set([...r.managed.tokens,...td]).size;
+      const amBonus=am_matches(r.am,d.assigned_am)?0.5:0;
+      if(inter+amBonus>bs){ bs=inter+amBonus; best=r; } });
+    if(best) best.deals.push(d);
+    else { const k='x'+[...td].sort().join(' ')||('x'+d.id); (extra[k]=extra[k]||{key:k,name:d.customer||'(no customer)',managed:null,am:d.assigned_am,deals:[]}).deals.push(d); }
+  });
+  const all=[...rows,...Object.values(extra)];
+  all.forEach(r=>{ const open=r.deals.filter(d=>!isClosedStage(d.stage)); r.open=open; r.count=open.length;
+    r.tcv=open.reduce((s,d)=>s+(d.estimated_value||0),0); r.rev=open.reduce((s,d)=>s+(d.revenue_2026||0),0);
+    r.avg=open.length?Math.round(open.reduce((s,d)=>s+(d.progress||0),0)/open.length):0; });
+  return all;
+}
+function acctLogoHtml(r,size){
+  if(r.managed) return vtLogo(r.managed,size||30);
+  const ini=(r.name.replace(/^(PT\.?|CV)\s+/i,'').match(/[A-Za-z0-9]/g)||['?']).slice(0,2).join('').toUpperCase();
+  return `<span class="inline-flex items-center justify-center flex-shrink-0" style="width:${Math.round((size||30)*1.5)}px;height:${size||30}px;background:#fff;border:1px solid var(--border);border-radius:8px;font-size:${Math.round((size||30)/3)}px;font-weight:700;color:#64748b">${ini}</span>`;
+}
+function setTkView(v){
+  TK_VIEW=v;
+  document.getElementById('tkViewOpps').classList.toggle('active',v==='opps');
+  document.getElementById('tkViewAccts').classList.toggle('active',v==='accounts');
+  document.getElementById('dealsTable').style.display = v==='opps'?'':'none';
+  document.getElementById('accountsView').style.display = v==='accounts'?'':'none';
+  document.getElementById('sortSelect').closest('.select-ico').style.display = v==='opps'?'':'none';
+  if(v==='opps') renderDealsTable(); else renderAccountsView();
+}
+document.querySelectorAll('[data-tkview]').forEach(b=>b.addEventListener('click',()=>setTkView(b.dataset.tkview)));
+async function renderAccountsView(){
+  const el=document.getElementById('accountsView');
+  if(!ACCT_CACHE) el.innerHTML='<p class="text-xs py-6 text-center" style="color:var(--text-faint)">Loading accounts…</p>';
+  const managed=await loadManagedAccounts();
+  const am=document.getElementById('filterAM').value;
+  const q=(document.getElementById('searchInput').value||'').toLowerCase().trim();
+  let rows=buildAccountRows(DEALS, am?managed.filter(m=>am_matches(m.am_name,am)):managed);
+  if(am) rows=rows.filter(r=>r.managed||r.deals.length);
+  if(q) rows=rows.filter(r=>r.name.toLowerCase().includes(q)||r.deals.some(d=>(d.deal_name+' '+d.customer).toLowerCase().includes(q)));
+  rows.sort((a,b)=>b.tcv-a.tcv||b.count-a.count||a.name.localeCompare(b.name));
+  const withOpps=rows.filter(r=>r.count).length, tot=rows.reduce((s,r)=>s+r.tcv,0), n=rows.reduce((s,r)=>s+r.count,0);
+  el.innerHTML=`<p class="text-[11px] mb-2" style="color:var(--text-faint)"><i class="fa-solid fa-circle-info mr-1"></i><b>${rows.length}</b> accounts · <b>${withOpps}</b> with ongoing opportunities · <b>${n}</b> opportunities worth <b>${fmtIDR(tot)}</b>. Click a row to expand, double-click for the full account view.</p>
+    <div class="card elev p-2"><div class="overflow-x-auto"><table class="vt-table"><thead><tr><th style="width:24px"></th><th>Account</th><th>AM</th><th>Ongoing opps</th><th>TCV</th><th>Rev 2026</th><th>Avg progress</th><th>Stages</th></tr></thead><tbody>
+    ${rows.map(r=>{ const open=tkOpen.has(r.key); const stages={}; r.open.forEach(d=>stages[d.stage]=(stages[d.stage]||0)+1);
+      return `<tr class="tk-acct-row clickable" data-key="${escapeHtml(r.key)}"><td><i class="fa-solid fa-chevron-${open?'down':'right'} text-[10px]" style="color:var(--text-faint)"></i></td>
+        <td><div class="flex items-center gap-2.5">${acctLogoHtml(r,28)}<div><span class="font-medium">${escapeHtml(vtShort(r.name))}</span>${r.managed&&r.managed.type==='Priority'?' <i class="fa-solid fa-star text-[10px]" style="color:var(--warning)" title="Priority account"></i>':''}${!r.managed?` <span class="text-[10px]" style="color:var(--text-faint)">not in account list</span>`:''}</div></div></td>
+        <td>${escapeHtml(r.am||'—')}</td><td>${r.count||vtNone('0')}</td><td>${r.count?fmtIDR(r.tcv):vtNone('—')}</td><td>${r.count?fmtIDR(r.rev):vtNone('—')}</td>
+        <td>${r.count?`<div class="flex items-center gap-2"><div style="width:60px;height:6px;background:var(--surface-2);border-radius:4px"><div style="width:${r.avg}%;height:6px;background:var(--primary);border-radius:4px"></div></div><span class="text-[11px]">${r.avg}%</span></div>`:''}</td>
+        <td>${Object.entries(stages).map(([k,v])=>vtChip(`${k} ${v}`,'')).join(' ')}</td></tr>
+        ${open?`<tr class="tk-child"><td></td><td colspan="7" style="background:var(--surface-2)">${r.deals.length?`<table class="vt-table" style="font-size:12px"><tbody>${r.deals.map(d=>`<tr class="tk-deal-row clickable" data-id="${d.id}"><td class="font-medium">${escapeHtml(d.deal_name)}</td><td>${escapeHtml(d.stage)}</td><td>${fmtIDR(d.estimated_value)}</td><td>${d.progress}%</td><td>${escapeHtml(d.target_quarter||'')}</td><td>${escapeHtml(d.assigned_am||'')}</td></tr>`).join('')}</tbody></table>`:'<p class="text-xs py-2" style="color:var(--text-faint)">No opportunities on this account yet.</p>'}</td></tr>`:''}`; }).join('')||'<tr><td colspan="8" style="color:var(--text-faint)">No accounts match.</td></tr>'}</tbody></table></div></div>`;
+  const byKey=Object.fromEntries(rows.map(r=>[r.key,r]));
+  el.querySelectorAll('.tk-acct-row').forEach(tr=>{
+    tr.addEventListener('click',()=>{ const k=tr.dataset.key; if(tkOpen.has(k)) tkOpen.delete(k); else tkOpen.add(k); renderAccountsView(); });
+    tr.addEventListener('dblclick',e=>{ e.preventDefault(); window.getSelection().removeAllRanges(); openAcctModal(byKey[tr.dataset.key]); });
+  });
+  el.querySelectorAll('.tk-deal-row').forEach(tr=>tr.addEventListener('click',e=>{ e.stopPropagation(); openDetail(parseInt(tr.dataset.id)); }));
+}
+function openAcctModal(r){
+  const m=r.managed;
+  document.getElementById('acctModalHead').innerHTML=`${acctLogoHtml(r,44)}<div><p class="text-base font-semibold" style="color:var(--text)">${escapeHtml(r.name)}</p><p class="text-xs" style="color:var(--text-muted)">${escapeHtml(r.am||'—')}${m?` · ${m.type} · ${m.cadence} visits`:''}</p></div>`;
+  const kpi=(l,v)=>`<div class="card p-3"><p class="text-[11px]" style="color:var(--text-muted)">${l}</p><p class="text-sm font-semibold mt-0.5" style="color:var(--text)">${v}</p></div>`;
+  document.getElementById('acctModalBody').innerHTML=`
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">${kpi('Ongoing opportunities',r.count)}${kpi('Total TCV',fmtIDR(r.tcv))}${kpi('Rev 2026',fmtIDR(r.rev))}
+      ${kpi('Visit status',m?`${vtChip(m.status,VT_STATUS_CLS[m.status])} <span class="text-[11px] font-normal" style="color:var(--text-muted)">${m.last_visit?'last '+vtDate(m.last_visit):'no visit yet'}</span>`:'—')}</div>
+    <p class="text-xs font-medium mb-2" style="color:var(--text-muted)">Opportunities on this account</p>
+    <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Opportunity</th><th>Stage</th><th>TCV</th><th>Rev 2026</th><th>Progress</th><th>Quarter</th><th>AM</th></tr></thead><tbody>
+    ${r.deals.map(d=>`<tr class="clickable acct-deal" data-id="${d.id}"><td class="font-medium">${escapeHtml(d.deal_name)}</td><td>${escapeHtml(d.stage)}</td><td>${fmtIDR(d.estimated_value)}</td><td>${fmtIDR(d.revenue_2026||0)}</td><td>${d.progress}%</td><td>${escapeHtml(d.target_quarter||'')}</td><td>${escapeHtml(d.assigned_am||'')}</td></tr>`).join('')||'<tr><td colspan="7" style="color:var(--text-faint)">No opportunities yet.</td></tr>'}</tbody></table></div>`;
+  document.querySelectorAll('#acctModalBody .acct-deal').forEach(tr=>tr.addEventListener('click',()=>{ closeModal('acctModal'); openDetail(parseInt(tr.dataset.id)); }));
+  openModal('acctModal');
+}
+
 /* ================= COMMAND PALETTE (feature search) ================= */
 const CMD_FEATURES = [
   {label:'Management View', desc:'Executive briefing — headline, blockers, AM performance & insights', icon:'fa-briefcase', tab:'management', roles:['admin','management']},
   {label:'My Tracker', desc:'Search, filter, sort and edit opportunities', icon:'fa-table-cells-large', tab:'tracker'},
-  {label:'Visit Tracker', desc:'Priority-account visit cadence, daily plan/log and blockers', icon:'fa-route', tab:'visits'},
-  {label:'My Weekly Plan', desc:'Plan customer visits Mon-Fri for the weekly meeting', icon:'fa-calendar-week', tab:'weeklyplan'},
+  {label:'Accounts & Visits', desc:'Priority accounts, visit calendar, daily log, blockers, account list', icon:'fa-route', tab:'visits'},
+  {label:'My Weekly Plan', desc:'Plan customer visits Mon-Fri', icon:'fa-calendar-week', tab:'weeklyplan'},
   {label:'Pipeline Analytics', desc:'Gap & targets, breakdown, execution framework, strategy, leaderboard', icon:'fa-chart-line', tab:'analytics'},
   {label:'Performance', desc:'Monthly ACH actuals, targets, pipeline cover, churn watch', icon:'fa-gauge-high', tab:'performance'},
-  {label:'Account Coverage', desc:'AM load, cold/champion accounts, rotation signal, new vs. performance-given', icon:'fa-users-viewfinder', tab:'coverage', ctab:'coverage'},
-  {label:'AM Workload', desc:'Per-AM account list: how many accounts each AM actually handles', icon:'fa-user-clock', tab:'coverage', ctab:'workload'},
   {label:'Lists & Automation', desc:'Deal stages, pillars, stage automation rules', icon:'fa-list-check', tab:'configuration', roles:['admin']},
   {label:'Login Logs', desc:'Sign-in history, retention limit, export', icon:'fa-user-clock', tab:'loginlogs', roles:['admin']},
   {label:'Settings', desc:'Targets, AM figures, users, data backup & restore', icon:'fa-sliders', tab:'settings', roles:['admin']},
@@ -5505,26 +4577,45 @@ const CMD_ACTIONS = [
 ];
 function cmdItems(){ return [...CMD_FEATURES, ...CMD_ACTIONS].filter(x=>!x.roles||x.roles.includes(ROLE)); }
 let cmdActiveIdx=0, cmdFiltered=[];
+const cmdTerms=q=>q.toLowerCase().split(/\s+/).filter(Boolean);
+function cmdSearchResults(q){
+  if(!q) return [];
+  const terms=cmdTerms(q), deals=(ALL_DEALS&&ALL_DEALS.length)?ALL_DEALS:DEALS;
+  const hit=txt=>{ const t=txt.toLowerCase(); return terms.every(w=>t.includes(w)); };
+  const out=[];
+  const matchedDeals=deals.filter(d=>hit(`${d.deal_name} ${d.customer} ${d.assigned_am} ${d.stage}`)).slice(0,8);
+  matchedDeals.forEach(d=>out.push({kind:'deal',group:'Opportunities',icon:'fa-handshake',label:d.deal_name,
+    desc:`${d.customer||'—'} · ${d.assigned_am||'—'} · ${d.stage} · ${fmtIDR(d.estimated_value)}`,action:()=>{ switchTab('tracker'); setTimeout(()=>openDetail(d.id),80); }}));
+  if(!ACCT_CACHE && !ROLE_NO_ACCOUNTS()) loadManagedAccounts().then(()=>{ if(!document.getElementById('cmdPalette').classList.contains('hidden')) renderCmdResults(); });
+  const rows=buildAccountRows(deals, ACCT_CACHE||[]).filter(r=>hit(r.name)||r.deals.some(d=>hit(d.customer+' '+d.deal_name))).slice(0,6);
+  rows.forEach(r=>out.push({kind:'account',group:'Accounts',icon:'fa-building',label:r.name,
+    desc:`${r.am||'—'} · ${r.count} ongoing opportunit${r.count===1?'y':'ies'}${r.count?' · '+fmtIDR(r.tcv):''}${r.open.length?' — '+r.open.slice(0,3).map(d=>d.deal_name).join(', '):''}`,
+    action:()=>{ switchTab('tracker'); setTkView('accounts'); setTimeout(()=>openAcctModal(r),60); }}));
+  return out;
+}
+const ROLE_NO_ACCOUNTS=()=>CROSS_FUNCTIONAL_ROLES_JS.includes(ROLE);
 function renderCmdResults(){
   const q=document.getElementById('cmdInput').value.trim().toLowerCase();
-  cmdFiltered = cmdItems().filter(x=>!q || x.label.toLowerCase().includes(q) || (x.desc||'').toLowerCase().includes(q));
-  cmdActiveIdx = 0;
-  const el=document.getElementById('cmdResults');
-  el.innerHTML = cmdFiltered.map((x,i)=>`
-    <div class="cmd-row flex items-center gap-3 px-4 py-2.5 ${i===0?'active':''}" data-idx="${i}">
+  const feats=cmdItems().filter(x=>!q || x.label.toLowerCase().includes(q) || (x.desc||'').toLowerCase().includes(q)).map(x=>({...x,group:x.tab?'Go to':'Actions'}));
+  cmdFiltered=[...cmdSearchResults(q),...feats];
+  cmdActiveIdx=0;
+  const el=document.getElementById('cmdResults'); let last='';
+  el.innerHTML = cmdFiltered.map((x,i)=>{
+    const head = x.group!==last ? `<p class="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wide" style="color:var(--text-faint)">${x.group}</p>` : ''; last=x.group;
+    return head+`<div class="cmd-row flex items-center gap-3 px-4 py-2.5 ${i===0?'active':''}" data-idx="${i}">
       <i class="fa-solid ${x.icon} w-4 text-center" style="color:var(--primary)"></i>
       <div class="flex-1 min-w-0">
         <p class="text-sm font-medium truncate" style="color:var(--text)">${escapeHtml(x.label)}</p>
         <p class="text-[11px] truncate" style="color:var(--text-faint)">${escapeHtml(x.desc||'')}</p>
       </div>
-      ${x.tab?'<i class="fa-solid fa-arrow-right text-xs" style="color:var(--text-faint)"></i>':''}
-    </div>`).join('') || `<p class="text-xs px-4 py-6 text-center" style="color:var(--text-faint)">No matching feature.</p>`;
+      ${(x.tab||x.kind)?'<i class="fa-solid fa-arrow-right text-xs" style="color:var(--text-faint)"></i>':''}
+    </div>`; }).join('') || `<p class="text-xs px-4 py-6 text-center" style="color:var(--text-faint)">No opportunity, account or feature matches "${escapeHtml(q)}".</p>`;
   el.querySelectorAll('.cmd-row').forEach(r=>r.addEventListener('click',()=>runCmd(parseInt(r.dataset.idx))));
 }
 function runCmd(idx){
   const x=cmdFiltered[idx]; if(!x) return;
   closeModal('cmdPalette');
-  if(x.tab){ switchTab(x.tab); if(x.ctab) switchCoverageTab(x.ctab); } else if(x.action) x.action();
+  if(x.tab){ switchTab(x.tab); } else if(x.action) x.action();
 }
 function cmdMove(delta){
   if(!cmdFiltered.length) return;
