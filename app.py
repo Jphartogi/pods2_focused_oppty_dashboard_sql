@@ -28,7 +28,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.13.0"
+APP_VERSION = "2.14.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -361,6 +361,19 @@ def _seed_visit_tracker(db):
         )
 
 
+def _seed_visit_options(db):
+    if db.execute("SELECT COUNT(*) FROM visit_options").fetchone()["count"] > 0:
+        return
+    defaults = [("activity", a, "visit" if a in ("Visit (in person)", "Video meeting") else "other")
+                for a in ("Visit (in person)", "Video meeting", "Call / WhatsApp",
+                          "Proposal / quotation", "Internal / admin")]
+    defaults += [("status", "Planned", "planned"), ("status", "Done", "done"),
+                 ("status", "Moved", "moved"), ("status", "Cancelled", "cancelled")]
+    for i, (kind, label, beh) in enumerate(defaults):
+        db.execute("INSERT INTO visit_options (kind, label, behavior, sort_order) VALUES (%s, %s, %s, %s) "
+                   "ON CONFLICT DO NOTHING", (kind, label, beh, i))
+
+
 def _load_seed_logos(db):
     """Fill in a logo for any account that has none yet, from seed/visit_logos.json
     (never overwrites a logo someone uploaded)."""
@@ -579,6 +592,15 @@ def _init_schema_and_seed(db):
                 updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
             );
 
+            CREATE TABLE IF NOT EXISTS visit_options (
+                id SERIAL PRIMARY KEY,
+                kind TEXT NOT NULL CHECK(kind IN ('activity', 'status')),
+                label TEXT NOT NULL,
+                behavior TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(kind, label)
+            );
+
             CREATE TABLE IF NOT EXISTS visit_blockers (
                 id SERIAL PRIMARY KEY,
                 date_raised TEXT NOT NULL,
@@ -633,6 +655,7 @@ def _init_schema_and_seed(db):
 
         _seed_visit_tracker(db)
         _load_seed_logos(db)
+        _seed_visit_options(db)
 
         # Seed deals if empty
         if db.execute("SELECT COUNT(*) FROM deals").fetchone()["count"] == 0:
@@ -1594,10 +1617,33 @@ VISIT_SETTINGS = {
     "cadence_days": {"Weekly": 7, "Fortnightly": 14, "Monthly": 30, "Quarterly": 90},
     "holidays": {date(2026, 12, 24), date(2026, 12, 25)},
 }
-VISIT_ACTIVITIES = ("Visit (in person)", "Video meeting", "Call / WhatsApp",
-                    "Proposal / quotation", "Internal / admin")
-VISIT_COUNTED_ACTIVITIES = ("Visit (in person)", "Video meeting")
-VISIT_TASK_STATUSES = ("Planned", "Done", "Moved", "Cancelled")
+# Activity / status wording is admin-editable (visit_options table); each option carries a
+# behavior the rules depend on, so renaming "Done" to e.g. "Completed" changes nothing else:
+#   activity behavior: 'visit' (a Done one counts as a visit) | 'other'
+#   status behavior:   'planned' | 'done' | 'moved' | 'cancelled'
+VISIT_ACTIVITY_BEHAVIORS = ("visit", "other")
+VISIT_STATUS_BEHAVIORS = ("planned", "done", "moved", "cancelled")
+
+
+def _visit_opts():
+    """Current dropdown options + the label sets the rules need (cached per request)."""
+    cached = getattr(g, "_visit_opts_cache", None)
+    if cached is not None:
+        return cached
+    rows = get_db().execute("SELECT * FROM visit_options ORDER BY sort_order, id").fetchall()
+    acts = [{"id": r["id"], "label": r["label"], "behavior": r["behavior"]} for r in rows if r["kind"] == "activity"]
+    stats = [{"id": r["id"], "label": r["label"], "behavior": r["behavior"]} for r in rows if r["kind"] == "status"]
+    o = {
+        "activities": acts, "statuses": stats,
+        "activity_labels": [a["label"] for a in acts], "status_labels": [s["label"] for s in stats],
+        "visit_acts": {a["label"] for a in acts if a["behavior"] == "visit"},
+        "done": {s["label"] for s in stats if s["behavior"] == "done"},
+        "planned": {s["label"] for s in stats if s["behavior"] == "planned"},
+        "default_planned": next((s["label"] for s in stats if s["behavior"] == "planned"), "Planned"),
+        "default_done": next((s["label"] for s in stats if s["behavior"] == "done"), "Done"),
+    }
+    g._visit_opts_cache = o
+    return o
 VISIT_ESCALATE_TO = ("PODS Lead", "Group Head", "Management / BOD", "Solution team",
                      "Pricing / finance", "Other")
 VISIT_BLOCKER_STATUSES = ("Open", "Escalated", "Resolved")
@@ -1656,18 +1702,19 @@ def _visit_scope(db, user):
 
 def compute_visit_metrics(accounts, tasks, today):
     s = VISIT_SETTINGS
+    o = _visit_opts()
     last, nxt = {}, {}
     for t in tasks:
-        if t["activity"] not in VISIT_COUNTED_ACTIVITIES:
+        if t["activity"] not in o["visit_acts"]:
             continue
         d = _parse_iso_date(t["task_date"])
         if not d:
             continue
         aid = t["account_id"]
-        if t["status"] == "Done":
+        if t["status"] in o["done"]:
             if aid not in last or d > last[aid]:
                 last[aid] = d
-        elif t["status"] == "Planned" and d >= today:
+        elif t["status"] in o["planned"] and d >= today:
             if aid not in nxt or d < nxt[aid]:
                 nxt[aid] = d
     out = {}
@@ -1810,7 +1857,9 @@ def visit_overview():
         "tracking_start_date": VISIT_SETTINGS["tracking_start_date"].isoformat(),
         "me": {"am_id": my_am["id"] if my_am else None, "can_write": bool(my_am) or may_write_any,
                "is_admin": user["role"] == "admin", "sees_all": sees_all},
-        "enums": {"activities": VISIT_ACTIVITIES, "task_statuses": VISIT_TASK_STATUSES,
+        "enums": {"activities": _visit_opts()["activity_labels"], "task_statuses": _visit_opts()["status_labels"],
+                  "activity_opts": _visit_opts()["activities"], "status_opts": _visit_opts()["statuses"],
+                  "default_planned": _visit_opts()["default_planned"], "default_done": _visit_opts()["default_done"],
                   "escalate_to": VISIT_ESCALATE_TO, "blocker_statuses": VISIT_BLOCKER_STATUSES,
                   "cadences": list(VISIT_SETTINGS["cadence_days"]), "types": VISIT_ACCOUNT_TYPES},
         "ams": am_out, "accounts": acct_out, "totals": tot,
@@ -1822,7 +1871,7 @@ def _visit_task_dict(t, today):
     return {"id": t["id"], "task_date": t["task_date"], "am_id": t["am_id"], "am_name": t["am_name"],
             "account_id": t["account_id"], "account_name": t["account_name"], "activity": t["activity"],
             "topic": t["topic"] or "", "status": t["status"], "outcome": t["outcome"] or "",
-            "not_updated": bool(d and d < today and t["status"] == "Planned")}
+            "not_updated": bool(d and d < today and t["status"] in _visit_opts()["planned"])}
 
 
 _VISIT_TASK_SELECT = """SELECT t.*, a.name AS account_name, m.name AS am_name FROM visit_tasks t
@@ -1872,10 +1921,11 @@ def _validate_visit_task(db, data, am_id):
     task_date = _parse_iso_date(data.get("task_date"))
     if not task_date:
         return None, "A valid date is required"
-    activity, status = data.get("activity"), data.get("status") or "Planned"
-    if activity not in VISIT_ACTIVITIES:
+    o = _visit_opts()
+    activity, status = data.get("activity"), data.get("status") or o["default_planned"]
+    if activity not in o["activity_labels"]:
         return None, "Pick an activity from the list"
-    if status not in VISIT_TASK_STATUSES:
+    if status not in o["status_labels"]:
         return None, "Pick a status from the list"
     acct = db.execute("SELECT * FROM visit_accounts WHERE id = %s", (data.get("account_id"),)).fetchone()
     if not acct or acct["am_id"] != am_id:
@@ -2129,11 +2179,11 @@ def visit_analytics():
         d = _parse_iso_date(r["task_date"])
         if not d:
             continue
-        if r["activity"] in VISIT_COUNTED_ACTIVITIES and r["status"] == "Done":
+        if r["activity"] in _visit_opts()["visit_acts"] and r["status"] in _visit_opts()["done"]:
             wi = (d - weeks[0]).days // 7
             if 0 <= wi < len(weeks):
                 per_week[r["am_id"]][wi] += 1
-        if r["status"] == "Done" and r["task_date"] >= cutoff:
+        if r["status"] in _visit_opts()["done"] and r["task_date"] >= cutoff:
             mix[r["activity"]] = mix.get(r["activity"], 0) + 1
         logged.setdefault(r["task_date"], set()).add(r["am_id"])
     days, d = [], today
@@ -2224,10 +2274,10 @@ def visit_import_log():
                 continue
             d = r[0].date() if hasattr(r[0], "date") else _parse_iso_date(r[0])
             name, activity = str(r[1] or "").strip(), str(r[2] or "").strip()
-            status = str(r[4] or "Planned").strip()
+            status = str(r[4] or "").strip() or _visit_opts()["default_planned"]
             acct = next((a for a in mine if a["name"].lower() == name.lower()), None) or \
                 next((a for a in mine if _acct_names_match(a["name"], name)), None)
-            if not d or not acct or activity not in VISIT_ACTIVITIES or status not in VISIT_TASK_STATUSES:
+            if not d or not acct or activity not in _visit_opts()["activity_labels"] or status not in _visit_opts()["status_labels"]:
                 skipped.append(f"{ws.title}: {name or '(blank)'} / {activity}")
                 continue
             topic, outcome = str(r[3] or "").strip(), str(r[5] or "").strip()
@@ -2242,6 +2292,132 @@ def visit_import_log():
             imported += 1
     db.commit()
     return jsonify({"ok": True, "imported": imported, "duplicates": dupes, "skipped": skipped[:20]})
+
+
+def _visit_option_usage(db, kind, label):
+    col = "activity" if kind == "activity" else "status"
+    return db.execute(f"SELECT COUNT(*) AS c FROM visit_tasks WHERE {col} = %s", (label,)).fetchone()["c"]
+
+
+def _check_option_invariants(db, kind):
+    """The rules need at least one 'visit' activity, and one planned + one done status."""
+    rows = db.execute("SELECT behavior FROM visit_options WHERE kind = %s", (kind,)).fetchall()
+    have = {r["behavior"] for r in rows}
+    if kind == "activity" and "visit" not in have:
+        return "Keep at least one activity that counts as a visit"
+    if kind == "status" and not {"planned", "done"} <= have:
+        return "Keep at least one 'planned' and one 'done' status"
+    return None
+
+
+@app.route("/api/visit/options", methods=["GET"])
+@login_required(roles=("admin",))
+def visit_get_options():
+    db = get_db()
+    o = _visit_opts()
+    for lst, kind in ((o["activities"], "activity"), (o["statuses"], "status")):
+        for it in lst:
+            it["in_use"] = _visit_option_usage(db, kind, it["label"])
+    return jsonify({"activities": o["activities"], "statuses": o["statuses"]})
+
+
+@app.route("/api/visit/options", methods=["POST"])
+@login_required(roles=("admin",))
+def visit_add_option():
+    db = get_db()
+    data = request.get_json(force=True) or {}
+    kind, label, beh = data.get("kind"), (data.get("label") or "").strip(), data.get("behavior")
+    allowed = VISIT_ACTIVITY_BEHAVIORS if kind == "activity" else VISIT_STATUS_BEHAVIORS
+    if kind not in ("activity", "status") or not label or beh not in allowed:
+        return jsonify({"error": "Name and behavior are required"}), 400
+    if db.execute("SELECT 1 FROM visit_options WHERE kind = %s AND lower(label) = lower(%s)", (kind, label)).fetchone():
+        return jsonify({"error": "That name already exists"}), 409
+    nxt = db.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM visit_options").fetchone()["n"]
+    db.execute("INSERT INTO visit_options (kind, label, behavior, sort_order) VALUES (%s, %s, %s, %s)", (kind, label, beh, nxt))
+    db.commit()
+    return jsonify({"ok": True}), 201
+
+
+@app.route("/api/visit/options/<int:opt_id>", methods=["PUT"])
+@login_required(roles=("admin",))
+def visit_update_option(opt_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM visit_options WHERE id = %s", (opt_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Option not found"}), 404
+    data = request.get_json(force=True) or {}
+    label = (data.get("label", row["label"]) or "").strip()
+    beh = data.get("behavior", row["behavior"])
+    allowed = VISIT_ACTIVITY_BEHAVIORS if row["kind"] == "activity" else VISIT_STATUS_BEHAVIORS
+    if not label or beh not in allowed:
+        return jsonify({"error": "Invalid name or behavior"}), 400
+    if label.lower() != row["label"].lower() and db.execute(
+            "SELECT 1 FROM visit_options WHERE kind = %s AND lower(label) = lower(%s) AND id != %s",
+            (row["kind"], label, opt_id)).fetchone():
+        return jsonify({"error": "That name already exists"}), 409
+    db.execute("UPDATE visit_options SET label = %s, behavior = %s WHERE id = %s", (label, beh, opt_id))
+    err = _check_option_invariants(db, row["kind"])
+    if err:
+        db.rollback()
+        return jsonify({"error": err}), 400
+    if label != row["label"]:  # tasks store the label text - carry them along with the rename
+        col = "activity" if row["kind"] == "activity" else "status"
+        db.execute(f"UPDATE visit_tasks SET {col} = %s WHERE {col} = %s", (label, row["label"]))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/visit/options/<int:opt_id>", methods=["DELETE"])
+@login_required(roles=("admin",))
+def visit_delete_option(opt_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM visit_options WHERE id = %s", (opt_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Option not found"}), 404
+    used = _visit_option_usage(db, row["kind"], row["label"])
+    if used:
+        return jsonify({"error": f"{used} task(s) use \"{row['label']}\" - rename it instead, or change those tasks first"}), 409
+    db.execute("DELETE FROM visit_options WHERE id = %s", (opt_id,))
+    err = _check_option_invariants(db, row["kind"])
+    if err:
+        db.rollback()
+        return jsonify({"error": err}), 400
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/visit/priority", methods=["PUT"])
+@login_required(roles=("admin", "account_manager"))
+def visit_set_priority():
+    """An AM (or the admin) chooses which of an AM's accounts are priority accounts.
+    Newly-priority accounts become Weekly; accounts dropped from priority fall back to
+    Monthly (if they have a 2026 target) or Quarterly."""
+    db = get_db()
+    user = g.current_user
+    data = request.get_json(force=True) or {}
+    am_id = data.get("am_id")
+    if user["role"] == "account_manager":
+        my = _visit_am_for_user(db, user)
+        if not my:
+            return jsonify({"error": "Your login isn't linked to an account manager yet"}), 403
+        am_id = my["id"]
+    if not am_id:
+        return jsonify({"error": "am_id is required"}), 400
+    chosen = {int(x) for x in (data.get("priority_ids") or [])}
+    accts = db.execute("SELECT * FROM visit_accounts WHERE am_id = %s", (am_id,)).fetchall()
+    own = {a["id"] for a in accts}
+    if not chosen <= own:
+        return jsonify({"error": "You can only choose from this account manager's own accounts"}), 400
+    changed = 0
+    for a in accts:
+        want = "Priority" if a["id"] in chosen else "Other"
+        if a["type"] == want:
+            continue
+        cad = "Weekly" if want == "Priority" else ("Monthly" if a["target_idr_mn"] else "Quarterly")
+        db.execute("UPDATE visit_accounts SET type = %s, cadence = %s WHERE id = %s", (want, cad, a["id"]))
+        changed += 1
+    db.commit()
+    return jsonify({"ok": True, "changed": changed, "priority": len(chosen)})
 
 
 @app.route("/api/visit/accounts/<int:account_id>", methods=["PUT"])
