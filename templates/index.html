@@ -823,6 +823,17 @@
         </div>
       </div>
 
+      <div id="vtPrioModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
+        <div class="card w-full max-w-lg elev p-6" style="contain:none">
+          <div class="flex items-start justify-between mb-1"><p id="vtPrioTitle" class="text-sm font-semibold" style="color:var(--text)">Priority accounts</p><button data-close-modal="vtPrioModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+          <p class="text-[11px] mb-3" style="color:var(--text-faint)">Tick the customers you're focusing on. Priority accounts are visited weekly; the rest fall back to monthly / quarterly.</p>
+          <input id="vtPrioSearch" type="text" placeholder="Search account…" class="field w-full px-3 py-2 text-sm mb-2">
+          <div id="vtPrioList" class="space-y-1" style="max-height:46vh;overflow:auto"></div>
+          <div class="flex items-center gap-2 pt-3"><span id="vtPrioCount" class="text-xs" style="color:var(--text-muted)"></span>
+            <div class="flex gap-2 ml-auto"><button type="button" data-close-modal="vtPrioModal" class="text-sm px-4 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text-muted)">Cancel</button><button type="button" id="vtPrioSave" class="btn-primary text-sm px-4 py-2 rounded-lg">Save</button></div></div>
+        </div>
+      </div>
+
       <div id="vtTaskModal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50 px-4">
         <div class="card w-full max-w-lg elev p-6" style="contain:none">
           <div class="flex items-start justify-between mb-4"><p id="vtTaskTitle" class="text-sm font-semibold" style="color:var(--text)">Edit task</p><button data-close-modal="vtTaskModal" style="color:var(--text-muted)"><i class="fa-solid fa-xmark text-lg"></i></button></div>
@@ -3386,8 +3397,8 @@ const VT = {data:null, tab:'overview', amId:null, month:null, day:null, monthTas
             acc:{am:'',type:'',q:'',fin:false}, editTask:null, editBlocker:null, editAcc:null, logoV:Date.now()};
 const VT_STATUS_CLS = {'On track':'vt-ok','Slipping':'vt-warn','Overdue':'vt-bad'};
 const VT_PLAN_CLS = {'OK':'vt-ok','No visit planned':'vt-warn','Beyond limit':'vt-bad'};
-const VT_TASK_CLS = {'Done':'vt-ok','Planned':'vt-warn','Moved':'','Cancelled':''};
-const VT_ACT_SHORT = {'Visit (in person)':'Visit','Video meeting':'Video','Call / WhatsApp':'Call','Proposal / quotation':'Proposal','Internal / admin':'Internal'};
+const vtBeh=l=>((VT.data&&VT.data.enums.status_opts.find(x=>x.label===l))||{}).behavior;
+const vtStatusCls=l=>({done:'vt-ok',planned:'vt-warn'})[vtBeh(l)]||'';
 const vtChip=(t,c)=>`<span class="vt-chip ${c||''}" ${c?'':'style="background:var(--surface-2);color:var(--text-muted)"'}>${escapeHtml(t)}</span>`;
 function vtDate(d){ if(!d) return '—'; const [y,m,dd]=d.split('-'); return new Date(+y,+m-1,+dd).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
 function vtLong(d){ const [y,m,dd]=d.split('-'); return new Date(+y,+m-1,+dd).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
@@ -3405,7 +3416,7 @@ function vtLogo(a,size){
   return `<span class="inline-flex items-center justify-center flex-shrink-0" style="width:${Math.round(w*1.5)}px;height:${w}px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:3px;overflow:hidden">${inner}</span>`;
 }
 const vtShort=n=>n.replace(/^(PT\.?|CV)\s+/i,'').replace(/\s*\(.*\)$/,'');
-const vtTaskLine=t=>`<div class="text-[11px] leading-snug"><b>${escapeHtml(VT_ACT_SHORT[t.activity]||t.activity)}</b>${t.status!=='Done'&&t.status!=='Planned'?' ('+t.status+')':''}${t.topic?': '+escapeHtml(t.topic):''}</div>`;
+const vtTaskLine=t=>`<div class="text-[11px] leading-snug"><b>${escapeHtml(t.activity)}</b>${!['done','planned'].includes(vtBeh(t.status))?' ('+t.status+')':''}${t.topic?': '+escapeHtml(t.topic):''}</div>`;
 const vtDayCell=(list,empty)=>list.length?list.map(vtTaskLine).join(''):vtNone(empty);
 
 async function renderVisits(){
@@ -3497,7 +3508,7 @@ function vtDrawCharts(){
   // activity mix
   const keys=Object.keys(an.activity_mix);
   if(!keys.length) document.getElementById('vtChMix').innerHTML='<p class="text-xs py-10 text-center" style="color:var(--text-faint)">Nothing completed yet</p>';
-  else vtChart('vtChMix',{type:'doughnut',data:{labels:keys.map(k=>VT_ACT_SHORT[k]||k),datasets:[{data:keys.map(k=>an.activity_mix[k]),backgroundColor:keys.map((_,i)=>CHART_COLORS[i%CHART_COLORS.length]),borderWidth:0}]},
+  else vtChart('vtChMix',{type:'doughnut',data:{labels:keys,datasets:[{data:keys.map(k=>an.activity_mix[k]),backgroundColor:keys.map((_,i)=>CHART_COLORS[i%CHART_COLORS.length]),borderWidth:0}]},
     options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom',labels:{color:tc,boxWidth:10,font:{size:10}}}}}});
   // logging compliance
   vtChart('vtChLog',{type:'bar',data:{labels:an.daily_logging.map(x=>vtDate(x.date)),datasets:[{label:'Logged',data:an.daily_logging.map(x=>x.logged),backgroundColor:ok,borderRadius:3}]},
@@ -3539,7 +3550,7 @@ async function vtAmPage(body, keep){
   const canEdit=vtCanEdit(amId);
   const picker = me.sees_all ? `<label class="text-xs" style="color:var(--text-muted)">Account manager ${vtSel('vtAmPick',D.ams.map(a=>`<option value="${a.id}" ${a.id===amId?'selected':''}>${escapeHtml(a.name)}</option>`).join(''))}</label>` : '';
   body.innerHTML=`
-    <div class="flex flex-wrap items-center gap-3 mb-3"><p class="text-lg font-semibold" style="color:var(--text)">${escapeHtml(vtAmName(amId))}</p><div class="flex-1"></div>${picker}</div>
+    <div class="flex flex-wrap items-center gap-3 mb-3"><p class="text-lg font-semibold" style="color:var(--text)">${escapeHtml(vtAmName(amId))}</p><div class="flex-1"></div>${canEdit?`<button type="button" id="vtPrioBtn" class="text-xs px-3 py-1.5 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-star mr-1" style="color:var(--warning)"></i>Choose priority accounts</button>`:''}${picker}</div>
     ${noPlan.length?`<div class="rounded-lg px-4 py-3 mb-3 text-sm" style="background:rgba(230,170,40,.12);color:var(--text)"><i class="fa-solid fa-triangle-exclamation mr-1.5" style="color:var(--warning)"></i><b>${noPlan.length} priority account${noPlan.length>1?'s':''} with no visit planned</b> &mdash; plan before 16:45 for the 17:00 sync: ${noPlan.map(a=>escapeHtml(vtShort(a.name))).join(', ')}</div>`:''}
     <div class="card elev p-5 mb-4"><p class="text-sm font-medium mb-1" style="color:var(--text)">${me.sees_all?'Priority accounts':'My priority accounts'} (${pri.length})</p>
       <p class="text-[11px] mb-3" style="color:var(--text-faint)">Which accounts matter most, whether they've been visited, and what was done yesterday / is planned tomorrow.${canEdit?' Click a logo to change it.':''}</p>
@@ -3550,6 +3561,7 @@ async function vtAmPage(body, keep){
         <td>${a.opp_count?`${a.opp_count} · ${fmtIDR(a.opp_value)}`:vtNone('—')}</td></tr>`).join('')||'<tr><td colspan="8" style="color:var(--text-faint)">No priority accounts.</td></tr>'}</tbody></table></div></div>
     <div id="vtCal"></div>`;
   const pick=document.getElementById('vtAmPick'); if(pick) pick.addEventListener('change',e=>{ VT.amId=parseInt(e.target.value); renderVisits(); });
+  const pb=document.getElementById('vtPrioBtn'); if(pb) pb.addEventListener('click',vtOpenPriority);
   body.querySelectorAll('.vt-logo-btn.clickable').forEach(el=>el.addEventListener('click',()=>vtOpenAccount(VT.data.accounts.find(a=>String(a.id)===el.dataset.id))));
   vtCalendar();
 }
@@ -3558,13 +3570,14 @@ function vtCalendar(){
   const [y,m]=VT.month.split('-').map(Number);
   const byDate={}; VT.monthTasks.forEach(t=>(byDate[t.task_date]=byDate[t.task_date]||[]).push(t));
   const first=new Date(y,m-1,1), lead=(first.getDay()+6)%7, days=new Date(y,m,0).getDate();
-  const dot=s=>s==='Done'?'var(--success)':s==='Planned'?'var(--warning)':'var(--text-faint)';
+  const dot=st=>({done:'var(--success)',planned:'var(--warning)'})[vtBeh(st)]||'var(--text-faint)';
   const cells=[]; for(let i=0;i<lead;i++) cells.push(null); for(let k=1;k<=days;k++) cells.push(k);
   while(cells.length%7) cells.push(null);
   const title=first.toLocaleDateString('en-US',{month:'long',year:'numeric'});
   const sel=VT.day; const selTasks=(byDate[sel]||[]);
   const accts=D.accounts.filter(a=>a.am_id===amId);
-  const defStatus = sel<=today ? 'Done' : 'Planned';
+  const defStatus = sel<=today ? D.enums.default_done : D.enums.default_planned;
+  const defAct=(D.enums.activity_opts.find(a=>a.behavior==='visit')||D.enums.activity_opts[0]).label;
   document.getElementById('vtCal').innerHTML=`
     <div class="grid lg:grid-cols-3 gap-4">
       <div class="card elev p-4 lg:col-span-2">
@@ -3586,11 +3599,11 @@ function vtCalendar(){
       <div class="card elev p-4">
         <p class="text-sm font-semibold" style="color:var(--text)">${vtLong(sel)} ${sel===today?vtChip('today','vt-ok'):sel===D.prev_day?vtChip('yesterday',''):sel===D.next_day?vtChip('tomorrow',''):''}</p>
         <div class="space-y-2 my-3">${selTasks.map(t=>`<div class="rounded-lg px-3 py-2" style="background:var(--surface-2)"><div class="flex items-start gap-2"><div class="flex-1 min-w-0"><p class="text-xs font-medium" style="color:var(--text)">${escapeHtml(vtShort(t.account_name))}</p>
-            <p class="text-[11px]" style="color:var(--text-muted)">${escapeHtml(VT_ACT_SHORT[t.activity]||t.activity)}${t.topic?' · '+escapeHtml(t.topic):''}</p>${t.outcome?`<p class="text-[11px]" style="color:var(--text-faint)">→ ${escapeHtml(t.outcome)}</p>`:''}</div>
-            <div class="text-right whitespace-nowrap">${vtChip(t.status,VT_TASK_CLS[t.status])}${canEdit?`<div class="mt-1">${t.status==='Planned'?`<button type="button" class="vt-done text-xs mr-2" data-id="${t.id}" style="color:var(--success)" title="Mark done"><i class="fa-solid fa-check"></i></button>`:''}<button type="button" class="vt-edit text-xs" data-id="${t.id}" style="color:var(--primary)" title="Edit"><i class="fa-solid fa-pen"></i></button></div>`:''}</div></div></div>`).join('')||'<p class="text-xs" style="color:var(--text-faint)">Nothing logged or planned for this day.</p>'}</div>
+            <p class="text-[11px]" style="color:var(--text-muted)">${escapeHtml(t.activity)}${t.topic?' · '+escapeHtml(t.topic):''}</p>${t.outcome?`<p class="text-[11px]" style="color:var(--text-faint)">→ ${escapeHtml(t.outcome)}</p>`:''}</div>
+            <div class="text-right whitespace-nowrap">${vtChip(t.status,vtStatusCls(t.status))}${canEdit?`<div class="mt-1">${vtBeh(t.status)==='planned'?`<button type="button" class="vt-done text-xs mr-2" data-id="${t.id}" style="color:var(--success)" title="Mark done"><i class="fa-solid fa-check"></i></button>`:''}<button type="button" class="vt-edit text-xs" data-id="${t.id}" style="color:var(--primary)" title="Edit"><i class="fa-solid fa-pen"></i></button></div>`:''}</div></div></div>`).join('')||'<p class="text-xs" style="color:var(--text-faint)">Nothing logged or planned for this day.</p>'}</div>
         ${canEdit?`<div class="rounded-lg p-3" style="border:1px dashed var(--border)"><p class="text-[11px] font-medium mb-2" style="color:var(--text-muted)">Quick add</p>
           <select id="vtQAcc" class="field w-full text-xs px-2 py-1.5 mb-1.5">${accts.map(a=>`<option value="${a.id}">${a.type==='Priority'?'★ ':''}${escapeHtml(a.name)}</option>`).join('')}</select>
-          <div class="grid grid-cols-2 gap-1.5 mb-1.5"><select id="vtQAct" class="field text-xs px-2 py-1.5">${vtOpts(D.enums.activities,'Visit (in person)')}</select><select id="vtQStat" class="field text-xs px-2 py-1.5">${vtOpts(D.enums.task_statuses,defStatus)}</select></div>
+          <div class="grid grid-cols-2 gap-1.5 mb-1.5"><select id="vtQAct" class="field text-xs px-2 py-1.5">${vtOpts(D.enums.activities,defAct)}</select><select id="vtQStat" class="field text-xs px-2 py-1.5">${vtOpts(D.enums.task_statuses,defStatus)}</select></div>
           <input id="vtQTopic" type="text" placeholder="What was / will be done… (Enter to save)" class="field w-full text-xs px-2 py-1.5 mb-1.5">
           <button type="button" id="vtQAdd" class="btn-primary w-full text-xs py-1.5 rounded-lg"><i class="fa-solid fa-plus mr-1"></i>Add to ${vtDate(sel)}</button></div>`:''}
       </div>
@@ -3603,7 +3616,7 @@ function vtCalendar(){
   document.querySelectorAll('#vtCal .vt-edit').forEach(b=>b.addEventListener('click',()=>vtOpenTask(VT.monthTasks.find(t=>String(t.id)===b.dataset.id))));
   document.querySelectorAll('#vtCal .vt-done').forEach(b=>b.addEventListener('click',async()=>{
     const t=VT.monthTasks.find(x=>String(x.id)===b.dataset.id);
-    try{ await api('/api/visit/tasks/'+t.id,{method:'PUT',body:JSON.stringify({...t,status:'Done'})}); showToast('Marked done'); vtAfterChange(); }catch(e){ showToast(e.message,true); }
+    try{ await api('/api/visit/tasks/'+t.id,{method:'PUT',body:JSON.stringify({...t,status:VT.data.enums.default_done})}); showToast('Marked done'); vtAfterChange(); }catch(e){ showToast(e.message,true); }
   }));
   const add=async()=>{
     const topic=document.getElementById('vtQTopic').value.trim();
@@ -3628,13 +3641,14 @@ function vtAccounts(body){
         <input type="file" id="vtFileMaster" accept=".xlsx" style="display:none"><input type="file" id="vtFileLog" accept=".xlsx" style="display:none">`:''}</div>
     <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Account</th><th>AM</th><th>Type</th><th>Cadence</th><th>Visit status</th><th>Last visit</th><th>Relationship</th><th>Champion</th><th>Opportunities</th>${f.fin?'<th>2026 target (Mn)</th><th>MRC (Mn)</th><th>Notes</th>':''}${me.is_admin?'<th></th>':''}</tr></thead><tbody>
     ${rows.map(a=>{ const c=a.cov, can=vtCanEdit(a.am_id);
-      return `<tr><td><div class="flex items-center gap-2.5">${vtLogo(a,30)}<span class="font-medium">${escapeHtml(vtShort(a.name))}</span></div></td><td>${escapeHtml(vtAmName(a.am_id))}</td><td>${vtChip(a.type,a.type==='Priority'?'vt-ok':'')}</td><td>${a.cadence}</td>
+      return `<tr><td><div class="flex items-center gap-2.5">${vtLogo(a,30)}<span class="font-medium">${escapeHtml(vtShort(a.name))}</span></div></td><td>${escapeHtml(vtAmName(a.am_id))}</td><td>${can?`<button type="button" class="vt-star text-xs whitespace-nowrap" data-id="${a.id}" data-am="${a.am_id}" title="Click to switch between Priority and Other">${a.type==='Priority'?'<i class="fa-solid fa-star" style="color:var(--warning)"></i> Priority':'<i class="fa-regular fa-star"></i> Other'}</button>`:vtChip(a.type,a.type==='Priority'?'vt-ok':'')}</td><td>${a.cadence}</td>
       <td>${vtChip(a.status,VT_STATUS_CLS[a.status])}</td><td>${a.last_visit?vtDate(a.last_visit):'—'}</td>
       <td>${c?(can?`<select class="vt-cov-status field text-xs px-2 py-1" data-id="${c.id}">${covOpts(c.status)}</select>`:escapeHtml(COV_STATUS_LABEL[c.status]||c.status)):vtNone('—')}</td>
       <td>${c?`<input type="checkbox" class="vt-cov-champ" data-id="${c.id}" ${c.is_champion?'checked':''} ${can?'':'disabled'}>`:'—'}</td>
       <td>${a.opp_count?`${a.opp_count} · ${fmtIDR(a.opp_value)}`:vtNone('none')}</td>
       ${f.fin?`<td>${a.target_idr_mn==null?'—':a.target_idr_mn.toLocaleString()}</td><td>${a.mrc_idr_mn==null?'—':a.mrc_idr_mn}</td><td>${c&&can?`<input type="text" class="vt-cov-notes field text-xs px-2 py-1" data-id="${c.id}" value="${escapeHtml(c.notes)}" style="min-width:160px">`:escapeHtml((c&&c.notes)||a.note)}</td>`:''}
       ${me.is_admin?`<td><button type="button" class="vt-acc-edit text-xs" data-id="${a.id}" style="color:var(--primary)" title="Edit / logo"><i class="fa-solid fa-pen"></i></button></td>`:''}</tr>`; }).join('')}</tbody></table></div></div>
+    ${me.is_admin?`<div id="vtOptsCard" class="card elev p-5 mb-4"></div>`:''}
     ${me.is_admin?`<div class="card elev p-5"><p class="text-sm font-medium mb-1" style="color:var(--text)">Account manager &harr; login</p><p class="text-[11px] mb-3" style="color:var(--text-faint)">Matched automatically by name. Set a login explicitly only if an AM can't see their own page.</p>
       <div class="grid md:grid-cols-2 gap-2">${d.ams.map(a=>`<div class="flex items-center gap-2 text-xs"><span class="flex-1" style="color:var(--text)">${escapeHtml(a.name)}</span>
         <select class="vt-link-sel field text-xs px-2 py-1.5" data-id="${a.id}"><option value="">Auto-match by name</option>${USERS.filter(u=>u.role==='account_manager').map(u=>`<option value="${u.id}" ${u.id===a.user_id?'selected':''}>${escapeHtml(u.full_name||u.username)}</option>`).join('')}</select></div>`).join('')}</div></div>`:''}`;
@@ -3649,6 +3663,13 @@ function vtAccounts(body){
   body.querySelectorAll('.vt-cov-champ').forEach(el=>el.addEventListener('change',()=>patchCov(el.dataset.id,{is_champion:el.checked})));
   body.querySelectorAll('.vt-cov-notes').forEach(el=>el.addEventListener('change',()=>patchCov(el.dataset.id,{notes:el.value})));
   body.querySelectorAll('.vt-acc-edit').forEach(b=>b.addEventListener('click',()=>vtOpenAccount(d.accounts.find(a=>String(a.id)===b.dataset.id))));
+  body.querySelectorAll('.vt-star').forEach(b=>b.addEventListener('click',async()=>{
+    const id=parseInt(b.dataset.id), amId=parseInt(b.dataset.am);
+    const ids=new Set(VT.data.accounts.filter(a=>a.am_id===amId&&a.type==='Priority').map(a=>a.id));
+    if(ids.has(id)) ids.delete(id); else ids.add(id);
+    try{ await api('/api/visit/priority',{method:'PUT',body:JSON.stringify({am_id:amId,priority_ids:[...ids]})}); renderVisits(); }catch(e){ showToast(e.message,true); }
+  }));
+  if(me.is_admin) vtLoadOptsCard();
   body.querySelectorAll('.vt-link-sel').forEach(sel=>sel.addEventListener('change',async()=>{
     try{ await api('/api/visit/ams/'+sel.dataset.id,{method:'PUT',body:JSON.stringify({user_id:sel.value?parseInt(sel.value):null})}); showToast('Link saved'); renderVisits(); }catch(e){ showToast(e.message,true); }
   }));
@@ -3662,6 +3683,57 @@ function vtAccounts(body){
     document.getElementById('vtFileLog').addEventListener('change',e=>{ const f0=e.target.files[0]; if(!f0) return;
       upload('/api/visit/import_log',f0,j=>`Imported ${j.imported} tasks (${j.duplicates} already there${j.skipped.length?`, ${j.skipped.length} skipped`:''})`); e.target.value=''; });
   }
+}
+
+
+/* ---- choose priority accounts ---- */
+function vtOpenPriority(){
+  const amId=VT.amId, accts=VT.data.accounts.filter(a=>a.am_id===amId);
+  VT.prioSel=new Set(accts.filter(a=>a.type==='Priority').map(a=>a.id));
+  document.getElementById('vtPrioTitle').textContent=`Priority accounts — ${vtAmName(amId)}`;
+  document.getElementById('vtPrioSearch').value=''; vtDrawPrio(); openModal('vtPrioModal');
+}
+function vtDrawPrio(){
+  const q=document.getElementById('vtPrioSearch').value.toLowerCase().trim();
+  const accts=VT.data.accounts.filter(a=>a.am_id===VT.amId&&(!q||a.name.toLowerCase().includes(q)));
+  document.getElementById('vtPrioList').innerHTML=accts.map(a=>`<label class="flex items-center gap-2.5 rounded-lg px-2 py-1.5 clickable" style="background:var(--surface-2)">
+    <input type="checkbox" class="vt-prio-cb" data-id="${a.id}" ${VT.prioSel.has(a.id)?'checked':''}>${vtLogo(a,24)}<span class="flex-1 text-sm" style="color:var(--text)">${escapeHtml(vtShort(a.name))}</span>
+    <span class="text-[10px]" style="color:var(--text-faint)">${a.opp_count?a.opp_count+' opp':''}</span></label>`).join('')||'<p class="text-xs" style="color:var(--text-faint)">No account matches.</p>';
+  document.getElementById('vtPrioCount').textContent=`${VT.prioSel.size} priority account${VT.prioSel.size===1?'':'s'} selected`;
+  document.querySelectorAll('#vtPrioList .vt-prio-cb').forEach(cb=>cb.addEventListener('change',()=>{
+    const id=parseInt(cb.dataset.id); if(cb.checked) VT.prioSel.add(id); else VT.prioSel.delete(id);
+    document.getElementById('vtPrioCount').textContent=`${VT.prioSel.size} priority account${VT.prioSel.size===1?'':'s'} selected`; }));
+}
+document.getElementById('vtPrioSearch').addEventListener('input',vtDrawPrio);
+document.getElementById('vtPrioSave').addEventListener('click',async()=>{
+  try{ const r=await api('/api/visit/priority',{method:'PUT',body:JSON.stringify({am_id:VT.amId,priority_ids:[...VT.prioSel]})});
+    closeModal('vtPrioModal'); showToast(r.changed?`Priority accounts updated (${r.priority} selected)`:'No changes'); vtAfterChange();
+  }catch(e){ showToast(e.message,true); }
+});
+
+/* ---- admin: edit the dropdown wording (activities / statuses) ---- */
+const VT_ACT_BEH=[['visit','Counts as a visit'],['other',"Doesn't count"]];
+const VT_STAT_BEH=[['planned','Planned (not done yet)'],['done','Done'],['moved','Moved'],['cancelled','Cancelled']];
+async function vtLoadOptsCard(){
+  const el=document.getElementById('vtOptsCard'); if(!el) return;
+  let o; try{ o=await api('/api/visit/options'); }catch(e){ el.innerHTML=''; return; }
+  const col=(kind,title,hint,list,behs)=>`<div><p class="text-xs font-semibold mb-1" style="color:var(--text)">${title}</p><p class="text-[10px] mb-2" style="color:var(--text-faint)">${hint}</p>
+    ${list.map(x=>`<div class="flex flex-wrap items-center gap-1.5 mb-1.5"><input type="text" class="vt-opt-label field text-xs px-2 py-1.5 flex-1" style="min-width:140px" data-id="${x.id}" value="${escapeHtml(x.label)}">
+      <select class="vt-opt-beh field text-xs px-2 py-1.5" data-id="${x.id}">${behs.map(([v,l])=>`<option value="${v}" ${v===x.behavior?'selected':''}>${l}</option>`).join('')}</select>
+      <button type="button" class="vt-opt-del text-xs px-1.5" data-id="${x.id}" style="color:var(--text-faint)" title="${x.in_use?x.in_use+' task(s) use this':'Delete'}"><i class="fa-solid fa-trash"></i></button></div>`).join('')}
+    <div class="flex flex-wrap items-center gap-1.5 mt-2"><input type="text" id="vtNew_${kind}" placeholder="New ${kind}…" class="field text-xs px-2 py-1.5 flex-1" style="min-width:140px">
+      <select id="vtNewBeh_${kind}" class="field text-xs px-2 py-1.5">${behs.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select>
+      <button type="button" class="vt-opt-add btn-primary text-xs px-2.5 py-1.5 rounded-lg" data-kind="${kind}"><i class="fa-solid fa-plus"></i></button></div></div>`;
+  el.innerHTML=`<p class="text-sm font-medium mb-1" style="color:var(--text)">Dropdown wording</p><p class="text-[11px] mb-3" style="color:var(--text-faint)">Rename the activities and statuses people pick from. Renaming updates every existing task. "Behavior" is what the rules use, so a renamed option keeps working.</p>
+    <div class="grid md:grid-cols-2 gap-6">${col('activity','Activities','Only a Done activity set to "Counts as a visit" resets an account\'s visit clock.',o.activities,VT_ACT_BEH)}${col('status','Statuses','Need at least one Planned and one Done.',o.statuses,VT_STAT_BEH)}</div>`;
+  const save=async(id,patch)=>{ try{ await api('/api/visit/options/'+id,{method:'PUT',body:JSON.stringify(patch)}); showToast('Saved'); await renderVisits(); }catch(e){ showToast(e.message,true); vtLoadOptsCard(); } };
+  el.querySelectorAll('.vt-opt-label').forEach(i=>i.addEventListener('change',()=>save(i.dataset.id,{label:i.value})));
+  el.querySelectorAll('.vt-opt-beh').forEach(i=>i.addEventListener('change',()=>save(i.dataset.id,{behavior:i.value})));
+  el.querySelectorAll('.vt-opt-del').forEach(b=>b.addEventListener('click',()=>openConfirm('Delete this option?',async()=>{
+    try{ await api('/api/visit/options/'+b.dataset.id,{method:'DELETE'}); showToast('Deleted'); await renderVisits(); }catch(e){ showToast(e.message,true); } })));
+  el.querySelectorAll('.vt-opt-add').forEach(b=>b.addEventListener('click',async()=>{
+    const k=b.dataset.kind, label=document.getElementById('vtNew_'+k).value.trim(); if(!label) return;
+    try{ await api('/api/visit/options',{method:'POST',body:JSON.stringify({kind:k,label,behavior:document.getElementById('vtNewBeh_'+k).value})}); showToast('Added'); await renderVisits(); }catch(e){ showToast(e.message,true); } }));
 }
 
 /* ---------------- Blockers ---------------- */

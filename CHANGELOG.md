@@ -6,6 +6,11 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.14.0] - 2026-10-16 (branch: v2.0)
+### Added
+- **Editable dropdown wording for visits.** Admin can rename (or add/remove) the Activity options ("Visit (in person)", "Video meeting", ...) and Status options ("Planned", "Done", ...) under Accounts & Visits -> Accounts -> "Dropdown wording". Each option carries a behavior (counts as a visit / planned / done / moved / cancelled) that the rules use, so renaming never breaks status or plan checks; renaming updates every existing task, and an option still in use can't be deleted.
+- **AMs choose their own priority accounts.** "Choose priority accounts" on the AM page (tick the customers, with search) and a star toggle in the Accounts list. New priority accounts become Weekly; dropped ones fall back to Monthly / Quarterly. An AM can only change their own accounts; admin can change anyone's.
+
 ## [2.13.0] - 2026-10-16 (branch: v2.0)
 ### Changed - the app is now a sales dashboard
 - **Removed Weekly Meeting and Team Tasks** (assigning follow-ups to Solution / Project / Product / Delivery) - those live in Salesforce. Gone: the Weekly Meeting and My Team Tasks pages, the Team Tasks tab on opportunities, the task-based notifications, and the Solution/Project/Product role options. Existing task rows stay in the database untouched; any legacy Solution/Project/Product login is now a read-only viewer.
