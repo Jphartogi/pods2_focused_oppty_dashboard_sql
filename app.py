@@ -5,6 +5,7 @@ Deal Execution Tracker & Strategy Dashboard (Postgres-backed v2.0)
 Row-level access control: each Account Manager can only edit the opportunities
 assigned to them; ADMIN can edit everything; MANAGEMENT is read-only.
 """
+import hashlib
 import io
 import json
 import os
@@ -28,7 +29,7 @@ from werkzeug.utils import secure_filename
 # Semantic version (MAJOR.MINOR.PATCH) for this deployment - bump on every
 # feature/fix and record it in CHANGELOG.md, so "which version is live" is
 # always answerable from the UI (bottom of the nav rail) or GET /api/version.
-APP_VERSION = "2.16.0"
+APP_VERSION = "2.17.0"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get(
@@ -592,6 +593,18 @@ def _init_schema_and_seed(db):
                 updated_at TEXT DEFAULT (CURRENT_TIMESTAMP::text)
             );
 
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                key_prefix TEXT NOT NULL,
+                key_hash TEXT UNIQUE NOT NULL,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                scope TEXT NOT NULL DEFAULT 'read' CHECK(scope IN ('read', 'write')),
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP::text),
+                last_used_at TIMESTAMP,
+                revoked BOOLEAN NOT NULL DEFAULT false
+            );
+
             CREATE TABLE IF NOT EXISTS visit_options (
                 id SERIAL PRIMARY KEY,
                 kind TEXT NOT NULL CHECK(kind IN ('activity', 'status')),
@@ -686,12 +699,31 @@ def _init_schema_and_seed(db):
 # --------------------------------------------------------------------------
 # Auth helpers
 # --------------------------------------------------------------------------
+API_KEY_PREFIX = "pods_"
+
+
 def get_current_user():
     auth = request.headers.get("Authorization", "")
     token = auth.replace("Bearer ", "").strip() if auth else request.args.get("token", "")
     if not token:
         return None
     db = get_db()
+    if token.startswith(API_KEY_PREFIX):
+        # Long-lived API key (agents / integrations): acts as the linked user, with that
+        # user's role permissions, optionally capped to read-only.
+        row = db.execute(
+            """SELECT k.id AS key_id, k.scope, k.last_used_at, u.id AS user_id, u.username, u.role, u.full_name
+               FROM api_keys k JOIN users u ON u.id = k.user_id
+               WHERE k.key_hash = %s AND NOT k.revoked""",
+            (hashlib.sha256(token.encode()).hexdigest(),),
+        ).fetchone()
+        if not row:
+            return None
+        if row["last_used_at"] is None or (datetime.utcnow() - row["last_used_at"]) > timedelta(minutes=5):
+            db.execute("UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE id = %s", (row["key_id"],))
+            db.commit()
+        return {"user_id": row["user_id"], "username": row["username"], "role": row["role"],
+                "full_name": row["full_name"] or row["username"], "auth": "api_key", "scope": row["scope"]}
     row = db.execute(
         "SELECT * FROM sessions WHERE token = %s AND expires_at > CURRENT_TIMESTAMP", (token,)
     ).fetchone()
@@ -702,6 +734,7 @@ def get_current_user():
         "username": row["username"],
         "role": row["role"],
         "full_name": row["full_name"],
+        "auth": "session",
     }
 
 
@@ -714,6 +747,9 @@ def login_required(roles=None):
                 return jsonify({"error": "Unauthorized"}), 401
             if roles and user["role"] not in roles:
                 return jsonify({"error": "Forbidden"}), 403
+            if user.get("auth") == "api_key" and user.get("scope") == "read" \
+                    and request.method not in ("GET", "HEAD", "OPTIONS"):
+                return jsonify({"error": "This API key is read-only"}), 403
             g.current_user = user
             return f(*args, **kwargs)
 
@@ -2530,6 +2566,67 @@ def visit_link_am(am_id):
     if user_id:
         db.execute("UPDATE visit_account_managers SET user_id = NULL WHERE user_id = %s", (user_id,))
     db.execute("UPDATE visit_account_managers SET user_id = %s WHERE id = %s", (user_id, am_id))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------
+# API keys (admin, via a signed-in session only - a key can't mint more keys)
+# --------------------------------------------------------------------------
+def _api_key_admin_only():
+    if g.current_user.get("auth") == "api_key":
+        return jsonify({"error": "API keys can only be managed from a signed-in admin session"}), 403
+    return None
+
+
+@app.route("/api/admin/api_keys", methods=["GET"])
+@login_required(roles=("admin",))
+def list_api_keys():
+    deny = _api_key_admin_only()
+    if deny:
+        return deny
+    rows = get_db().execute(
+        """SELECT k.*, u.username, u.full_name, u.role FROM api_keys k JOIN users u ON u.id = k.user_id
+           ORDER BY k.revoked, k.id DESC""").fetchall()
+    return jsonify([{
+        "id": r["id"], "name": r["name"], "key_prefix": r["key_prefix"], "scope": r["scope"],
+        "user_id": r["user_id"], "acts_as": r["full_name"] or r["username"], "role": r["role"],
+        "created_at": r["created_at"], "revoked": r["revoked"],
+        "last_used_at": r["last_used_at"].strftime("%Y-%m-%d %H:%M") if r["last_used_at"] else "",
+    } for r in rows])
+
+
+@app.route("/api/admin/api_keys", methods=["POST"])
+@login_required(roles=("admin",))
+def create_api_key():
+    deny = _api_key_admin_only()
+    if deny:
+        return deny
+    db = get_db()
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or "").strip()
+    scope = data.get("scope") or "read"
+    if not name or scope not in ("read", "write"):
+        return jsonify({"error": "A name and an access level (read / write) are required"}), 400
+    user = db.execute("SELECT id FROM users WHERE id = %s", (data.get("user_id"),)).fetchone()
+    if not user:
+        return jsonify({"error": "Pick which user this key acts as"}), 400
+    key = API_KEY_PREFIX + secrets.token_urlsafe(32)
+    db.execute(
+        "INSERT INTO api_keys (name, key_prefix, key_hash, user_id, scope) VALUES (%s, %s, %s, %s, %s)",
+        (name, key[:12], hashlib.sha256(key.encode()).hexdigest(), user["id"], scope))
+    db.commit()
+    return jsonify({"key": key, "note": "Copy this now - it is never shown again."}), 201
+
+
+@app.route("/api/admin/api_keys/<int:key_id>", methods=["DELETE"])
+@login_required(roles=("admin",))
+def revoke_api_key(key_id):
+    deny = _api_key_admin_only()
+    if deny:
+        return deny
+    db = get_db()
+    db.execute("UPDATE api_keys SET revoked = true WHERE id = %s", (key_id,))
     db.commit()
     return jsonify({"ok": True})
 

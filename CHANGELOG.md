@@ -6,6 +6,14 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.17.0] - 2026-10-18 (branch: v2.0)
+### Added
+- **API keys for agents and integrations.** Settings -> "API keys & agents": create a named key that acts as a chosen user (that user's permissions apply), Read-only or Read & write; shown once, revocable, with last-used time. Keys authenticate the existing REST API (`Authorization: Bearer pods_...`); read-only keys get 403 on any change; a key can't create other keys. New `api_keys` table (only a SHA-256 hash is stored).
+- **MCP server** (`mcp_server/`): 13 tools so an AI agent (Claude Desktop / Claude Code) can search and read the pipeline, accounts, visit status, team week, blockers and analytics, and - with a read & write key - log visits, raise blockers and add accounts. Setup in `mcp_server/README.md`.
+- **REST API reference**: `docs/API.md`.
+
+Verified: all 13 tools over a real MCP stdio session against a local dashboard; admin read & write key performed writes, a read-only key got "This API key is read-only", an AM key only saw its own accounts, a revoked key returned 401, a key could not mint keys; key creation works from the Settings page.
+
 ## [2.16.0] - 2026-10-18 (branch: v2.0)
 ### Added
 - **Team week** tab in Accounts & Visits (admin / management): every account manager's plan for the week side by side - a row per AM, a column per day (Mon-Fri, plus the weekend only if something is logged), each cell listing who is visiting which account, doing what, with done / planned dots and a flag on planned tasks that weren't updated. Header counts show visits done and planned per day and per AM; week navigation (prev / this week / next); click a cell to jump to that AM's day on their page.
