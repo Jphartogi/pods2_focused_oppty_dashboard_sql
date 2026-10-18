@@ -363,6 +363,16 @@
   .vt-day:hover { border-color:var(--primary); } .vt-day.sel { border-color:var(--primary); background:var(--primary-soft); } .vt-day.today { box-shadow:inset 0 0 0 1px var(--primary); }
   .vt-chipline { font-size:10px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
   .vt-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:4px; vertical-align:middle; }
+  .vt-tw { width:100%; border-collapse:separate; border-spacing:4px; table-layout:fixed; }
+  .vt-tw th { text-align:left; font-size:11px; font-weight:600; color:var(--text-muted); padding:4px 6px; }
+  .vt-tw-sub { font-size:10px; font-weight:400; color:var(--text-faint); margin-top:1px; }
+  .vt-tw-am { vertical-align:top; padding:8px 6px; }
+  .vt-tw-cell { vertical-align:top; background:var(--surface-2); border-radius:8px; padding:6px 7px; min-height:64px; cursor:pointer; border:1px solid transparent; }
+  .vt-tw-cell:hover { border-color:var(--primary); }
+  .vt-tw-today { box-shadow:inset 0 0 0 1px var(--primary); } th.vt-tw-today { box-shadow:none; color:var(--primary); }
+  .vt-tw-item { font-size:11px; line-height:1.35; margin-bottom:5px; color:var(--text); }
+  .vt-tw-act { display:block; color:var(--text-muted); font-size:10px; padding-left:11px; }
+  .vt-tw-empty { color:var(--text-faint); font-size:11px; }
   .vt-link { color:var(--primary); cursor:pointer; text-decoration:underline; }
   .metric-context-item { display:inline-flex; align-items:center; gap:7px; font-size:12px; padding:5px 12px; border-radius:9999px; background:var(--surface-2); }
 </style>
@@ -3451,7 +3461,7 @@ async function renderVisits(){
   catch(e){ body.innerHTML=`<p class="text-sm" style="color:var(--danger)">${escapeHtml(e.message)}</p>`; return; }
   const d=VT.data, me=d.me;
   document.getElementById('vtAsOf').textContent = `Today ${vtDate(d.today)} · yesterday ${vtDate(d.prev_day)} · tomorrow ${vtDate(d.next_day)}`;
-  const tabs = me.sees_all ? [['overview','Overview'],['am','AM page'],['accounts','Accounts'],['blockers','Blockers']] : [['am','My page'],['accounts','My accounts'],['blockers','Blockers']];
+  const tabs = me.sees_all ? [['overview','Overview'],['team','Team week'],['am','AM page'],['accounts','Accounts'],['blockers','Blockers']] : [['am','My page'],['accounts','My accounts'],['blockers','Blockers']];
   if(!tabs.some(t=>t[0]===VT.tab)) VT.tab=tabs[0][0];
   if(!VT.amId || !d.ams.some(a=>a.id===VT.amId)) VT.amId = me.am_id || (d.ams[0] && d.ams[0].id) || null;
   if(!VT.month) VT.month=d.today.slice(0,7);
@@ -3462,6 +3472,7 @@ async function renderVisits(){
     body.innerHTML=`<div class="card elev p-5 text-sm" style="color:var(--text-muted)">Your login isn't linked to an account manager here yet. Ask the admin to link it (Accounts &amp; Visits → Accounts).</div>`; return;
   }
   if(VT.tab==='overview') await vtOverview(body);
+  else if(VT.tab==='team') await vtTeamWeek(body);
   else if(VT.tab==='am') await vtAmPage(body);
   else if(VT.tab==='accounts') vtAccounts(body);
   else await vtBlockers(body);
@@ -3558,6 +3569,41 @@ function vtDetail(kind,opt){
       <td>${a.next_planned_visit?vtDate(a.next_planned_visit):vtNone('none')}</td><td>${vtDayCell(a.prev_day_tasks,'—')}</td><td>${vtDayCell(a.next_day_tasks,'—')}</td></tr>`).join('')||'<tr><td colspan="9" style="color:var(--text-faint)">Nothing here.</td></tr>'}</tbody></table>`;
   document.querySelectorAll('#vtDetailBody .vt-d-row').forEach(r=>r.addEventListener('dblclick',()=>{ VT.amId=parseInt(r.dataset.am); VT.tab='am'; closeModal('vtDetailModal'); renderVisits(); }));
   openModal('vtDetailModal');
+}
+
+/* ---------------- Team week: every AM's plan side by side ---------------- */
+function vtMonday(iso){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); dt.setDate(dt.getDate()-((dt.getDay()+6)%7)); return dt; }
+const vtIso=dt=>`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+async function vtTeamWeek(body){
+  const D=VT.data;
+  if(!VT.weekStart) VT.weekStart=vtIso(vtMonday(D.today));
+  const mon=vtMonday(VT.weekStart), days=[...Array(7)].map((_,i)=>{ const x=new Date(mon); x.setDate(mon.getDate()+i); return vtIso(x); });
+  const tasks=await api(`/api/visit/tasks?date_from=${days[0]}&date_to=${days[6]}`);
+  const wkend=tasks.some(t=>t.task_date>=days[5]);
+  const cols=wkend?days:days.slice(0,5);
+  const actBeh=a=>((D.enums.activity_opts.find(x=>x.label===a)||{}).behavior);
+  const dot=st=>({done:'var(--success)',planned:'var(--warning)'})[vtBeh(st)]||'var(--text-faint)';
+  const by={}; tasks.forEach(t=>((by[t.am_id]=by[t.am_id]||{})[t.task_date]=by[t.am_id][t.task_date]||[]).push(t));
+  const rangeLabel=`${vtDate(days[0])} – ${vtDate(days[6])}`;
+  const stat=list=>({done:list.filter(t=>actBeh(t.activity)==='visit'&&vtBeh(t.status)==='done').length, planned:list.filter(t=>actBeh(t.activity)==='visit'&&vtBeh(t.status)==='planned').length, total:list.length});
+  const colTotals=cols.map(d=>stat(tasks.filter(t=>t.task_date===d)));
+  body.innerHTML=`
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <button type="button" id="vtWkPrev" class="px-2.5 py-1 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-left"></i></button>
+      <button type="button" id="vtWkToday" class="text-xs px-2.5 py-1 rounded-lg" style="border:1px solid var(--border);color:var(--text)">This week</button>
+      <button type="button" id="vtWkNext" class="px-2.5 py-1 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-right"></i></button>
+      <p class="text-sm font-semibold ml-1" style="color:var(--text)">${rangeLabel}</p><div class="flex-1"></div>
+      <p class="text-[11px]" style="color:var(--text-faint)"><span class="vt-dot" style="background:var(--success)"></span>done &nbsp;<span class="vt-dot" style="background:var(--warning)"></span>planned &nbsp;click a cell to open that AM's day</p></div>
+    <div class="card elev p-3"><div class="overflow-x-auto"><table class="vt-tw"><thead><tr><th style="min-width:150px">Account manager</th>${cols.map((d,i)=>`<th class="${d===D.today?'vt-tw-today':''}">${vtLong(d)}<div class="vt-tw-sub">${colTotals[i].total?`${colTotals[i].done} visit${colTotals[i].done===1?'':'s'} done · ${colTotals[i].planned} planned`:'&nbsp;'}</div></th>`).join('')}</tr></thead><tbody>
+    ${D.ams.map(a=>{ const mine=by[a.id]||{}, all=Object.values(mine).flat(), s=stat(all);
+      return `<tr><td class="vt-tw-am"><p class="font-medium" style="color:var(--text)">${escapeHtml(a.name)}</p><p class="text-[10px]" style="color:var(--text-muted)">${s.done} visit${s.done===1?'':'s'} done · ${s.planned} planned · ${all.length} task${all.length===1?'':'s'}</p></td>
+      ${cols.map(d=>{ const list=mine[d]||[]; return `<td class="vt-tw-cell ${d===D.today?'vt-tw-today':''}" data-am="${a.id}" data-d="${d}">${list.map(t=>`<div class="vt-tw-item" title="${escapeHtml((t.topic||'')+(t.outcome?' → '+t.outcome:''))}"><span class="vt-dot" style="background:${dot(t.status)}"></span><b>${escapeHtml(vtShort(t.account_name))}</b><span class="vt-tw-act">${escapeHtml(t.activity)}${t.topic?' · '+escapeHtml(t.topic):''}</span>${t.not_updated?' <i class="fa-solid fa-circle-exclamation text-[9px]" style="color:var(--warning)" title="Planned task not updated"></i>':''}</div>`).join('')||'<span class="vt-tw-empty">—</span>'}</td>`; }).join('')}</tr>`; }).join('')}
+    </tbody></table></div></div>`;
+  const go=n=>{ const x=new Date(mon); x.setDate(mon.getDate()+7*n); VT.weekStart=vtIso(x); vtTeamWeek(body); };
+  document.getElementById('vtWkPrev').addEventListener('click',()=>go(-1));
+  document.getElementById('vtWkNext').addEventListener('click',()=>go(1));
+  document.getElementById('vtWkToday').addEventListener('click',()=>{ VT.weekStart=vtIso(vtMonday(D.today)); vtTeamWeek(body); });
+  body.querySelectorAll('.vt-tw-cell').forEach(c=>c.addEventListener('click',()=>{ VT.amId=parseInt(c.dataset.am); VT.month=c.dataset.d.slice(0,7); VT.day=c.dataset.d; VT.tab='am'; renderVisits(); }));
 }
 
 /* ---------------- AM page: priority accounts + calendar ---------------- */

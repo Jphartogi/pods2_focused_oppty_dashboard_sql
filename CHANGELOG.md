@@ -6,6 +6,10 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.16.0] - 2026-10-18 (branch: v2.0)
+### Added
+- **Team week** tab in Accounts & Visits (admin / management): every account manager's plan for the week side by side - a row per AM, a column per day (Mon-Fri, plus the weekend only if something is logged), each cell listing who is visiting which account, doing what, with done / planned dots and a flag on planned tasks that weren't updated. Header counts show visits done and planned per day and per AM; week navigation (prev / this week / next); click a cell to jump to that AM's day on their page.
+
 ## [2.15.0] - 2026-10-16 (branch: v2.0)
 ### Added
 - **Add accounts by hand - no opportunity needed.** In My Weekly Plan, the Customer picker now lists every account the AM manages (accounts with no pipeline are labelled "no opportunity yet", not just ones with deals) and ends with "+ Add a new customer / account…": type a name and it's saved as a real account (plus an Account Coverage entry), so it's pickable next time and shows up in Accounts & Visits and the Tracker's Accounts view with 0 opportunities. Accounts & Visits -> Accounts also gets an "Add account" button (admin picks the AM). Duplicates are caught by loose name match; an account added by hand can be removed while it has no tasks.
