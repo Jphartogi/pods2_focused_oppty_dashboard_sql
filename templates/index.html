@@ -1142,6 +1142,19 @@
           </div>
 
           <div class="card elev p-5 lg:col-span-2">
+            <p class="text-sm font-medium mb-1"><i class="fa-solid fa-robot mr-1.5" style="color:var(--primary)"></i>API keys &amp; agents</p>
+            <p class="text-[11px] mb-3" style="color:var(--text-faint)">Let an AI agent (via the MCP server) or another tool read - and optionally update - the dashboard. A key acts as the user you pick and gets exactly that user's permissions; <b>Read-only</b> additionally blocks every change. Prefer a dedicated user. Setup: <code>mcp_server/README.md</code> in the repo.</p>
+            <div class="flex flex-wrap items-end gap-2 mb-3">
+              <div><label class="block text-[11px] mb-1" style="color:var(--text-muted)">Key name</label><input id="akName" type="text" placeholder="e.g. Claude Desktop" class="field text-sm px-3 py-2" style="width:200px"></div>
+              <div><label class="block text-[11px] mb-1" style="color:var(--text-muted)">Acts as</label><select id="akUser" class="field text-sm px-3 py-2" style="width:200px"></select></div>
+              <div><label class="block text-[11px] mb-1" style="color:var(--text-muted)">Access</label><select id="akScope" class="field text-sm px-3 py-2"><option value="read">Read-only</option><option value="write">Read &amp; write</option></select></div>
+              <button id="akCreate" class="btn-primary text-sm px-4 py-2 rounded-lg"><i class="fa-solid fa-key mr-1.5"></i>Create key</button>
+            </div>
+            <div id="akNew" class="rounded-lg p-3 mb-3 text-xs" style="display:none;background:rgba(46,160,106,.12);color:var(--text)"></div>
+            <div class="overflow-x-auto"><table class="vt-table"><thead><tr><th>Name</th><th>Acts as</th><th>Access</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody id="akList"></tbody></table></div>
+          </div>
+
+          <div class="card elev p-5 lg:col-span-2">
             <p class="text-sm font-medium mb-1"><i class="fa-solid fa-database mr-1.5" style="color:var(--primary)"></i>Data Backup &amp; Restore</p>
             <p class="text-[11px] mb-4" style="color:var(--text-faint)">Download everything (opportunities, strategies, next actions with target dates, configuration and users) as one Excel file. The same file is the import template — use it to restore after a problem, or to move this dashboard to another cloud provider. Passwords are never exported; imported new users get the temporary password <b>changeme123</b>.</p>
             <div class="flex flex-wrap items-center gap-3">
@@ -4309,7 +4322,30 @@ function renderSettings(){
   loadEngine1Config();
   loadV1SyncConfig();
   loadAmMismatches();
+  loadApiKeys();
 }
+
+/* ================= API KEYS (admin) ================= */
+async function loadApiKeys(){
+  const body=document.getElementById('akList'); if(!body) return;
+  document.getElementById('akUser').innerHTML=USERS.map(u=>`<option value="${u.id}">${escapeHtml(u.full_name||u.username)} (${u.role.replace('_',' ')})</option>`).join('');
+  let keys=[]; try{ keys=await api('/api/admin/api_keys'); }catch(e){ return; }
+  body.innerHTML=keys.map(k=>`<tr style="${k.revoked?'opacity:.5':''}"><td class="font-medium">${escapeHtml(k.name)}</td><td>${escapeHtml(k.acts_as)} <span class="text-[10px]" style="color:var(--text-faint)">${k.role.replace('_',' ')}</span></td>
+    <td>${vtChip(k.scope==='read'?'Read-only':'Read & write',k.scope==='read'?'':'vt-warn')}</td><td><code>${escapeHtml(k.key_prefix)}…</code></td><td>${escapeHtml((k.created_at||'').slice(0,10))}</td><td>${escapeHtml(k.last_used_at||'never')}</td>
+    <td>${k.revoked?'<span class="text-[11px]" style="color:var(--text-faint)">revoked</span>':`<button type="button" class="ak-revoke text-xs" data-id="${k.id}" style="color:var(--danger)">Revoke</button>`}</td></tr>`).join('')||'<tr><td colspan="7" style="color:var(--text-faint)">No API keys yet.</td></tr>';
+  body.querySelectorAll('.ak-revoke').forEach(b=>b.addEventListener('click',()=>openConfirm('Revoke this key? Anything using it stops working immediately.',async()=>{
+    try{ await api('/api/admin/api_keys/'+b.dataset.id,{method:'DELETE'}); showToast('Key revoked'); loadApiKeys(); }catch(e){ showToast(e.message,true); } })));
+}
+document.getElementById('akCreate').addEventListener('click',async()=>{
+  const name=document.getElementById('akName').value.trim(); if(!name){ showToast('Give the key a name',true); return; }
+  try{
+    const r=await api('/api/admin/api_keys',{method:'POST',body:JSON.stringify({name,user_id:parseInt(document.getElementById('akUser').value),scope:document.getElementById('akScope').value})});
+    const box=document.getElementById('akNew'); box.style.display='';
+    box.innerHTML=`<p class="font-semibold mb-1">Copy this key now - it won't be shown again.</p><div class="flex items-center gap-2"><code id="akKeyText" style="word-break:break-all">${escapeHtml(r.key)}</code><button type="button" id="akCopy" class="btn-primary text-xs px-3 py-1.5 rounded-lg">Copy</button></div>`;
+    document.getElementById('akCopy').addEventListener('click',()=>{ navigator.clipboard.writeText(r.key).then(()=>showToast('Copied')); });
+    document.getElementById('akName').value=''; loadApiKeys();
+  }catch(e){ showToast(e.message,true); }
+});
 /* ================= MERGE ACCOUNT MANAGER NAME ================= */
 async function loadAmMismatches(){
   const listEl=document.getElementById('amMismatchList');
