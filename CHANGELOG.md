@@ -6,6 +6,13 @@ MAJOR for breaking changes, MINOR for new backward-compatible features, PATCH
 for fixes. The current version is shown in the app (bottom of the left nav,
 and the sign-in screen) and via `GET /api/version`.
 
+## [2.18.0] - 2026-11-02 (branch: v2.0)
+### Added
+- **Daily cadence** view (first tab of Accounts & Visits, admin / management) - built for running and screen-sharing the daily sales check. For every account manager it shows **Yesterday / Today / Tomorrow** (previous and next *working* day) side by side: who visited or is doing what, with outcomes, status and a flag on planned tasks that were never updated; an amber "Nothing logged / Nothing planned" for gaps; and a health line per AM (priority accounts on track / slipping / overdue, no visit planned, open blockers).
+  - **Whole team**: one screen, one row per AM. **One by one**: a single AM at a time in large type with their priority accounts (logo, last visited, next planned) and open blockers; switch AM with the arrows or the keyboard ← →. Click an AM in the team view to jump to them.
+  - Move the date back/forward by working day to replay another day.
+  - **Present full screen** hides the menu and header, enlarges the text and goes full screen (Esc to exit).
+
 ## [2.17.0] - 2026-10-18 (branch: v2.0)
 ### Added
 - **API keys for agents and integrations.** Settings -> "API keys & agents": create a named key that acts as a chosen user (that user's permissions apply), Read-only or Read & write; shown once, revocable, with last-used time. Keys authenticate the existing REST API (`Authorization: Bearer pods_...`); read-only keys get 403 on any change; a key can't create other keys. New `api_keys` table (only a SHA-256 hash is stored).

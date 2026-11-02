@@ -373,6 +373,27 @@
   .vt-tw-item { font-size:11px; line-height:1.35; margin-bottom:5px; color:var(--text); }
   .vt-tw-act { display:block; color:var(--text-muted); font-size:10px; padding-left:11px; }
   .vt-tw-empty { color:var(--text-faint); font-size:11px; }
+  .cad-head, .cad-row { display:grid; grid-template-columns:230px repeat(3,minmax(0,1fr)); gap:8px; }
+  .cad-row { margin-top:8px; }
+  .cad-colhead { font-size:15px; font-weight:700; color:var(--text); padding:6px 10px; border-radius:8px; background:var(--surface-2); }
+  .cad-colhead span, .cad-colhead2 span { font-weight:500; font-size:12px; color:var(--text-muted); margin-left:6px; }
+  .cad-colhead2 { font-size:17px; font-weight:700; color:var(--text); }
+  .cad-today { box-shadow:inset 0 0 0 1.5px var(--primary); } .cad-today-card { box-shadow:inset 0 0 0 1.5px var(--primary); }
+  .cad-am { padding:10px; border-radius:10px; background:var(--surface-2); } .cad-am:hover { outline:1px solid var(--primary); }
+  .cad-name { font-size:16px; font-weight:700; color:var(--text); } .cad-big { font-size:26px; font-weight:800; color:var(--text); line-height:1.1; }
+  .cad-chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; } .cad-big + .cad-chips { margin-top:4px; }
+  .cad-cell { background:var(--surface-2); border-radius:10px; padding:8px; min-height:70px; display:flex; flex-direction:column; gap:6px; }
+  .cad-task { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:7px 9px; }
+  .cad-stale { border-color:var(--warning); }
+  .cad-acct { font-size:13px; font-weight:700; color:var(--text); line-height:1.25; } .cad-act { font-size:12px; color:var(--text-muted); line-height:1.3; } .cad-out { font-size:11px; color:var(--text-faint); margin-top:2px; }
+  .cad-empty { font-size:12px; color:var(--text-faint); padding:4px; } .cad-warn { color:var(--warning); }
+  @media (max-width:1100px){ .cad-head { display:none; } .cad-row { grid-template-columns:1fr; } }
+  #vtExitPresent { display:none; position:fixed; top:10px; right:12px; z-index:90; background:rgba(0,0,0,.55); color:#fff; font-size:12px; padding:6px 12px; border-radius:9999px; cursor:pointer; }
+  body.vt-present #vtExitPresent { display:block; }
+  body.vt-present header.app-topbar, body.vt-present #sideRail, body.vt-present #metricStripWrap, body.vt-present #tab-visits > div:first-child, body.vt-present #vtTabs, body.vt-present #cadPresent { display:none !important; }
+  body.vt-present main { max-height:100vh !important; }
+  body.vt-present #tab-visits { padding:18px 28px; }
+  body.vt-present .cad-colhead { font-size:19px; } body.vt-present .cad-name { font-size:19px; } body.vt-present .cad-acct { font-size:15px; } body.vt-present .cad-act { font-size:14px; } body.vt-present .cad-out { font-size:13px; } body.vt-present .cad-empty { font-size:14px; } body.vt-present .cad-big { font-size:34px; }
   .vt-link { color:var(--primary); cursor:pointer; text-decoration:underline; }
   .metric-context-item { display:inline-flex; align-items:center; gap:7px; font-size:12px; padding:5px 12px; border-radius:9999px; background:var(--surface-2); }
 </style>
@@ -3442,7 +3463,7 @@ document.getElementById('wpTodayBtn').addEventListener('click', ()=>{ WP_WEEK_ST
 document.getElementById('wpAmFilter').addEventListener('change', renderWeeklyPlan);
 
 /* ================= ACCOUNTS & VISITS ================= */
-const VT = {data:null, tab:'overview', amId:null, month:null, day:null, monthTasks:[], blockers:[], an:null,
+const VT = {data:null, tab:'cadence', amId:null, month:null, day:null, monthTasks:[], blockers:[], an:null,
             acc:{am:'',type:'',q:'',fin:false}, editTask:null, editBlocker:null, editAcc:null, logoV:Date.now()};
 const VT_STATUS_CLS = {'On track':'vt-ok','Slipping':'vt-warn','Overdue':'vt-bad'};
 const VT_PLAN_CLS = {'OK':'vt-ok','No visit planned':'vt-warn','Beyond limit':'vt-bad'};
@@ -3474,7 +3495,7 @@ async function renderVisits(){
   catch(e){ body.innerHTML=`<p class="text-sm" style="color:var(--danger)">${escapeHtml(e.message)}</p>`; return; }
   const d=VT.data, me=d.me;
   document.getElementById('vtAsOf').textContent = `Today ${vtDate(d.today)} · yesterday ${vtDate(d.prev_day)} · tomorrow ${vtDate(d.next_day)}`;
-  const tabs = me.sees_all ? [['overview','Overview'],['team','Team week'],['am','AM page'],['accounts','Accounts'],['blockers','Blockers']] : [['am','My page'],['accounts','My accounts'],['blockers','Blockers']];
+  const tabs = me.sees_all ? [['cadence','Daily cadence'],['overview','Overview'],['team','Team week'],['am','AM page'],['accounts','Accounts'],['blockers','Blockers']] : [['am','My page'],['accounts','My accounts'],['blockers','Blockers']];
   if(!tabs.some(t=>t[0]===VT.tab)) VT.tab=tabs[0][0];
   if(!VT.amId || !d.ams.some(a=>a.id===VT.amId)) VT.amId = me.am_id || (d.ams[0] && d.ams[0].id) || null;
   if(!VT.month) VT.month=d.today.slice(0,7);
@@ -3485,6 +3506,7 @@ async function renderVisits(){
     body.innerHTML=`<div class="card elev p-5 text-sm" style="color:var(--text-muted)">Your login isn't linked to an account manager here yet. Ask the admin to link it (Accounts &amp; Visits → Accounts).</div>`; return;
   }
   if(VT.tab==='overview') await vtOverview(body);
+  else if(VT.tab==='cadence') await vtCadence(body);
   else if(VT.tab==='team') await vtTeamWeek(body);
   else if(VT.tab==='am') await vtAmPage(body);
   else if(VT.tab==='accounts') vtAccounts(body);
@@ -3583,6 +3605,81 @@ function vtDetail(kind,opt){
   document.querySelectorAll('#vtDetailBody .vt-d-row').forEach(r=>r.addEventListener('dblclick',()=>{ VT.amId=parseInt(r.dataset.am); VT.tab='am'; closeModal('vtDetailModal'); renderVisits(); }));
   openModal('vtDetailModal');
 }
+
+/* ---------------- Daily cadence: yesterday / today / tomorrow, AM by AM (built for screen-sharing) ---------------- */
+const CAD = {mode:'team', day:null, amIdx:0, kbd:false};
+function vtWorkday(iso,step){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); do{ dt.setDate(dt.getDate()+step); }while(dt.getDay()===0||dt.getDay()===6); return vtIso(dt); }
+async function vtCadence(body){
+  const D=VT.data;
+  if(!CAD.day) CAD.day=D.today;
+  const prev=vtWorkday(CAD.day,-1), next=vtWorkday(CAD.day,1);
+  const [tasks,blockers]=await Promise.all([api(`/api/visit/tasks?date_from=${prev}&date_to=${next}`), api('/api/visit/blockers')]);
+  const actBeh=a=>((D.enums.activity_opts.find(x=>x.label===a)||{}).behavior);
+  const dot=st=>({done:'var(--success)',planned:'var(--warning)'})[vtBeh(st)]||'var(--text-faint)';
+  const ams=D.ams; if(CAD.amIdx>=ams.length) CAD.amIdx=0;
+  const mine=(amId,day)=>tasks.filter(t=>t.am_id===amId&&t.task_date===day);
+  const pri=amId=>D.accounts.filter(a=>a.am_id===amId&&a.type==='Priority');
+  const openB=amId=>blockers.filter(b=>b.am_id===amId&&b.status!=='Resolved');
+  const cols=[['Yesterday',prev,'yesterday'],['Today',CAD.day,'today'],['Tomorrow',next,'tomorrow']];
+  const empty={yesterday:'Nothing logged',today:'Nothing planned yet',tomorrow:'Nothing planned'};
+  const card=(t,big)=>`<div class="cad-task ${t.not_updated?'cad-stale':''}"><div class="flex items-start gap-2"><span class="vt-dot" style="background:${dot(t.status)};margin-top:5px"></span><div class="min-w-0 flex-1">
+      <p class="cad-acct">${escapeHtml(vtShort(t.account_name))}</p><p class="cad-act">${escapeHtml(t.activity)}${t.topic?' — '+escapeHtml(t.topic):''}</p>
+      ${t.outcome?`<p class="cad-out">→ ${escapeHtml(t.outcome)}</p>`:''}</div>
+      ${t.not_updated?vtChip('not updated','vt-warn'):(vtBeh(t.status)==='done'?'':vtChip(t.status,vtStatusCls(t.status)))}</div></div>`;
+  const cell=(amId,key,day)=>{ const l=mine(amId,day); return l.length?l.map(t=>card(t)).join(''):`<p class="cad-empty ${key==='today'?'':'cad-warn'}">${empty[key]}</p>`; };
+  const health=a=>`${vtChip(a.on_track+' on track','vt-ok')} ${a.slipping?vtChip(a.slipping+' slipping','vt-warn'):''} ${a.overdue?vtChip(a.overdue+' overdue','vt-bad'):''} ${a.no_plan?vtChip(a.no_plan+' no visit planned','vt-warn'):''} ${a.open_blockers?vtChip(a.open_blockers+' blocker'+(a.open_blockers>1?'s':''),'vt-bad'):''}`;
+  const ctrl=`<div class="flex flex-wrap items-center gap-2 mb-3 vt-nopresent-hide-no">
+      <div class="flex items-center gap-1 card p-1" style="width:fit-content"><button type="button" class="vt-tabbtn ${CAD.mode==='team'?'active':''}" data-cm="team">Whole team</button><button type="button" class="vt-tabbtn ${CAD.mode==='am'?'active':''}" data-cm="am">One by one</button></div>
+      <button type="button" id="cadPrevDay" class="px-2.5 py-1 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-left"></i></button>
+      <p class="text-sm font-semibold" style="color:var(--text)">${vtLong(CAD.day)}${CAD.day===D.today?' · today':''}</p>
+      <button type="button" id="cadNextDay" class="px-2.5 py-1 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-right"></i></button>
+      ${CAD.day!==D.today?'<button type="button" id="cadToday" class="text-xs px-2.5 py-1 rounded-lg" style="border:1px solid var(--border);color:var(--text)">Back to today</button>':''}
+      <div class="flex-1"></div>
+      <button type="button" id="cadPresent" class="btn-primary text-sm px-4 py-2 rounded-lg"><i class="fa-solid fa-display mr-1.5"></i>Present full screen</button></div>`;
+  let main;
+  if(CAD.mode==='team'){
+    main=`<div class="cad-wrap card elev p-3"><div class="cad-head"><div></div>${cols.map(([l,d,k])=>`<div class="cad-colhead ${k==='today'?'cad-today':''}">${l}<span>${vtDate(d)}</span></div>`).join('')}</div>
+      ${ams.map((a,i)=>`<div class="cad-row"><div class="cad-am clickable" data-i="${i}" title="Open ${escapeHtml(a.name)} one by one"><p class="cad-name">${escapeHtml(a.name)}</p><div class="cad-chips">${health(a)}</div></div>
+        ${cols.map(([l,d,k])=>`<div class="cad-cell ${k==='today'?'cad-today':''}">${cell(a.id,k,d)}</div>`).join('')}</div>`).join('')}</div>`;
+  } else {
+    const a=ams[CAD.amIdx], p=pri(a.id), b=openB(a.id);
+    const stale=tasks.filter(t=>t.am_id===a.id&&t.not_updated).length;
+    main=`<div class="flex flex-wrap items-center gap-3 mb-3"><button type="button" id="cadPrevAm" class="px-3 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-left"></i></button>
+        <div><p class="cad-big">${escapeHtml(a.name)}</p><div class="cad-chips mt-1">${health(a)} ${a.logged_today?vtChip('logged today','vt-ok'):vtChip('not logged today','vt-warn')} ${stale?vtChip(stale+' planned task'+(stale>1?'s':'')+' not updated','vt-warn'):''}</div></div>
+        <button type="button" id="cadNextAm" class="px-3 py-2 rounded-lg" style="border:1px solid var(--border);color:var(--text)"><i class="fa-solid fa-angle-right"></i></button>
+        <span class="text-xs" style="color:var(--text-faint)">${CAD.amIdx+1} of ${ams.length} · ← → keys to switch</span></div>
+      <div class="grid lg:grid-cols-3 gap-4 mb-4">${cols.map(([l,d,k])=>`<div class="card elev p-4 ${k==='today'?'cad-today-card':''}"><p class="cad-colhead2">${l} <span>${vtDate(d)}</span></p><div class="space-y-2 mt-3">${cell(a.id,k,d)}</div></div>`).join('')}</div>
+      <div class="grid lg:grid-cols-3 gap-4"><div class="card elev p-4 lg:col-span-2"><p class="cad-colhead2">Priority accounts <span>${p.length}</span></p>
+        <div class="grid sm:grid-cols-2 gap-2 mt-3">${p.map(x=>`<div class="flex items-center gap-3 rounded-lg px-3 py-2" style="background:var(--surface-2)">${vtLogo(x,32)}<div class="min-w-0 flex-1"><p class="text-sm font-medium truncate" style="color:var(--text)">${escapeHtml(vtShort(x.name))}</p>
+          <p class="text-[11px]" style="color:var(--text-muted)">${x.last_visit?`visited ${vtDate(x.last_visit)} · ${x.days_since}d ago`:'not visited yet'}${x.next_planned_visit?` · next ${vtDate(x.next_planned_visit)}`:' · no visit planned'}</p></div>${vtChip(x.status,VT_STATUS_CLS[x.status])}</div>`).join('')||'<p class="text-xs" style="color:var(--text-faint)">No priority accounts.</p>'}</div></div>
+        <div class="card elev p-4"><p class="cad-colhead2">Blockers <span>${b.length}</span></p><div class="space-y-2 mt-3">${b.map(x=>`<div class="rounded-lg px-3 py-2 text-sm" style="background:var(--surface-2);color:var(--text)">${escapeHtml(x.text)}<p class="text-[11px] mt-1" style="color:var(--text-muted)">→ ${escapeHtml(x.escalate_to)}${x.due_date?' · due '+vtDate(x.due_date):''} ${x.overdue?vtChip('overdue','vt-bad'):''}</p></div>`).join('')||'<p class="text-xs" style="color:var(--text-faint)">No open blockers.</p>'}</div></div></div>`;
+  }
+  body.innerHTML=ctrl+main;
+  const rerender=()=>vtCadence(body);
+  body.querySelectorAll('[data-cm]').forEach(b=>b.addEventListener('click',()=>{ CAD.mode=b.dataset.cm; rerender(); }));
+  const shift=n=>{ CAD.day=vtWorkday(CAD.day,n); rerender(); };
+  document.getElementById('cadPrevDay').addEventListener('click',()=>shift(-1)); document.getElementById('cadNextDay').addEventListener('click',()=>shift(1));
+  const td=document.getElementById('cadToday'); if(td) td.addEventListener('click',()=>{ CAD.day=D.today; rerender(); });
+  document.getElementById('cadPresent').addEventListener('click',vtPresent);
+  body.querySelectorAll('.cad-am').forEach(el=>el.addEventListener('click',()=>{ CAD.amIdx=parseInt(el.dataset.i); CAD.mode='am'; rerender(); }));
+  const pa=document.getElementById('cadPrevAm'), na=document.getElementById('cadNextAm');
+  if(pa){ pa.addEventListener('click',()=>{ CAD.amIdx=(CAD.amIdx-1+ams.length)%ams.length; rerender(); }); na.addEventListener('click',()=>{ CAD.amIdx=(CAD.amIdx+1)%ams.length; rerender(); }); }
+  if(!CAD.kbd){ CAD.kbd=true; document.addEventListener('keydown',e=>{
+    if(VT.tab!=='cadence'||CAD.mode!=='am'||!document.getElementById('tab-visits').classList.contains('active')) return;
+    if(['INPUT','TEXTAREA','SELECT'].includes((e.target.tagName||''))) return;
+    const n=VT.data.ams.length;
+    if(e.key==='ArrowRight'){ CAD.amIdx=(CAD.amIdx+1)%n; vtCadence(document.getElementById('vtBody')); }
+    if(e.key==='ArrowLeft'){ CAD.amIdx=(CAD.amIdx-1+n)%n; vtCadence(document.getElementById('vtBody')); }
+  }); }
+}
+function vtPresent(){
+  document.body.classList.add('vt-present');
+  const el=document.documentElement; if(el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+  if(!document.getElementById('vtExitPresent')){ const b=document.createElement('button'); b.id='vtExitPresent'; b.type='button'; b.innerHTML='<i class="fa-solid fa-xmark mr-1"></i>Exit presentation (Esc)'; b.addEventListener('click',vtExitPresent); document.body.appendChild(b); }
+}
+function vtExitPresent(){ document.body.classList.remove('vt-present'); if(document.fullscreenElement) document.exitFullscreen().catch(()=>{}); }
+document.addEventListener('fullscreenchange',()=>{ if(!document.fullscreenElement) document.body.classList.remove('vt-present'); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && document.body.classList.contains('vt-present')) vtExitPresent(); });
 
 /* ---------------- Team week: every AM's plan side by side ---------------- */
 function vtMonday(iso){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(y,m-1,d); dt.setDate(dt.getDate()-((dt.getDay()+6)%7)); return dt; }
